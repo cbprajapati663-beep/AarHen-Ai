@@ -22,60 +22,100 @@ const responseEngine =
     require("./response");
 
 // ============================================================
-// SKILL SELECTION
+// SELECT SKILL
 // ============================================================
 
 function selectSkill(input) {
-    const result = router.route(input);
+
+    const result =
+        router.route(
+            input
+        );
 
     if (!result.success) {
         return result;
     }
 
     return {
+
         success: true,
-        selectedSkill: result.selectedSkill,
-        matches: result.matches,
-        status: result.status
+
+        selectedSkill:
+            result.selectedSkill,
+
+        matches:
+            result.matches,
+
+        status:
+            result.status
     };
 }
 
 // ============================================================
-// PERMISSION DECISION
+// DETERMINE PERMISSION
 // ============================================================
 
-function determinePermission(intentResult, routing) {
+function determinePermission(
+    intentResult,
+    routing
+) {
 
     if (!routing.selectedSkill) {
+
         return permissions.check(
             "execute_external_code"
         );
     }
 
     const category =
-        routing.selectedSkill.category;
+        routing
+            .selectedSkill
+            .category;
 
-    if (category === "security") {
+    if (
+        category ===
+        "security"
+    ) {
+
         return permissions.check(
             "security_testing_against_external_target"
         );
     }
 
-    if (category === "coding") {
+    if (
+        category ===
+        "coding"
+    ) {
+
         return permissions.check(
             "execute_external_code"
         );
     }
 
     if (
-        category === "finance" ||
-        category === "calculation" ||
-        category === "knowledge" ||
-        category === "research" ||
-        category === "data" ||
-        category === "documents" ||
-        category === "business"
+
+        category ===
+            "finance" ||
+
+        category ===
+            "calculation" ||
+
+        category ===
+            "knowledge" ||
+
+        category ===
+            "research" ||
+
+        category ===
+            "data" ||
+
+        category ===
+            "documents" ||
+
+        category ===
+            "business"
     ) {
+
         return permissions.check(
             "read_public_information"
         );
@@ -96,10 +136,17 @@ function buildExecutionContext(
     intentResult,
     context = {}
 ) {
+
     return {
+
         ...context,
 
+        // ------------------------------------------
+        // BRAIN
+        // ------------------------------------------
+
         brain: {
+
             request:
                 brainResult.request,
 
@@ -113,32 +160,188 @@ function buildExecutionContext(
                 brainResult.knowledge,
 
             thinkingContext:
-                brainResult.thinkingContext
+                brainResult
+                    .thinkingContext
         },
+
+        // ------------------------------------------
+        // MEMORY MANAGEMENT
+        // ------------------------------------------
+
+        memoryManagement: {
+
+            decision:
+                brainResult
+                    .memory
+                    ?.decision || null,
+
+            managedRecall:
+                brainResult
+                    .memory
+                    ?.managed || [],
+
+            importantRecall:
+                brainResult
+                    .memory
+                    ?.important || [],
+
+            verifiedRecall:
+                brainResult
+                    .memory
+                    ?.verified || []
+        },
+
+        // ------------------------------------------
+        // ROUTING
+        // ------------------------------------------
 
         routing: {
+
             selectedSkill:
-                routing.selectedSkill,
+                routing
+                    .selectedSkill,
 
             matches:
-                routing.matches
+                routing
+                    .matches
         },
 
+        // ------------------------------------------
+        // INTENT
+        // ------------------------------------------
+
         intent: {
+
             category:
-                intentResult.category,
+                intentResult
+                    .category,
 
             intent:
-                intentResult.intent,
+                intentResult
+                    .intent,
 
             parameters:
-                intentResult.parameters
+                intentResult
+                    .parameters
         }
     };
 }
 
 // ============================================================
-// MAIN PROCESS
+// MEMORY ACTION DECISION
+// ============================================================
+
+function determineMemoryAction(
+    brainResult,
+    context = {}
+) {
+
+    const decision =
+        brainResult
+            ?.memory
+            ?.decision;
+
+    if (!decision) {
+
+        return {
+
+            action:
+                "none",
+
+            reason:
+                "No memory decision available."
+        };
+    }
+
+    // --------------------------------------------------------
+    // EXPLICIT USER REQUEST
+    // --------------------------------------------------------
+
+    if (
+        context.remember === true
+    ) {
+
+        return {
+
+            action:
+                "remember",
+
+            reason:
+                "User explicitly requested memory."
+        };
+    }
+
+    // --------------------------------------------------------
+    // EXPLICIT DISABLE
+    // --------------------------------------------------------
+
+    if (
+        context.remember === false
+    ) {
+
+        return {
+
+            action:
+                "do-not-remember",
+
+            reason:
+                "Memory explicitly disabled."
+        };
+    }
+
+    // --------------------------------------------------------
+    // AUTOMATIC MEMORY MODE
+    // --------------------------------------------------------
+
+    if (
+        context.autoRemember === true &&
+        decision.shouldRemember
+    ) {
+
+        return {
+
+            action:
+                "remember",
+
+            reason:
+                decision.reason,
+
+            type:
+                decision.type,
+
+            importance:
+                decision.importance,
+
+            confidence:
+                decision.confidence
+        };
+    }
+
+    // --------------------------------------------------------
+    // DEFAULT
+    // --------------------------------------------------------
+
+    return {
+
+        action:
+            "evaluate-only",
+
+        reason:
+            decision.reason,
+
+        type:
+            decision.type,
+
+        importance:
+            decision.importance,
+
+        confidence:
+            decision.confidence
+    };
+}
+
+// ============================================================
+// PROCESS REQUEST
 // ============================================================
 
 async function process(
@@ -146,13 +349,22 @@ async function process(
     context = {}
 ) {
 
+    // --------------------------------------------------------
+    // INPUT VALIDATION
+    // --------------------------------------------------------
+
     if (
         !input ||
-        typeof input !== "string"
+        typeof input !==
+            "string"
     ) {
+
         return {
+
             success: false,
-            error: "Invalid input."
+
+            error:
+                "Invalid input."
         };
     }
 
@@ -160,14 +372,18 @@ async function process(
         input.trim();
 
     if (!request) {
+
         return {
+
             success: false,
-            error: "Input is empty."
+
+            error:
+                "Input is empty."
         };
     }
 
     // --------------------------------------------------------
-    // 1. BRAIN THINKING
+    // MASTER BRAIN
     // --------------------------------------------------------
 
     const brainResult =
@@ -177,22 +393,26 @@ async function process(
         );
 
     if (!brainResult.success) {
+
         return brainResult;
     }
 
     // --------------------------------------------------------
-    // 2. SKILL ROUTING
+    // SKILL ROUTING
     // --------------------------------------------------------
 
     const routing =
-        selectSkill(request);
+        selectSkill(
+            request
+        );
 
     if (!routing.success) {
+
         return routing;
     }
 
     // --------------------------------------------------------
-    // 3. INTENT ANALYSIS
+    // INTENT ANALYSIS
     // --------------------------------------------------------
 
     const intentResult =
@@ -201,11 +421,12 @@ async function process(
         );
 
     if (!intentResult.success) {
+
         return intentResult;
     }
 
     // --------------------------------------------------------
-    // 4. PERMISSION CHECK
+    // PERMISSION
     // --------------------------------------------------------
 
     const permission =
@@ -215,22 +436,43 @@ async function process(
         );
 
     // --------------------------------------------------------
-    // 5. EXECUTION CONTEXT
+    // MEMORY ACTION
     // --------------------------------------------------------
 
-    const executionContext =
-        buildExecutionContext(
+    const memoryAction =
+        determineMemoryAction(
             brainResult,
-            routing,
-            intentResult,
             context
         );
 
     // --------------------------------------------------------
-    // 6. APPROVAL CHECK
+    // EXECUTION CONTEXT
     // --------------------------------------------------------
 
-    if (permission.requiresApproval) {
+    const executionContext =
+        buildExecutionContext(
+
+            brainResult,
+
+            routing,
+
+            intentResult,
+
+            context
+        );
+
+    executionContext
+        .memoryAction =
+            memoryAction;
+
+    // --------------------------------------------------------
+    // APPROVAL REQUIRED
+    // --------------------------------------------------------
+
+    if (
+        permission
+            .requiresApproval
+    ) {
 
         const approvalResult = {
 
@@ -248,9 +490,12 @@ async function process(
 
             permission,
 
+            memoryAction,
+
             executionContext,
 
-            execution: null,
+            execution:
+                null,
 
             status:
                 "approval-required",
@@ -263,31 +508,33 @@ async function process(
         };
 
         return {
+
             ...approvalResult,
 
             response:
-                responseEngine.createResponse(
-                    approvalResult
-                )
+                responseEngine
+                    .createResponse(
+                        approvalResult
+                    )
         };
     }
 
     // --------------------------------------------------------
-    // 7. EXECUTE SKILL
+    // EXECUTE SKILL
     // --------------------------------------------------------
 
     const execution =
-        await executor.executeIntent(
-            {
+        await executor
+            .executeIntent({
+
                 ...intentResult,
 
                 context:
                     executionContext
-            }
-        );
+            });
 
     // --------------------------------------------------------
-    // 8. FINAL ORCHESTRATION RESULT
+    // FINAL RESULT
     // --------------------------------------------------------
 
     const orchestrationResult = {
@@ -306,15 +553,21 @@ async function process(
 
         permission,
 
+        memoryAction,
+
         executionContext,
 
         execution,
 
         status:
             execution.success
+
                 ? "completed"
+
                 : execution.needsInput
+
                     ? "needs-user-input"
+
                     : "execution-error",
 
         timestamp:
@@ -322,25 +575,27 @@ async function process(
     };
 
     // --------------------------------------------------------
-    // 9. RESPONSE GENERATION
+    // RESPONSE
     // --------------------------------------------------------
 
     orchestrationResult.response =
-        responseEngine.createResponse(
-            orchestrationResult
-        );
+        responseEngine
+            .createResponse(
+                orchestrationResult
+            );
 
     return orchestrationResult;
 }
 
 // ============================================================
-// ORCHESTRATE ALIAS
+// ORCHESTRATE
 // ============================================================
 
 async function orchestrate(
     input,
     context = {}
 ) {
+
     return process(
         input,
         context
@@ -348,7 +603,7 @@ async function orchestrate(
 }
 
 // ============================================================
-// STATUS
+// ORCHESTRATOR STATUS
 // ============================================================
 
 function getStatus() {
@@ -371,6 +626,10 @@ function getStatus() {
             "Language Engine",
 
             "Advanced Long-Term Memory",
+
+            "Advanced Memory Manager",
+
+            "Memory Decision Engine",
 
             "RAG Knowledge Engine",
 
@@ -407,6 +666,10 @@ function getStatus() {
 
             "Memory Recall",
 
+            "Memory Management",
+
+            "Memory Decision",
+
             "RAG Retrieval",
 
             "Skill Routing",
@@ -420,7 +683,28 @@ function getStatus() {
             "Skill Execution",
 
             "Response Generation"
-        ]
+        ],
+
+        memorySystem: {
+
+            manager:
+                "Advanced Memory Manager",
+
+            decision:
+                "Automatic Memory Decision",
+
+            explicitRemember:
+                true,
+
+            explicitForget:
+                true,
+
+            automaticMode:
+                "opt-in",
+
+            safeDefault:
+                "evaluate-only"
+        }
     };
 }
 
@@ -429,10 +713,18 @@ function getStatus() {
 // ============================================================
 
 module.exports = {
+
     process,
+
     orchestrate,
+
     selectSkill,
+
     determinePermission,
+
+    determineMemoryAction,
+
     buildExecutionContext,
+
     getStatus
 };
