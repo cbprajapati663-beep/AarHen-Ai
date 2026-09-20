@@ -9,6 +9,9 @@ const {
     orchestrate
 } = require("./core/orchestrator");
 
+const auth =
+    require("./core/auth");
+
 
 // ------------------------------------------------------------
 // Server configuration
@@ -41,7 +44,7 @@ function sendJSON(
                 "GET,POST,OPTIONS",
 
             "Access-Control-Allow-Headers":
-                "Content-Type"
+                "Content-Type,X-AarHen-API-Key"
         }
     );
 
@@ -172,6 +175,11 @@ const server =
                         status:
                             "online",
 
+                        authentication:
+                            auth.isConfigured()
+                                ? "protected"
+                                : "development-mode",
+
                         message:
                             "AarHen API Server is running."
 
@@ -191,6 +199,40 @@ const server =
                 request.method === "POST" &&
                 request.url === "/ask"
             ) {
+
+
+                // --------------------------------------------
+                // Authentication
+                // --------------------------------------------
+
+                const authentication =
+                    auth.authenticate(
+                        request
+                    );
+
+
+                if (
+                    auth.isConfigured() &&
+                    !authentication.authenticated
+                ) {
+
+                    sendJSON(
+                        response,
+                        401,
+                        {
+
+                            success: false,
+
+                            error:
+                                "Authentication required."
+
+                        }
+                    );
+
+                    return;
+
+                }
+
 
                 try {
 
