@@ -22,11 +22,14 @@ const memory =
 const memoryHistory =
     require("./core/memoryHistory");
 
+const memoryApi =
+    require("./core/memoryApi");
+
 const PORT =
     process.env.PORT || 3000;
 
 // ============================================================
-// SEND JSON RESPONSE
+// SEND JSON
 // ============================================================
 
 function sendJSON(
@@ -61,7 +64,7 @@ function sendJSON(
 }
 
 // ============================================================
-// READ REQUEST BODY
+// READ BODY
 // ============================================================
 
 function readBody(req) {
@@ -83,9 +86,7 @@ function readBody(req) {
                 () => {
 
                     if (!body) {
-
                         resolve({});
-
                         return;
                     }
 
@@ -115,7 +116,7 @@ function readBody(req) {
 }
 
 // ============================================================
-// AUTHENTICATION
+// AUTH
 // ============================================================
 
 function authenticateRequest(req) {
@@ -132,7 +133,7 @@ const server =
         async (req, res) => {
 
             // ==================================================
-            // CORS PREFLIGHT
+            // CORS
             // ==================================================
 
             if (
@@ -160,7 +161,7 @@ const server =
             }
 
             // ==================================================
-            // AUTH
+            // AUTHENTICATION
             // ==================================================
 
             const authentication =
@@ -189,12 +190,25 @@ const server =
             }
 
             // ==================================================
-            // HEALTH / ROOT
+            // URL OBJECT
+            // ==================================================
+
+            const url =
+                new URL(
+                    req.url,
+                    `http://localhost:${PORT}`
+                );
+
+            const pathname =
+                url.pathname;
+
+            // ==================================================
+            // ROOT
             // ==================================================
 
             if (
                 req.method === "GET" &&
-                req.url === "/"
+                pathname === "/"
             ) {
 
                 sendJSON(
@@ -225,15 +239,17 @@ const server =
 
                             "long-term-memory",
 
+                            "memory-api",
+
+                            "memory-history",
+
+                            "memory-health",
+
                             "learning",
 
                             "feedback",
 
                             "correction",
-
-                            "memory-history",
-
-                            "memory-health",
 
                             "web-research",
 
@@ -267,7 +283,7 @@ const server =
 
             if (
                 req.method === "POST" &&
-                req.url === "/ask"
+                pathname === "/ask"
             ) {
 
                 try {
@@ -330,7 +346,7 @@ const server =
 
             if (
                 req.method === "POST" &&
-                req.url === "/learn"
+                pathname === "/learn"
             ) {
 
                 try {
@@ -396,7 +412,7 @@ const server =
 
             if (
                 req.method === "POST" &&
-                req.url === "/feedback"
+                pathname === "/feedback"
             ) {
 
                 try {
@@ -460,7 +476,7 @@ const server =
 
             if (
                 req.method === "POST" &&
-                req.url === "/correct"
+                pathname === "/correct"
             ) {
 
                 try {
@@ -521,18 +537,11 @@ const server =
 
             if (
                 req.method === "GET" &&
-                req.url.startsWith(
+                pathname ===
                     "/learning-history"
-                )
             ) {
 
                 try {
-
-                    const url =
-                        new URL(
-                            req.url,
-                            `http://localhost:${PORT}`
-                        );
 
                     const memoryId =
                         url.searchParams.get(
@@ -579,12 +588,444 @@ const server =
             }
 
             // ==================================================
+            // MEMORY API - REMEMBER
+            // ==================================================
+
+            if (
+                req.method === "POST" &&
+                pathname ===
+                    "/memory/remember"
+            ) {
+
+                try {
+
+                    const body =
+                        await readBody(req);
+
+                    const result =
+                        memoryApi.remember(
+                            body
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY API - SEARCH
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                pathname ===
+                    "/memory/search"
+            ) {
+
+                try {
+
+                    const query =
+                        url.searchParams.get(
+                            "q"
+                        ) || "";
+
+                    const limit =
+                        Number(
+                            url.searchParams.get(
+                                "limit"
+                            )
+                        ) || 10;
+
+                    const result =
+                        memoryApi.search(
+                            query,
+                            limit
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY API - GET
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                pathname ===
+                    "/memory/get"
+            ) {
+
+                try {
+
+                    const memoryId =
+                        url.searchParams.get(
+                            "memoryId"
+                        );
+
+                    const result =
+                        memoryApi.get(
+                            memoryId
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 404,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY API - UPDATE
+            // ==================================================
+
+            if (
+                req.method === "POST" &&
+                pathname ===
+                    "/memory/update"
+            ) {
+
+                try {
+
+                    const body =
+                        await readBody(req);
+
+                    const result =
+                        memoryApi.update(
+                            body.memoryId,
+                            body.changes || {}
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY API - FORGET
+            // ==================================================
+
+            if (
+                req.method === "POST" &&
+                pathname ===
+                    "/memory/forget"
+            ) {
+
+                try {
+
+                    const body =
+                        await readBody(req);
+
+                    const result =
+                        memoryApi.forget(
+                            body.memoryId
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY API - VERIFIED
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                pathname ===
+                    "/memory/verified"
+            ) {
+
+                try {
+
+                    const limit =
+                        Number(
+                            url.searchParams.get(
+                                "limit"
+                            )
+                        ) || 10;
+
+                    const result =
+                        memoryApi.getVerified(
+                            limit
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY API - KNOWLEDGE SEARCH
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                pathname ===
+                    "/memory/knowledge"
+            ) {
+
+                try {
+
+                    const query =
+                        url.searchParams.get(
+                            "q"
+                        ) || "";
+
+                    const limit =
+                        Number(
+                            url.searchParams.get(
+                                "limit"
+                            )
+                        ) || 10;
+
+                    const result =
+                        memoryApi.searchKnowledge(
+                            query,
+                            limit
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY API - VERIFIED KNOWLEDGE
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                pathname ===
+                    "/memory/verified-knowledge"
+            ) {
+
+                try {
+
+                    const query =
+                        url.searchParams.get(
+                            "q"
+                        ) || "";
+
+                    const limit =
+                        Number(
+                            url.searchParams.get(
+                                "limit"
+                            )
+                        ) || 10;
+
+                    const result =
+                        memoryApi.searchVerifiedKnowledge(
+                            query,
+                            limit
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY API - CONTROL STATUS
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                pathname ===
+                    "/memory/control-status"
+            ) {
+
+                try {
+
+                    sendJSON(
+                        res,
+                        200,
+                        memoryApi.getControlStatus()
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
             // ALL MEMORY
             // ==================================================
 
             if (
                 req.method === "GET" &&
-                req.url === "/memory"
+                pathname === "/memory"
             ) {
 
                 try {
@@ -623,7 +1064,8 @@ const server =
 
             if (
                 req.method === "GET" &&
-                req.url === "/memory-status"
+                pathname ===
+                    "/memory-status"
             ) {
 
                 try {
@@ -657,18 +1099,11 @@ const server =
 
             if (
                 req.method === "GET" &&
-                req.url.startsWith(
+                pathname ===
                     "/memory-history"
-                )
             ) {
 
                 try {
-
-                    const url =
-                        new URL(
-                            req.url,
-                            `http://localhost:${PORT}`
-                        );
 
                     const memoryId =
                         url.searchParams.get(
@@ -728,7 +1163,8 @@ const server =
 
             if (
                 req.method === "GET" &&
-                req.url === "/memory-health"
+                pathname ===
+                    "/memory-health"
             ) {
 
                 try {
@@ -769,7 +1205,7 @@ const server =
 
             if (
                 req.method === "GET" &&
-                req.url ===
+                pathname ===
                     "/memory-history-status"
             ) {
 
@@ -807,7 +1243,7 @@ const server =
 
             if (
                 req.method === "GET" &&
-                req.url === "/learning"
+                pathname === "/learning"
             ) {
 
                 try {
@@ -841,7 +1277,7 @@ const server =
 
             if (
                 req.method === "GET" &&
-                req.url ===
+                pathname ===
                     "/learning-status"
             ) {
 
@@ -871,7 +1307,7 @@ const server =
             }
 
             // ==================================================
-            // FINAL 404
+            // 404
             // ==================================================
 
             sendJSON(
@@ -921,7 +1357,11 @@ server.listen(
         );
 
         console.log(
-            "Routes:"
+            "----------------------------------------------"
+        );
+
+        console.log(
+            "CORE ROUTES"
         );
 
         console.log(
@@ -949,6 +1389,22 @@ server.listen(
         );
 
         console.log(
+            "GET  /learning"
+        );
+
+        console.log(
+            "GET  /learning-status"
+        );
+
+        console.log(
+            "----------------------------------------------"
+        );
+
+        console.log(
+            "MEMORY ROUTES"
+        );
+
+        console.log(
             "GET  /memory"
         );
 
@@ -969,11 +1425,51 @@ server.listen(
         );
 
         console.log(
-            "GET  /learning"
+            "----------------------------------------------"
         );
 
         console.log(
-            "GET  /learning-status"
+            "MEMORY CONTROL API"
+        );
+
+        console.log(
+            "POST /memory/remember"
+        );
+
+        console.log(
+            "GET  /memory/search?q=..."
+        );
+
+        console.log(
+            "GET  /memory/get?memoryId=..."
+        );
+
+        console.log(
+            "POST /memory/update"
+        );
+
+        console.log(
+            "POST /memory/forget"
+        );
+
+        console.log(
+            "GET  /memory/verified"
+        );
+
+        console.log(
+            "GET  /memory/knowledge?q=..."
+        );
+
+        console.log(
+            "GET  /memory/verified-knowledge?q=..."
+        );
+
+        console.log(
+            "GET  /memory/control-status"
+        );
+
+        console.log(
+            "----------------------------------------------"
         );
 
         console.log(
@@ -985,7 +1481,7 @@ server.listen(
         );
 
         console.log(
-            "Memory: Long-Term + History + Health"
+            "Memory: Long-Term + History + Control API"
         );
 
         console.log(
