@@ -21,6 +21,9 @@ const permissions =
 const responseEngine =
     require("./response");
 
+const memoryManager =
+    require("./memoryManager");
+
 // ============================================================
 // SELECT SKILL
 // ============================================================
@@ -73,8 +76,7 @@ function determinePermission(
             .category;
 
     if (
-        category ===
-        "security"
+        category === "security"
     ) {
 
         return permissions.check(
@@ -83,8 +85,7 @@ function determinePermission(
     }
 
     if (
-        category ===
-        "coding"
+        category === "coding"
     ) {
 
         return permissions.check(
@@ -94,26 +95,19 @@ function determinePermission(
 
     if (
 
-        category ===
-            "finance" ||
+        category === "finance" ||
 
-        category ===
-            "calculation" ||
+        category === "calculation" ||
 
-        category ===
-            "knowledge" ||
+        category === "knowledge" ||
 
-        category ===
-            "research" ||
+        category === "research" ||
 
-        category ===
-            "data" ||
+        category === "data" ||
 
-        category ===
-            "documents" ||
+        category === "documents" ||
 
-        category ===
-            "business"
+        category === "business"
     ) {
 
         return permissions.check(
@@ -141,9 +135,9 @@ function buildExecutionContext(
 
         ...context,
 
-        // ------------------------------------------
+        // ----------------------------------------------------
         // BRAIN
-        // ------------------------------------------
+        // ----------------------------------------------------
 
         brain: {
 
@@ -164,9 +158,9 @@ function buildExecutionContext(
                     .thinkingContext
         },
 
-        // ------------------------------------------
+        // ----------------------------------------------------
         // MEMORY MANAGEMENT
-        // ------------------------------------------
+        // ----------------------------------------------------
 
         memoryManagement: {
 
@@ -191,9 +185,9 @@ function buildExecutionContext(
                     ?.verified || []
         },
 
-        // ------------------------------------------
+        // ----------------------------------------------------
         // ROUTING
-        // ------------------------------------------
+        // ----------------------------------------------------
 
         routing: {
 
@@ -206,9 +200,9 @@ function buildExecutionContext(
                     .matches
         },
 
-        // ------------------------------------------
+        // ----------------------------------------------------
         // INTENT
-        // ------------------------------------------
+        // ----------------------------------------------------
 
         intent: {
 
@@ -228,7 +222,7 @@ function buildExecutionContext(
 }
 
 // ============================================================
-// MEMORY ACTION DECISION
+// DETERMINE MEMORY ACTION
 // ============================================================
 
 function determineMemoryAction(
@@ -241,6 +235,10 @@ function determineMemoryAction(
             ?.memory
             ?.decision;
 
+    // --------------------------------------------------------
+    // NO DECISION
+    // --------------------------------------------------------
+
     if (!decision) {
 
         return {
@@ -248,31 +246,16 @@ function determineMemoryAction(
             action:
                 "none",
 
+            shouldStore:
+                false,
+
             reason:
                 "No memory decision available."
         };
     }
 
     // --------------------------------------------------------
-    // EXPLICIT USER REQUEST
-    // --------------------------------------------------------
-
-    if (
-        context.remember === true
-    ) {
-
-        return {
-
-            action:
-                "remember",
-
-            reason:
-                "User explicitly requested memory."
-        };
-    }
-
-    // --------------------------------------------------------
-    // EXPLICIT DISABLE
+    // USER EXPLICITLY DISABLES MEMORY
     // --------------------------------------------------------
 
     if (
@@ -284,8 +267,47 @@ function determineMemoryAction(
             action:
                 "do-not-remember",
 
+            shouldStore:
+                false,
+
             reason:
-                "Memory explicitly disabled."
+                "Memory explicitly disabled by user."
+        };
+    }
+
+    // --------------------------------------------------------
+    // USER EXPLICITLY REQUESTS MEMORY
+    // --------------------------------------------------------
+
+    if (
+        context.remember === true
+    ) {
+
+        return {
+
+            action:
+                "remember",
+
+            shouldStore:
+                true,
+
+            automatic:
+                false,
+
+            reason:
+                "User explicitly requested memory.",
+
+            type:
+                decision.type,
+
+            importance:
+                decision.importance,
+
+            importanceScore:
+                decision.importanceScore,
+
+            confidence:
+                decision.confidence
         };
     }
 
@@ -294,37 +316,71 @@ function determineMemoryAction(
     // --------------------------------------------------------
 
     if (
-        context.autoRemember === true &&
-        decision.shouldRemember
+        context.autoRemember === true
     ) {
+
+        if (
+            decision.shouldRemember
+        ) {
+
+            return {
+
+                action:
+                    "auto-remember",
+
+                shouldStore:
+                    true,
+
+                automatic:
+                    true,
+
+                reason:
+                    decision.reason,
+
+                type:
+                    decision.type,
+
+                importance:
+                    decision.importance,
+
+                importanceScore:
+                    decision.importanceScore,
+
+                confidence:
+                    decision.confidence
+            };
+        }
 
         return {
 
             action:
-                "remember",
+                "auto-skip",
+
+            shouldStore:
+                false,
+
+            automatic:
+                true,
 
             reason:
-                decision.reason,
-
-            type:
-                decision.type,
-
-            importance:
-                decision.importance,
-
-            confidence:
-                decision.confidence
+                decision.reason
         };
     }
 
     // --------------------------------------------------------
-    // DEFAULT
+    // SAFE DEFAULT
     // --------------------------------------------------------
 
     return {
 
         action:
             "evaluate-only",
+
+        shouldStore:
+            false,
+
+        automatic:
+            false,
 
         reason:
             decision.reason,
@@ -335,9 +391,164 @@ function determineMemoryAction(
         importance:
             decision.importance,
 
+        importanceScore:
+            decision.importanceScore,
+
         confidence:
             decision.confidence
     };
+}
+
+// ============================================================
+// STORE MEMORY
+// ============================================================
+
+function storeMemory(
+    request,
+    brainResult,
+    memoryAction,
+    context = {}
+) {
+
+    if (
+        !memoryAction ||
+        memoryAction.shouldStore !== true
+    ) {
+
+        return {
+
+            success: true,
+
+            stored:
+                false,
+
+            status:
+                "memory-not-written",
+
+            reason:
+                memoryAction
+                    ?.reason ||
+                "Memory storage not requested."
+        };
+    }
+
+    // --------------------------------------------------------
+    // EXPLICIT USER MEMORY
+    // --------------------------------------------------------
+
+    if (
+        context.remember === true
+    ) {
+
+        return memoryManager.remember({
+
+            type:
+                context.memoryType ||
+                brainResult
+                    ?.memory
+                    ?.decision
+                    ?.type,
+
+            title:
+                context.memoryTitle ||
+                "AarHen User Memory",
+
+            category:
+                context.memoryCategory ||
+                brainResult
+                    ?.memory
+                    ?.decision
+                    ?.type ||
+                "general",
+
+            content:
+                request,
+
+            source:
+                context.memorySource ||
+                "user",
+
+            importance:
+                context.memoryImportance ||
+                brainResult
+                    ?.memory
+                    ?.decision
+                    ?.importance,
+
+            confidence:
+                typeof context.memoryConfidence ===
+                "number"
+
+                    ? context.memoryConfidence
+
+                    : brainResult
+                        ?.memory
+                        ?.decision
+                        ?.confidence,
+
+            tags:
+                Array.isArray(
+                    context.memoryTags
+                )
+                    ? context.memoryTags
+                    : [],
+
+            verified:
+                Boolean(
+                    context.memoryVerified
+                ),
+
+            remember:
+                true
+        });
+    }
+
+    // --------------------------------------------------------
+    // AUTOMATIC MEMORY
+    // --------------------------------------------------------
+
+    return memoryManager.autoRemember({
+
+        type:
+            brainResult
+                ?.memory
+                ?.decision
+                ?.type,
+
+        title:
+            "AarHen Automatic Memory",
+
+        category:
+            brainResult
+                ?.memory
+                ?.decision
+                ?.type ||
+            "general",
+
+        content:
+            request,
+
+        source:
+            "automatic-memory",
+
+        importance:
+            brainResult
+                ?.memory
+                ?.decision
+                ?.importance,
+
+        confidence:
+            brainResult
+                ?.memory
+                ?.decision
+                ?.confidence,
+
+        verified:
+            false,
+
+        remember:
+            true
+    });
 }
 
 // ============================================================
@@ -355,8 +566,7 @@ async function process(
 
     if (
         !input ||
-        typeof input !==
-            "string"
+        typeof input !== "string"
     ) {
 
         return {
@@ -436,7 +646,7 @@ async function process(
         );
 
     // --------------------------------------------------------
-    // MEMORY ACTION
+    // MEMORY ACTION DECISION
     // --------------------------------------------------------
 
     const memoryAction =
@@ -466,12 +676,50 @@ async function process(
             memoryAction;
 
     // --------------------------------------------------------
+    // MEMORY WRITE
+    // --------------------------------------------------------
+
+    let memoryWrite = {
+
+        success: true,
+
+        stored:
+            false,
+
+        status:
+            "memory-not-written",
+
+        reason:
+            "Memory storage not requested."
+    };
+
+    if (
+        memoryAction.shouldStore === true
+    ) {
+
+        memoryWrite =
+            storeMemory(
+
+                request,
+
+                brainResult,
+
+                memoryAction,
+
+                context
+            );
+    }
+
+    executionContext
+        .memoryWrite =
+            memoryWrite;
+
+    // --------------------------------------------------------
     // APPROVAL REQUIRED
     // --------------------------------------------------------
 
     if (
-        permission
-            .requiresApproval
+        permission.requiresApproval
     ) {
 
         const approvalResult = {
@@ -491,6 +739,8 @@ async function process(
             permission,
 
             memoryAction,
+
+            memoryWrite,
 
             executionContext,
 
@@ -555,11 +805,14 @@ async function process(
 
         memoryAction,
 
+        memoryWrite,
+
         executionContext,
 
         execution,
 
         status:
+
             execution.success
 
                 ? "completed"
@@ -629,6 +882,8 @@ function getStatus() {
 
             "Advanced Memory Manager",
 
+            "Automatic Memory Writer",
+
             "Memory Decision Engine",
 
             "RAG Knowledge Engine",
@@ -670,6 +925,8 @@ function getStatus() {
 
             "Memory Decision",
 
+            "Memory Write",
+
             "RAG Retrieval",
 
             "Skill Routing",
@@ -693,10 +950,22 @@ function getStatus() {
             decision:
                 "Automatic Memory Decision",
 
+            automaticWrite:
+                true,
+
             explicitRemember:
                 true,
 
-            explicitForget:
+            explicitDisable:
+                true,
+
+            duplicateProtection:
+                true,
+
+            importanceTracking:
+                true,
+
+            confidenceTracking:
                 true,
 
             automaticMode:
@@ -723,6 +992,8 @@ module.exports = {
     determinePermission,
 
     determineMemoryAction,
+
+    storeMemory,
 
     buildExecutionContext,
 
