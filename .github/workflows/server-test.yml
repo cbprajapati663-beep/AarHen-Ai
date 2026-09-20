@@ -3,7 +3,6 @@ name: AarHen Server Test
 on:
   push:
     branches: ["main"]
-
   pull_request:
     branches: ["main"]
 
@@ -14,13 +13,25 @@ jobs:
 
     steps:
 
+      # ==============================================
+      # CHECKOUT
+      # ==============================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ==============================================
+      # NODE.JS
+      # ==============================================
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
+
+      # ==============================================
+      # START SERVER
+      # ==============================================
 
       - name: Start AarHen server
         env:
@@ -29,29 +40,66 @@ jobs:
           node server.js > server.log 2>&1 &
           sleep 3
 
+      # ==============================================
+      # HEALTH TEST
+      # ==============================================
+
       - name: Test health endpoint
         run: |
           curl -f http://localhost:3000/
+
+      # ==============================================
+      # LEARNING STATUS
+      # ==============================================
 
       - name: Test learning status
         run: |
           curl -f http://localhost:3000/learning-status
 
-      - name: Test memory endpoint
+      # ==============================================
+      # MEMORY STATUS
+      # ==============================================
+
+      - name: Test memory status
         run: |
-          curl -f http://localhost:3000/memory
+          curl -f http://localhost:3000/memory-status
+
+      # ==============================================
+      # LEARN KNOWLEDGE
+      # ==============================================
 
       - name: Test learning API
         run: |
           curl -f \
             -X POST \
             -H "Content-Type: application/json" \
-            -d '{"title":"AarHen Test Knowledge","content":"AarHen continuous learning system test knowledge.","category":"system-test","source":"github-actions"}' \
+            -d '{
+              "title":"AarHen Learning Test",
+              "content":"AarHen continuous learning system test knowledge for end-to-end verification.",
+              "category":"system-test",
+              "source":"github-actions"
+            }' \
             http://localhost:3000/learn
+
+      # ==============================================
+      # VERIFY KNOWLEDGE STORAGE
+      # ==============================================
 
       - name: Verify learned knowledge
         run: |
           curl -f http://localhost:3000/learning
+
+      # ==============================================
+      # VERIFY MEMORY STORAGE
+      # ==============================================
+
+      - name: Verify memory endpoint
+        run: |
+          curl -f http://localhost:3000/memory
+
+      # ==============================================
+      # WEB RESEARCH
+      # ==============================================
 
       - name: Test Tavily Web Research
         env:
@@ -60,8 +108,22 @@ jobs:
           curl -f \
             -X POST \
             -H "Content-Type: application/json" \
-            -d '{"input":"latest vehicle finance information search karo"}' \
+            -d '{
+              "input":"latest vehicle finance information search karo"
+            }' \
             http://localhost:3000/ask
+
+      # ==============================================
+      # FINAL LEARNING STATUS
+      # ==============================================
+
+      - name: Verify final learning status
+        run: |
+          curl -f http://localhost:3000/learning-status
+
+      # ==============================================
+      # SERVER LOG
+      # ==============================================
 
       - name: Show server log
         if: always()
