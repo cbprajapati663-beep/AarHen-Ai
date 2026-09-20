@@ -41,7 +41,7 @@ jobs:
           sleep 3
 
       # ==============================================
-      # HEALTH TEST
+      # HEALTH
       # ==============================================
 
       - name: Test health endpoint
@@ -65,24 +65,46 @@ jobs:
           curl -f http://localhost:3000/memory-status
 
       # ==============================================
-      # LEARN KNOWLEDGE
+      # LEARN
       # ==============================================
 
-      - name: Test learning API
+      - name: Learn test knowledge
         run: |
-          curl -f \
+
+          RESPONSE=$(curl -fsS \
             -X POST \
             -H "Content-Type: application/json" \
             -d '{
-              "title":"AarHen Learning Test",
-              "content":"AarHen continuous learning system test knowledge for end-to-end verification.",
+              "title":"AarHen Automated Learning Test",
+              "content":"AarHen automated learning loop test knowledge. This knowledge will be used for feedback and correction testing.",
               "category":"system-test",
               "source":"github-actions"
             }' \
-            http://localhost:3000/learn
+            http://localhost:3000/learn)
+
+          echo "$RESPONSE"
+
+          MEMORY_ID=$(printf '%s' "$RESPONSE" | node -e '
+            let data = "";
+            process.stdin.on("data", chunk => data += chunk);
+            process.stdin.on("end", () => {
+              const json = JSON.parse(data);
+              const id = json.result && json.result.memoryId;
+              if (!id) {
+                console.error("Memory ID not found.");
+                process.exit(1);
+              }
+              console.log(id);
+            });
+          ')
+
+          echo "MEMORY_ID=$MEMORY_ID" >> "$GITHUB_ENV"
+
+          echo "Captured Memory ID:"
+          echo "$MEMORY_ID"
 
       # ==============================================
-      # VERIFY KNOWLEDGE STORAGE
+      # VERIFY LEARNING
       # ==============================================
 
       - name: Verify learned knowledge
@@ -90,21 +112,114 @@ jobs:
           curl -f http://localhost:3000/learning
 
       # ==============================================
-      # VERIFY MEMORY STORAGE
+      # FEEDBACK
       # ==============================================
 
-      - name: Verify memory endpoint
+      - name: Test user feedback
         run: |
-          curl -f http://localhost:3000/memory
+
+          curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"memoryId\":\"$MEMORY_ID\",
+              \"feedback\":\"This knowledge was useful during the AarHen learning test.\",
+              \"helpful\":true,
+              \"reason\":\"Automated feedback test\"
+            }" \
+            http://localhost:3000/feedback
 
       # ==============================================
-      # WEB RESEARCH
+      # CORRECTION
+      # ==============================================
+
+      - name: Test knowledge correction
+        run: |
+
+          curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"memoryId\":\"$MEMORY_ID\",
+              \"correction\":\"AarHen automated learning loop test knowledge was corrected successfully through user feedback.\",
+              \"reason\":\"Automated correction test\"
+            }" \
+            http://localhost:3000/correct
+
+      # ==============================================
+      # LEARNING HISTORY
+      # ==============================================
+
+      - name: Test learning history
+        run: |
+
+          curl -fsS \
+            "http://localhost:3000/learning-history?memoryId=$MEMORY_ID"
+
+      # ==============================================
+      # VERIFY CORRECTED MEMORY
+      # ==============================================
+
+      - name: Verify corrected memory
+        run: |
+
+          RESPONSE=$(curl -fsS \
+            "http://localhost:3000/learning-history?memoryId=$MEMORY_ID")
+
+          echo "$RESPONSE"
+
+          printf '%s' "$RESPONSE" | node -e '
+            let data = "";
+            process.stdin.on("data", chunk => data += chunk);
+            process.stdin.on("end", () => {
+
+              const json = JSON.parse(data);
+
+              if (!json.success) {
+                console.error("Learning history failed.");
+                process.exit(1);
+              }
+
+              if (json.feedbackCount < 1) {
+                console.error("Feedback was not recorded.");
+                process.exit(1);
+              }
+
+              if (json.status !== "corrected") {
+                console.error("Knowledge correction was not applied.");
+                process.exit(1);
+              }
+
+              console.log("Feedback verified.");
+              console.log("Correction verified.");
+              console.log("Learning history verified.");
+            });
+          '
+
+      # ==============================================
+      # RAG RECALL AFTER CORRECTION
+      # ==============================================
+
+      - name: Test knowledge recall
+        run: |
+
+          curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{
+              "input":"AarHen automated learning loop test knowledge"
+            }' \
+            http://localhost:3000/ask
+
+      # ==============================================
+      # TAVILY WEB RESEARCH
       # ==============================================
 
       - name: Test Tavily Web Research
         env:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
+
           curl -f \
             -X POST \
             -H "Content-Type: application/json" \
@@ -120,6 +235,14 @@ jobs:
       - name: Verify final learning status
         run: |
           curl -f http://localhost:3000/learning-status
+
+      # ==============================================
+      # FINAL MEMORY
+      # ==============================================
+
+      - name: Verify final memory
+        run: |
+          curl -f http://localhost:3000/memory
 
       # ==============================================
       # SERVER LOG
