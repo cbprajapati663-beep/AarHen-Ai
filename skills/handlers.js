@@ -1,90 +1,94 @@
 // ============================================================
 // AARHEN CORE V5
-// SKILL ENGINE HANDLERS
+// SKILL HANDLERS
 // ============================================================
 
-const finance = require("../engines/finance");
-const calculator = require("../engines/calculator");
-const knowledge = require("../engines/knowledge");
-const research = require("../engines/research");
-const coding = require("../engines/coding");
-const cybersecurity = require("../engines/cybersecurity");
-const dataAnalysis = require("../engines/dataAnalysis");
-const documents = require("../engines/documents");
-const business = require("../business/businessBrain");
+const finance =
+    require("../engines/finance");
 
+const calculator =
+    require("../engines/calculator");
 
-// ------------------------------------------------------------
-// Engine registry
-// ------------------------------------------------------------
+const knowledge =
+    require("../engines/knowledge");
+
+const research =
+    require("../engines/research");
+
+const coding =
+    require("../engines/coding");
+
+const cybersecurity =
+    require("../engines/cybersecurity");
+
+const dataAnalysis =
+    require("../engines/dataAnalysis");
+
+const documents =
+    require("../engines/documents");
+
+const business =
+    require("../business/businessBrain");
+
+const providerManager =
+    require("../providers/providerManager");
 
 const HANDLERS = {
-
     finance,
-
     calculator,
-
     knowledge,
-
     research,
-
     coding,
-
     cybersecurity,
-
     "data-analysis": dataAnalysis,
-
     documents,
+    business,
 
-    business
-
+    // Research provider access
+    providers: providerManager
 };
 
-
-// ------------------------------------------------------------
-// Get engine
-// ------------------------------------------------------------
-
 function getEngine(category) {
-
     return HANDLERS[category] || null;
 }
 
-
-// ------------------------------------------------------------
-// Check engine availability
-// ------------------------------------------------------------
-
 function hasEngine(category) {
-
     return Boolean(
         HANDLERS[category]
     );
 }
 
-
-// ------------------------------------------------------------
-// Get available engines
-// ------------------------------------------------------------
-
 function getAvailableEngines() {
-
     return Object.keys(HANDLERS);
 }
 
+function getResearchProvider() {
+    return providerManager.getProvider(
+        "research"
+    );
+}
 
-// ------------------------------------------------------------
-// Module exports
-// ------------------------------------------------------------
+function getResearchProviderStatus() {
+    return providerManager.getStatus();
+}
+
+async function searchWeb({
+    query,
+    maxSources = 5
+} = {}) {
+
+    return providerManager.searchWeb({
+        query,
+        maxSources
+    });
+}
 
 module.exports = {
-
     HANDLERS,
-
     getEngine,
-
     hasEngine,
-
-    getAvailableEngines
-
+    getAvailableEngines,
+    getResearchProvider,
+    getResearchProviderStatus,
+    searchWeb
 };
