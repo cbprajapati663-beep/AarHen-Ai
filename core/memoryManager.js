@@ -53,8 +53,9 @@ function normalize(
     value = ""
 ) {
 
-    return String(value || "")
-        .trim();
+    return String(
+        value || ""
+    ).trim();
 }
 
 // ============================================================
@@ -71,10 +72,9 @@ function clamp(
         Number(value);
 
     if (
-        Number.isNaN(
-            number
-        )
+        Number.isNaN(number)
     ) {
+
         return min;
     }
 
@@ -97,27 +97,77 @@ function getImportanceScore(
 
     const scores = {
 
-        low:
-            0.25,
+        low: 0.25,
 
-        normal:
-            0.50,
+        normal: 0.50,
 
-        high:
-            0.75,
+        high: 0.75,
 
-        critical:
-            1.00
+        critical: 1.00
     };
 
     return (
+
         scores[
             String(
                 importance
             ).toLowerCase()
-        ] ||
-        0.50
+        ]
+
+        || 0.50
     );
+}
+
+// ============================================================
+// NORMALIZE IMPORTANCE
+// ============================================================
+
+function normalizeImportance(
+    importance
+) {
+
+    const value =
+        String(
+            importance || ""
+        )
+        .trim()
+        .toLowerCase();
+
+    if (
+        IMPORTANCE_LEVELS
+            .includes(value)
+    ) {
+
+        return value;
+    }
+
+    return "normal";
+}
+
+// ============================================================
+// NORMALIZE TYPE
+// ============================================================
+
+function normalizeType(
+    type
+) {
+
+    const value =
+        String(
+            type || ""
+        )
+        .trim()
+        .toLowerCase();
+
+    if (
+        MEMORY_TYPES
+            .includes(value)
+    ) {
+
+        return value;
+    }
+
+    return null;
 }
 
 // ============================================================
@@ -128,81 +178,333 @@ function detectMemoryType(
     input = {}
 ) {
 
-    if (
-        input.type &&
-        MEMORY_TYPES.includes(
+    const explicitType =
+        normalizeType(
             input.type
-        )
-    ) {
+        );
 
-        return input.type;
+    if (explicitType) {
+
+        return explicitType;
     }
 
     const text =
         normalize(
             input.content
-        ).toLowerCase();
+        )
+        .toLowerCase();
 
     if (!text) {
 
         return "temporary";
     }
 
+    // --------------------------------------------------------
+    // USER PREFERENCE
+    // --------------------------------------------------------
+
     if (
+
         text.includes(
             "my preference"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "i prefer"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "always use"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "don't use"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "do not use"
+        )
+
+        ||
+
+        text.includes(
+            "from now on"
+        )
+
+        ||
+
+        text.includes(
+            "going forward"
         )
     ) {
 
         return "user-preference";
     }
 
+    // --------------------------------------------------------
+    // BUSINESS
+    // --------------------------------------------------------
+
     if (
+
         text.includes(
             "heritage auto finance"
-        ) ||
-        text.includes(
-            "business"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "customer"
-        ) ||
+        )
+
+        ||
+
         text.includes(
-            "loan"
-        ) ||
+            "vehicle finance"
+        )
+
+        ||
+
         text.includes(
-            "finance"
+            "vehicle loan"
+        )
+
+        ||
+
+        text.includes(
+            "commercial vehicle"
+        )
+
+        ||
+
+        text.includes(
+            "car finance"
+        )
+
+        ||
+
+        text.includes(
+            "refinance"
         )
     ) {
 
         return "business";
     }
 
+    // --------------------------------------------------------
+    // IMPORTANT FACT
+    // --------------------------------------------------------
+
     if (
+
         text.includes(
             "remember"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "important"
+        )
+
+        ||
+
+        text.includes(
+            "must remember"
         )
     ) {
 
         return "important-fact";
     }
 
+    // --------------------------------------------------------
+    // KNOWLEDGE
+    // --------------------------------------------------------
+
+    if (
+
+        text.includes(
+            "learn"
+        )
+
+        ||
+
+        text.includes(
+            "knowledge"
+        )
+
+        ||
+
+        text.includes(
+            "information"
+        )
+
+        ||
+
+        text.includes(
+            "concept"
+        )
+    ) {
+
+        return "knowledge";
+    }
+
     return "conversation";
+}
+
+// ============================================================
+// DETECT IMPORTANCE
+// ============================================================
+
+function detectImportance(
+    input = {}
+) {
+
+    if (
+        input.importance
+    ) {
+
+        return normalizeImportance(
+            input.importance
+        );
+    }
+
+    const text =
+        normalize(
+            input.content
+        )
+        .toLowerCase();
+
+    if (!text) {
+
+        return "low";
+    }
+
+    // --------------------------------------------------------
+    // CRITICAL
+    // --------------------------------------------------------
+
+    if (
+
+        text.includes(
+            "critical"
+        )
+
+        ||
+
+        text.includes(
+            "never forget"
+        )
+
+        ||
+
+        text.includes(
+            "very important"
+        )
+    ) {
+
+        return "critical";
+    }
+
+    // --------------------------------------------------------
+    // HIGH
+    // --------------------------------------------------------
+
+    if (
+
+        text.includes(
+            "important"
+        )
+
+        ||
+
+        text.includes(
+            "remember this"
+        )
+
+        ||
+
+        text.includes(
+            "always remember"
+        )
+
+        ||
+
+        text.includes(
+            "from now on"
+        )
+    ) {
+
+        return "high";
+    }
+
+    // --------------------------------------------------------
+    // LOW
+    // --------------------------------------------------------
+
+    if (
+
+        text.length < 25
+
+        ||
+
+        text.includes(
+            "temporary"
+        )
+    ) {
+
+        return "low";
+    }
+
+    return "normal";
+}
+
+// ============================================================
+// DETECT CONFIDENCE
+// ============================================================
+
+function detectConfidence(
+    input = {}
+) {
+
+    if (
+        typeof input.confidence ===
+        "number"
+    ) {
+
+        return clamp(
+            input.confidence
+        );
+    }
+
+    if (
+        input.verified === true
+    ) {
+
+        return 0.90;
+    }
+
+    if (
+        input.source &&
+        String(
+            input.source
+        ).trim()
+            .toLowerCase() !==
+            "user"
+    ) {
+
+        return 0.60;
+    }
+
+    return 0.50;
 }
 
 // ============================================================
@@ -222,8 +524,7 @@ function shouldRemember(
 
         return {
 
-            remember:
-                false,
+            remember: false,
 
             reason:
                 "Empty content."
@@ -236,8 +537,7 @@ function shouldRemember(
 
         return {
 
-            remember:
-                false,
+            remember: false,
 
             reason:
                 "Content is too short."
@@ -245,14 +545,12 @@ function shouldRemember(
     }
 
     if (
-        input.remember ===
-        false
+        input.remember === false
     ) {
 
         return {
 
-            remember:
-                false,
+            remember: false,
 
             reason:
                 "Memory explicitly disabled."
@@ -266,8 +564,7 @@ function shouldRemember(
 
         return {
 
-            remember:
-                false,
+            remember: false,
 
             reason:
                 "Temporary information should not enter long-term memory."
@@ -276,8 +573,7 @@ function shouldRemember(
 
     return {
 
-        remember:
-            true,
+        remember: true,
 
         reason:
             "Information is suitable for memory."
@@ -298,11 +594,9 @@ function buildMemoryRecord(
         );
 
     const importance =
-        IMPORTANCE_LEVELS.includes(
-            input.importance
-        )
-            ? input.importance
-            : "normal";
+        detectImportance(
+            input
+        );
 
     const importanceScore =
         getImportanceScore(
@@ -310,12 +604,25 @@ function buildMemoryRecord(
         );
 
     const confidence =
-        clamp(
-            typeof input.confidence ===
-            "number"
-                ? input.confidence
-                : 0.5
+        detectConfidence(
+            input
         );
+
+    const tags =
+        Array.isArray(
+            input.tags
+        )
+
+            ? input.tags
+                .map(
+                    tag =>
+                        normalize(
+                            tag
+                        )
+                )
+                .filter(Boolean)
+
+            : [];
 
     return {
 
@@ -355,21 +662,16 @@ function buildMemoryRecord(
                 input.verified
             ),
 
-        tags:
-            Array.isArray(
-                input.tags
-            )
-                ? input.tags
-                    .map(
-                        tag =>
-                            normalize(
-                                tag
-                            )
-                    )
-                    .filter(
-                        Boolean
-                    )
-                : []
+        tags,
+
+        memoryManaged:
+            true,
+
+        managerVersion:
+            "5.0.0",
+
+        createdBy:
+            "AarHen Memory Manager"
     };
 }
 
@@ -386,14 +688,15 @@ function remember(
             input
         );
 
-    if (!decision.remember) {
+    if (
+        !decision.remember
+    ) {
 
         return {
 
             success: true,
 
-            remembered:
-                false,
+            remembered: false,
 
             status:
                 "not-stored",
@@ -419,8 +722,7 @@ function remember(
 
             success: true,
 
-            remembered:
-                true,
+            remembered: true,
 
             memoryId:
                 saved.id,
@@ -433,15 +735,24 @@ function remember(
                     saved.duplicate
                 ),
 
+            type:
+                record.type,
+
             importance:
                 record.importance,
 
             importanceScore:
                 record.importanceScore,
 
+            confidence:
+                record.confidence,
+
             status:
+
                 saved.duplicate
+
                     ? "already-exists"
+
                     : "stored"
         };
 
@@ -451,13 +762,56 @@ function remember(
 
             success: false,
 
-            remembered:
-                false,
+            remembered: false,
 
             error:
                 error.message
         };
     }
+}
+
+// ============================================================
+// AUTO REMEMBER
+// ============================================================
+
+function autoRemember(
+    input = {}
+) {
+
+    const decision =
+        shouldRemember(
+            input
+        );
+
+    if (
+        !decision.remember
+    ) {
+
+        return {
+
+            success: true,
+
+            remembered: false,
+
+            automatic: true,
+
+            status:
+                "auto-memory-skipped",
+
+            reason:
+                decision.reason
+        };
+    }
+
+    return remember(
+        {
+            ...input,
+
+            source:
+                input.source ||
+                "automatic-memory"
+        }
+    );
 }
 
 // ============================================================
@@ -497,9 +851,9 @@ function recall(
             cleanQuery
         );
 
-    // ------------------------------------------
+    // --------------------------------------------------------
     // VERIFIED ONLY
-    // ------------------------------------------
+    // --------------------------------------------------------
 
     if (
         options.verifiedOnly ===
@@ -509,34 +863,35 @@ function recall(
         results =
             results.filter(
                 item =>
-                    verification.isVerified(
-                        item
-                    )
+                    verification
+                        .isVerified(
+                            item
+                        )
             );
     }
 
-    // ------------------------------------------
+    // --------------------------------------------------------
     // TYPE FILTER
-    // ------------------------------------------
+    // --------------------------------------------------------
 
-    if (
-        options.type &&
-        MEMORY_TYPES.includes(
+    const requestedType =
+        normalizeType(
             options.type
-        )
-    ) {
+        );
+
+    if (requestedType) {
 
         results =
             results.filter(
                 item =>
                     item.type ===
-                    options.type
+                    requestedType
             );
     }
 
-    // ------------------------------------------
+    // --------------------------------------------------------
     // IMPORTANCE FILTER
-    // ------------------------------------------
+    // --------------------------------------------------------
 
     if (
         options.minimumImportance
@@ -544,7 +899,8 @@ function recall(
 
         const minimum =
             getImportanceScore(
-                options.minimumImportance
+                options
+                    .minimumImportance
             );
 
         results =
@@ -552,10 +908,59 @@ function recall(
                 item =>
                     Number(
                         item.importanceScore ||
-                        0
+                        getImportanceScore(
+                            item.importance
+                        )
                     ) >= minimum
             );
     }
+
+    // --------------------------------------------------------
+    // MANAGED MEMORY BOOST
+    // --------------------------------------------------------
+
+    results =
+        results.map(
+            item => {
+
+                let managerScore =
+                    0;
+
+                if (
+                    item.memoryManaged
+                ) {
+
+                    managerScore +=
+                        0.10;
+                }
+
+                if (
+                    item.importance ===
+                    "critical"
+                ) {
+
+                    managerScore +=
+                        0.20;
+                }
+
+                else if (
+                    item.importance ===
+                    "high"
+                ) {
+
+                    managerScore +=
+                        0.10;
+                }
+
+                return {
+
+                    ...item,
+
+                    memoryManagerScore:
+                        managerScore
+                };
+            }
+        );
 
     return {
 
@@ -588,13 +993,38 @@ function recallImportant(
 ) {
 
     return recall(
+
         query,
+
         {
 
             limit,
 
             minimumImportance:
                 "high"
+        }
+    );
+}
+
+// ============================================================
+// RECALL CRITICAL
+// ============================================================
+
+function recallCritical(
+    query = "",
+    limit = 10
+) {
+
+    return recall(
+
+        query,
+
+        {
+
+            limit,
+
+            minimumImportance:
+                "critical"
         }
     );
 }
@@ -609,13 +1039,14 @@ function recallVerified(
 ) {
 
     return recall(
+
         query,
+
         {
 
             limit,
 
-            verifiedOnly:
-                true
+            verifiedOnly: true
         }
     );
 }
@@ -684,9 +1115,26 @@ function update(
         };
     }
 
+    if (
+        !changes ||
+        typeof changes !==
+        "object"
+    ) {
+
+        return {
+
+            success: false,
+
+            error:
+                "Memory changes are required."
+        };
+    }
+
     const updated =
         memory.update(
+
             memoryId,
+
             changes
         );
 
@@ -714,6 +1162,66 @@ function update(
 }
 
 // ============================================================
+// UPDATE IMPORTANCE
+// ============================================================
+
+function updateImportance(
+    memoryId,
+    importance
+) {
+
+    const normalized =
+        normalizeImportance(
+            importance
+        );
+
+    return update(
+
+        memoryId,
+
+        {
+
+            importance:
+                normalized,
+
+            importanceScore:
+                getImportanceScore(
+                    normalized
+                ),
+
+            updatedBy:
+                "AarHen Memory Manager"
+        }
+    );
+}
+
+// ============================================================
+// UPDATE CONFIDENCE
+// ============================================================
+
+function updateConfidence(
+    memoryId,
+    confidence
+) {
+
+    return update(
+
+        memoryId,
+
+        {
+
+            confidence:
+                clamp(
+                    confidence
+                ),
+
+            updatedBy:
+                "AarHen Memory Manager"
+        }
+    );
+}
+
+// ============================================================
 // FORGET
 // ============================================================
 
@@ -721,13 +1229,24 @@ function forget(
     memoryId
 ) {
 
+    if (!memoryId) {
+
+        return {
+
+            success: false,
+
+            error:
+                "Memory ID is required."
+        };
+    }
+
     return memory.forget(
         memoryId
     );
 }
 
 // ============================================================
-// MEMORY PROFILE
+// GET MEMORY PROFILE
 // ============================================================
 
 function getMemoryProfile(
@@ -769,7 +1288,9 @@ function getMemoryProfile(
             importanceScore:
                 Number(
                     item.importanceScore ||
-                    0.5
+                    getImportanceScore(
+                        item.importance
+                    )
                 ),
 
             confidence:
@@ -790,6 +1311,11 @@ function getMemoryProfile(
             source:
                 item.source ||
                 "unknown",
+
+            memoryManaged:
+                Boolean(
+                    item.memoryManaged
+                ),
 
             createdAt:
                 item.createdAt,
@@ -814,6 +1340,9 @@ function getSummary() {
         total:
             all.length,
 
+        managed:
+            0,
+
         byType: {},
 
         byImportance: {
@@ -833,35 +1362,68 @@ function getSummary() {
     };
 
     for (
-        const item
-        of all
+        const item of all
     ) {
 
+        // ----------------------------------------------
+        // MANAGED
+        // ----------------------------------------------
+
+        if (
+            item.memoryManaged
+        ) {
+
+            summary.managed++;
+        }
+
+        // ----------------------------------------------
+        // TYPE
+        // ----------------------------------------------
+
         const type =
-            item.type ||
-            "unknown";
+            MEMORY_TYPES.includes(
+                item.type
+            )
+
+                ? item.type
+
+                : "unknown";
 
         summary.byType[type] =
             (
-                summary.byType[type] ||
+                summary
+                    .byType[type] ||
                 0
             ) + 1;
 
+        // ----------------------------------------------
+        // IMPORTANCE
+        // ----------------------------------------------
+
         const importance =
-            IMPORTANCE_LEVELS.includes(
-                item.importance
-            )
+            IMPORTANCE_LEVELS
+                .includes(
+                    item.importance
+                )
+
                 ? item.importance
+
                 : "normal";
 
-        summary.byImportance[
-            importance
-        ]++;
+        summary
+            .byImportance[
+                importance
+            ]++;
+
+        // ----------------------------------------------
+        // VERIFICATION
+        // ----------------------------------------------
 
         if (
-            verification.isVerified(
-                item
-            )
+            verification
+                .isVerified(
+                    item
+                )
         ) {
 
             summary.verified++;
@@ -898,9 +1460,11 @@ function analyzeMemoryDecision(
 
     const record =
         decision.remember
+
             ? buildMemoryRecord(
                 input
             )
+
             : null;
 
     return {
@@ -939,7 +1503,7 @@ function analyzeMemoryDecision(
 }
 
 // ============================================================
-// HEALTH
+// MEMORY HEALTH
 // ============================================================
 
 function health() {
@@ -964,8 +1528,11 @@ function health() {
                 result,
 
             status:
+
                 result.healthy
+
                     ? "memory-manager-online"
+
                     : "memory-manager-error"
         };
 
@@ -1012,19 +1579,33 @@ function getStatus() {
 
             "automatic-memory-decision",
 
+            "automatic-memory-storage",
+
             "memory-classification",
+
+            "importance-detection",
 
             "importance-scoring",
 
+            "confidence-detection",
+
             "confidence-tracking",
+
+            "duplicate-safe-memory",
 
             "memory-recall",
 
             "important-memory-recall",
 
+            "critical-memory-recall",
+
             "verified-memory-recall",
 
             "memory-update",
+
+            "importance-update",
+
+            "confidence-update",
 
             "memory-forget",
 
@@ -1039,7 +1620,13 @@ function getStatus() {
             MEMORY_TYPES,
 
         importanceLevels:
-            IMPORTANCE_LEVELS
+            IMPORTANCE_LEVELS,
+
+        automaticMemory:
+            true,
+
+        userControl:
+            true
     };
 }
 
@@ -1059,7 +1646,15 @@ module.exports = {
 
     getImportanceScore,
 
+    normalizeImportance,
+
+    normalizeType,
+
     detectMemoryType,
+
+    detectImportance,
+
+    detectConfidence,
 
     shouldRemember,
 
@@ -1067,15 +1662,23 @@ module.exports = {
 
     remember,
 
+    autoRemember,
+
     recall,
 
     recallImportant,
+
+    recallCritical,
 
     recallVerified,
 
     get,
 
     update,
+
+    updateImportance,
+
+    updateConfidence,
 
     forget,
 
