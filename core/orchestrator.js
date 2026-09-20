@@ -7,6 +7,7 @@ const Brain = require("./brain");
 const router = require("../skills/router");
 const intent = require("./intent");
 const executor = require("../skills/executor");
+const permissions = require("./permissions");
 
 
 // ------------------------------------------------------------
@@ -43,10 +44,88 @@ function selectSkill(input) {
 
 
 // ------------------------------------------------------------
+// Determine required permission
+// ------------------------------------------------------------
+
+function determinePermission(
+    intentResult,
+    routing
+) {
+
+    if (!routing.selectedSkill) {
+
+        return permissions.check(
+            "execute_external_code"
+        );
+
+    }
+
+
+    const category =
+        routing.selectedSkill.category;
+
+
+    // Security-related external testing
+
+    if (
+        category === "security" &&
+        intentResult.intent !== "general_request"
+    ) {
+
+        return permissions.check(
+            "security_testing_against_external_target"
+        );
+
+    }
+
+
+    // Coding execution is not automatically allowed
+
+    if (
+        category === "coding"
+    ) {
+
+        return permissions.check(
+            "execute_external_code"
+        );
+
+    }
+
+
+    // Normal calculation/knowledge work
+
+    if (
+        category === "finance" ||
+        category === "calculation" ||
+        category === "knowledge" ||
+        category === "research" ||
+        category === "data" ||
+        category === "documents" ||
+        category === "business"
+    ) {
+
+        return permissions.check(
+            "read_public_information"
+        );
+
+    }
+
+
+    return permissions.check(
+        "execute_external_code"
+    );
+
+}
+
+
+// ------------------------------------------------------------
 // Process complete request
 // ------------------------------------------------------------
 
-function orchestrate(input, context = {}) {
+function orchestrate(
+    input,
+    context = {}
+) {
 
     if (
         !input ||
@@ -103,7 +182,9 @@ function orchestrate(input, context = {}) {
     // --------------------------------------------------------
 
     const intentResult =
-        intent.analyzeIntent(request);
+        intent.analyzeIntent(
+            request
+        );
 
 
     if (!intentResult.success) {
@@ -112,7 +193,100 @@ function orchestrate(input, context = {}) {
 
 
     // --------------------------------------------------------
-    // 4. Engine Execution
+    // 4. Permission check
+    // --------------------------------------------------------
+
+    const permission =
+        determinePermission(
+            intentResult,
+            routing
+        );
+
+
+    // --------------------------------------------------------
+    // 5. Stop if approval is required
+    // --------------------------------------------------------
+
+    if (
+        permission.requiresApproval
+    ) {
+
+        return {
+
+            success: true,
+
+            request,
+
+            brain: {
+
+                language:
+                    brainResult.language,
+
+                languageInfo:
+                    brainResult.languageInfo,
+
+                memory:
+                    brainResult.memory
+
+            },
+
+            routing: {
+
+                selectedSkill:
+                    routing.selectedSkill,
+
+                matches:
+                    routing.matches,
+
+                status:
+                    routing.status
+
+            },
+
+            intent: {
+
+                category:
+                    intentResult.category,
+
+                intent:
+                    intentResult.intent,
+
+                parameters:
+                    intentResult.parameters
+
+            },
+
+            permission: {
+
+                action:
+                    permission.action,
+
+                policy:
+                    permission.policy,
+
+                requiresApproval:
+                    true
+
+            },
+
+            execution: null,
+
+            status:
+                "approval-required",
+
+            message:
+                "AarHen requires user approval before performing this action.",
+
+            timestamp:
+                new Date().toISOString()
+
+        };
+
+    }
+
+
+    // --------------------------------------------------------
+    // 6. Engine execution
     // --------------------------------------------------------
 
     const execution =
@@ -122,7 +296,7 @@ function orchestrate(input, context = {}) {
 
 
     // --------------------------------------------------------
-    // 5. Final orchestration result
+    // 7. Final result
     // --------------------------------------------------------
 
     return {
@@ -173,6 +347,20 @@ function orchestrate(input, context = {}) {
         },
 
 
+        permission: {
+
+            action:
+                permission.action,
+
+            policy:
+                permission.policy,
+
+            requiresApproval:
+                permission.requiresApproval
+
+        },
+
+
         execution,
 
 
@@ -217,6 +405,10 @@ function getStatus() {
 
             "Memory Engine",
 
+            "Verification Engine",
+
+            "Permission & Safety Brain",
+
             "Skill Registry",
 
             "Skill Router",
@@ -245,6 +437,8 @@ module.exports = {
     orchestrate,
 
     selectSkill,
+
+    determinePermission,
 
     getStatus
 
