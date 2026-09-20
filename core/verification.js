@@ -1,205 +1,324 @@
 // ============================================================
 // AARHEN CORE V5
-// SELF-VERIFICATION BRAIN
+// ADVANCED VERIFICATION ENGINE
 // ============================================================
 
-const memory = require("./memory");
+const memory =
+    require("./memory");
 
+// ============================================================
+// HELPERS
+// ============================================================
 
-// ------------------------------------------------------------
-// Create a verification record
-// ------------------------------------------------------------
+function clampConfidence(value) {
+
+    const number =
+        Number(value);
+
+    if (Number.isNaN(number)) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        Math.min(1, number)
+    );
+}
+
+function normalizeSourceCount(value) {
+
+    const count =
+        Number(value);
+
+    if (
+        Number.isNaN(count) ||
+        count < 0
+    ) {
+        return 0;
+    }
+
+    return Math.floor(count);
+}
+
+function determineStatus(
+    sourceCount,
+    confidence,
+    conflictDetected = false
+) {
+
+    if (conflictDetected) {
+        return "conflict-review";
+    }
+
+    if (
+        sourceCount >= 2 &&
+        confidence >= 0.8
+    ) {
+        return "verified";
+    }
+
+    if (
+        sourceCount >= 1 &&
+        confidence >= 0.6
+    ) {
+        return "partially-verified";
+    }
+
+    return "review";
+}
+
+// ============================================================
+// VERIFY MEMORY
+// ============================================================
 
 function verifyMemory({
+
     memoryId,
-    verifiedBy = "system",
+
+    verifiedBy =
+        "AarHen Verification Engine",
+
     sourceCount = 1,
+
     confidence = 0.5,
-    notes = ""
+
+    notes = "",
+
+    evidence = [],
+
+    conflictDetected = false
+
 } = {}) {
 
     if (!memoryId) {
 
         return {
             success: false,
-            error: "memoryId is required."
+            error:
+                "Memory ID is required."
         };
-
     }
 
-
     const existing =
-        memory.getAll()
-            .find(
-                item =>
-                    item.id === memoryId
-            );
-
+        memory.getById(
+            memoryId
+        );
 
     if (!existing) {
 
         return {
             success: false,
-            error: "Memory not found."
+            error:
+                "Memory not found."
         };
-
     }
 
-
-    let safeConfidence =
-        Number(confidence);
-
-
-    if (
-        Number.isNaN(
-            safeConfidence
-        )
-    ) {
-
-        safeConfidence = 0.5;
-
-    }
-
-
-    safeConfidence =
-        Math.max(
-            0,
-            Math.min(
-                1,
-                safeConfidence
-            )
+    const normalizedSourceCount =
+        normalizeSourceCount(
+            sourceCount
         );
 
+    const normalizedConfidence =
+        clampConfidence(
+            confidence
+        );
 
-    let verificationStatus =
-        "review";
+    const normalizedEvidence =
+        Array.isArray(evidence)
+            ? evidence
+            : [];
 
-
-    if (
-        sourceCount >= 2 &&
-        safeConfidence >= 0.80
-    ) {
-
-        verificationStatus =
-            "verified";
-
-    }
-    else if (
-        sourceCount >= 1 &&
-        safeConfidence >= 0.60
-    ) {
-
-        verificationStatus =
-            "partially-verified";
-
-    }
-
+    const status =
+        determineStatus(
+            normalizedSourceCount,
+            normalizedConfidence,
+            Boolean(conflictDetected)
+        );
 
     const updated =
         memory.update(
             memoryId,
             {
 
-                verificationStatus,
+                verified:
+                    status ===
+                    "verified",
+
+                verificationStatus:
+                    status,
+
+                verificationConfidence:
+                    normalizedConfidence,
+
+                verificationSourceCount:
+                    normalizedSourceCount,
+
+                verificationSources:
+                    normalizedEvidence,
+
+                verificationEvidence:
+                    normalizedEvidence,
+
+                verificationConflict:
+                    Boolean(
+                        conflictDetected
+                    ),
 
                 verifiedBy,
 
-                sourceCount:
-                    Number(sourceCount),
-
-                verificationConfidence:
-                    safeConfidence,
-
                 verificationNotes:
-                    notes,
+                    String(
+                        notes || ""
+                    ).trim(),
 
                 lastVerifiedAt:
                     new Date().toISOString()
-
             }
         );
 
+    if (!updated) {
+
+        return {
+            success: false,
+            error:
+                "Memory update failed."
+        };
+    }
 
     return {
 
         success: true,
 
-        memoryId:
-            updated.id,
+        memoryId,
 
-        verificationStatus,
+        verificationStatus:
+            status,
 
-        verificationConfidence:
-            safeConfidence,
+        verified:
+            status === "verified",
+
+        confidence:
+            normalizedConfidence,
 
         sourceCount:
-            Number(sourceCount)
+            normalizedSourceCount,
 
+        evidenceCount:
+            normalizedEvidence.length,
+
+        conflictDetected:
+            Boolean(
+                conflictDetected
+            ),
+
+        verifiedBy,
+
+        notes:
+            String(
+                notes || ""
+            ).trim(),
+
+        memory:
+            updated
     };
-
 }
 
-
-// ------------------------------------------------------------
-// Check verification status
-// ------------------------------------------------------------
+// ============================================================
+// GET VERIFICATION STATUS
+// ============================================================
 
 function getVerificationStatus(
     memoryId
 ) {
 
-    const existing =
-        memory.getAll()
-            .find(
-                item =>
-                    item.id === memoryId
-            );
-
-
-    if (!existing) {
+    if (!memoryId) {
 
         return {
-
             success: false,
-
             error:
-                "Memory not found."
-
+                "Memory ID is required."
         };
-
     }
 
+    const item =
+        memory.getById(
+            memoryId
+        );
+
+    if (!item) {
+
+        return {
+            success: false,
+            error:
+                "Memory not found."
+        };
+    }
 
     return {
 
         success: true,
 
-        memoryId:
-            existing.id,
+        memoryId,
 
-        title:
-            existing.title,
+        verified:
+            Boolean(
+                item.verified
+            ),
 
         verificationStatus:
-            existing.verificationStatus ||
-            "unverified",
+            item.verificationStatus ||
+            "review",
 
-        confidence:
-            existing.verificationConfidence ??
-            0,
+        verificationConfidence:
+            Number(
+                item.verificationConfidence ||
+                item.confidence ||
+                0
+            ),
 
-        sourceCount:
-            existing.sourceCount ??
-            0
+        verificationSourceCount:
+            Number(
+                item.verificationSourceCount ||
+                item.sourceCount ||
+                0
+            ),
 
+        verificationSources:
+            Array.isArray(
+                item.verificationSources
+            )
+                ? item.verificationSources
+                : [],
+
+        verificationEvidence:
+            Array.isArray(
+                item.verificationEvidence
+            )
+                ? item.verificationEvidence
+                : [],
+
+        verificationConflict:
+            Boolean(
+                item.verificationConflict
+            ),
+
+        verifiedBy:
+            item.verifiedBy ||
+            null,
+
+        verificationNotes:
+            item.verificationNotes ||
+            "",
+
+        lastVerifiedAt:
+            item.lastVerifiedAt ||
+            null
     };
-
 }
 
-
-// ------------------------------------------------------------
-// Check whether memory is verified
-// ------------------------------------------------------------
+// ============================================================
+// CHECK VERIFIED
+// ============================================================
 
 function isVerified(
     memoryItem
@@ -209,98 +328,145 @@ function isVerified(
         return false;
     }
 
-
     return (
 
         memoryItem.verificationStatus ===
-        "verified"
+            "verified"
 
         &&
 
         Number(
-            memoryItem.verificationConfidence || 0
-        ) >= 0.80
+            memoryItem.verificationConfidence ||
+            0
+        ) >= 0.8
 
+        &&
+
+        Number(
+            memoryItem.verificationSourceCount ||
+            memoryItem.sourceCount ||
+            0
+        ) >= 2
+
+        &&
+
+        memoryItem.verificationConflict !==
+            true
     );
-
 }
 
+// ============================================================
+// GET VERIFIED MEMORIES
+// ============================================================
 
-// ------------------------------------------------------------
-// Verify multiple memories
-// ------------------------------------------------------------
+function getVerifiedMemories() {
 
-function getVerifiedMemories(
-    memories = []
-) {
-
-    if (!Array.isArray(memories)) {
-
-        return [];
-
-    }
-
-
-    return memories.filter(
-        item =>
-            isVerified(item)
-    );
-
+    return memory
+        .getAll()
+        .filter(
+            item =>
+                isVerified(item)
+        );
 }
 
+// ============================================================
+// GET REVIEW REQUIRED
+// ============================================================
 
-// ------------------------------------------------------------
-// Calculate verification summary
-// ------------------------------------------------------------
+function getReviewRequiredMemories() {
 
-function verificationSummary(
-    memories = []
-) {
+    return memory
+        .getAll()
+        .filter(
+            item =>
+                item.type === "knowledge" &&
+                !isVerified(item)
+        );
+}
 
-    const list =
-        Array.isArray(memories)
-            ? memories
-            : [];
+// ============================================================
+// VERIFICATION SUMMARY
+// ============================================================
 
+function verificationSummary() {
 
-    const verified =
-        getVerifiedMemories(
-            list
+    const all =
+        memory.getAll();
+
+    const knowledge =
+        all.filter(
+            item =>
+                item.type === "knowledge"
         );
 
+    const verified =
+        knowledge.filter(
+            item =>
+                isVerified(item)
+        );
 
-    const partiallyVerified =
-        list.filter(
+    const partial =
+        knowledge.filter(
             item =>
                 item.verificationStatus ===
                 "partially-verified"
         );
 
+    const conflicts =
+        knowledge.filter(
+            item =>
+                item.verificationConflict ===
+                true
+        );
+
+    const review =
+        knowledge.filter(
+            item =>
+                !isVerified(item)
+        );
 
     return {
 
-        total:
-            list.length,
+        success: true,
+
+        totalKnowledge:
+            knowledge.length,
 
         verified:
             verified.length,
 
         partiallyVerified:
-            partiallyVerified.length,
+            partial.length,
 
-        unverified:
-            list.length -
-            verified.length -
-            partiallyVerified.length
+        conflicts:
+            conflicts.length,
 
+        reviewRequired:
+            review.length,
+
+        verificationEngine:
+            "Advanced Verification Engine",
+
+        rules: {
+
+            verified:
+                "2+ sources AND confidence >= 0.80",
+
+            partiallyVerified:
+                "1+ source AND confidence >= 0.60",
+
+            conflict:
+                "Conflicting evidence requires review",
+
+            review:
+                "Insufficient verification confidence"
+        }
     };
-
 }
 
-
-// ------------------------------------------------------------
-// Module exports
-// ------------------------------------------------------------
+// ============================================================
+// EXPORTS
+// ============================================================
 
 module.exports = {
 
@@ -312,6 +478,13 @@ module.exports = {
 
     getVerifiedMemories,
 
-    verificationSummary
+    getReviewRequiredMemories,
 
+    verificationSummary,
+
+    determineStatus,
+
+    clampConfidence,
+
+    normalizeSourceCount
 };
