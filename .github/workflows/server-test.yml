@@ -3,14 +3,17 @@ name: AarHen Server Test
 on:
   push:
     branches: ["main"]
+
   pull_request:
     branches: ["main"]
 
 jobs:
   server-test:
+
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -20,6 +23,8 @@ jobs:
           node-version: 20
 
       - name: Start AarHen server
+        env:
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
           node server.js > server.log 2>&1 &
           sleep 3
@@ -47,6 +52,16 @@ jobs:
       - name: Verify learned knowledge
         run: |
           curl -f http://localhost:3000/learning
+
+      - name: Test Tavily Web Research
+        env:
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+        run: |
+          curl -f \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"input":"latest vehicle finance information search karo"}' \
+            http://localhost:3000/ask
 
       - name: Show server log
         if: always()
