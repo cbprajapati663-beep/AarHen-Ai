@@ -3,333 +3,293 @@
 // RESPONSE ENGINE
 // ============================================================
 
-
-// ------------------------------------------------------------
-// Format number
-// ------------------------------------------------------------
-
 function formatNumber(value) {
-
-    const number =
-        Number(value);
-
+    const number = Number(value);
 
     if (!Number.isFinite(number)) {
-        return String(value);
+        return String(value ?? "");
     }
 
-
-    return number.toLocaleString(
-        "en-IN",
-        {
-            maximumFractionDigits: 2
-        }
-    );
-
+    return number.toLocaleString("en-IN", {
+        maximumFractionDigits: 2
+    });
 }
 
-
-// ------------------------------------------------------------
-// Create EMI response
-// ------------------------------------------------------------
+// ============================================================
+// FINANCE RESPONSES
+// ============================================================
 
 function formatEMI(result) {
 
-    if (
-        !result ||
-        !result.result
-    ) {
-
-        return {
-
-            success: false,
-
-            message:
-                "EMI result is not available."
-
-        };
-
+    if (!result || !result.success) {
+        return "EMI calculation complete nahi ho saki.";
     }
 
-
-    const data =
-        result.result;
-
-
-    return {
-
-        success: true,
-
-        type:
-            "finance",
-
-        message:
-            `Loan amount ₹${formatNumber(data.principal)} ke liye ${data.annualRate}% annual interest aur ${data.years} years tenure par estimated EMI ₹${formatNumber(data.monthlyEMI)} per month hai.`,
-
-        details: {
-
-            loanAmount:
-                data.principal,
-
-            interestRate:
-                data.annualRate,
-
-            tenureYears:
-                data.years,
-
-            monthlyEMI:
-                data.monthlyEMI,
-
-            totalPayment:
-                data.totalPayment,
-
-            totalInterest:
-                data.totalInterest
-
-        }
-
-    };
-
+    return (
+        `Loan amount ₹${formatNumber(result.principal)}, ` +
+        `${result.annualRate}% annual interest aur ` +
+        `${result.years} years tenure ke hisaab se ` +
+        `estimated EMI ₹${formatNumber(result.emi)} ` +
+        `per month hai.`
+    );
 }
-
-
-// ------------------------------------------------------------
-// Format simple interest
-// ------------------------------------------------------------
 
 function formatSimpleInterest(result) {
 
-    if (
-        !result ||
-        !result.result
-    ) {
-
-        return {
-
-            success: false,
-
-            message:
-                "Interest result is not available."
-
-        };
-
+    if (!result || !result.success) {
+        return "Simple interest calculation complete nahi ho saki.";
     }
 
-
-    const data =
-        result.result;
-
-
-    return {
-
-        success: true,
-
-        type:
-            "finance",
-
-        message:
-            `₹${formatNumber(data.principal)} par ${data.annualRate}% annual rate aur ${data.years} years ke liye simple interest ₹${formatNumber(data.interest)} hai. Total amount ₹${formatNumber(data.totalAmount)} hoga.`,
-
-        details:
-            data
-
-    };
-
+    return (
+        `Principal ₹${formatNumber(result.principal)}, ` +
+        `${result.annualRate}% interest aur ` +
+        `${result.years} years ke hisaab se ` +
+        `simple interest ₹${formatNumber(result.interest)} ` +
+        `aur total amount ₹${formatNumber(result.totalAmount)} hai.`
+    );
 }
 
+// ============================================================
+// MISSING INPUT
+// ============================================================
 
-// ------------------------------------------------------------
-// Format missing input
-// ------------------------------------------------------------
+function formatMissingInput(missing = []) {
 
-function formatMissingInput(result) {
+    if (!Array.isArray(missing) ||
+        missing.length === 0) {
 
-    const missing =
-        result.missingParameters || [];
+        return "Mujhe calculation complete karne ke liye required information chahiye.";
+    }
 
-
-    return {
-
-        success: true,
-
-        type:
-            "needs-input",
-
-        message:
-            `Mujhe calculation complete karne ke liye ${missing.join(", ")} chahiye.`,
-
-        missingParameters:
-            missing
-
-    };
-
+    return (
+        "Mujhe calculation complete karne ke liye " +
+        missing.join(", ") +
+        " chahiye."
+    );
 }
 
+// ============================================================
+// WEB RESEARCH RESPONSE
+// ============================================================
 
-// ------------------------------------------------------------
-// Format generic execution result
-// ------------------------------------------------------------
-
-function formatExecution(result) {
+function formatResearch(result) {
 
     if (!result) {
-
-        return {
-
-            success: false,
-
-            message:
-                "No execution result available."
-
-        };
-
+        return "Research result available nahi hai.";
     }
 
+    if (
+        result.executionStatus ===
+        "research-error"
+    ) {
+
+        return (
+            "Web research complete nahi ho saki. " +
+            (result.result?.error ||
+                "Research provider error.")
+        );
+    }
+
+    const research =
+        result.result || {};
+
+    const answer =
+        String(
+            research.answer || ""
+        ).trim();
+
+    const sources =
+        Array.isArray(research.results)
+            ? research.results
+            : [];
+
+    const verification =
+        research.verification || {};
+
+    let response = "";
+
+    if (answer) {
+
+        response +=
+            `🌐 Web Research Result\n\n${answer}`;
+    } else {
+
+        response +=
+            "🌐 Web research complete hui, lekin provider ne direct summary nahi di.";
+    }
+
+    response +=
+        `\n\n📚 Sources: ${sources.length}`;
 
     if (
-        result.needsInput
+        verification.verificationStatus
     ) {
+
+        response +=
+            `\n🔍 Verification: ${verification.verificationStatus}`;
+    }
+
+    if (
+        research.learning &&
+        research.learning.success
+    ) {
+
+        response +=
+            "\n🧠 Verified information AarHen ki knowledge memory me learn ho gayi.";
+    }
+
+    if (sources.length > 0) {
+
+        response +=
+            "\n\nTop sources:";
+
+        sources
+            .slice(0, 5)
+            .forEach(
+                (source, index) => {
+
+                    response +=
+                        `\n${index + 1}. ${source.title}`;
+
+                    if (source.url) {
+
+                        response +=
+                            ` — ${source.url}`;
+                    }
+                }
+            );
+    }
+
+    return response;
+}
+
+// ============================================================
+// GENERIC EXECUTION RESPONSE
+// ============================================================
+
+function formatExecution(execution) {
+
+    if (!execution) {
+        return "AarHen execution result available nahi hai.";
+    }
+
+    if (execution.needsInput) {
 
         return formatMissingInput(
-            result
+            execution.missingParameters
         );
-
     }
 
+    if (!execution.success) {
+
+        return (
+            "AarHen task complete nahi kar saka. " +
+            (execution.error ||
+                "Unknown execution error.")
+        );
+    }
 
     if (
-        !result.success
+        execution.category === "research"
     ) {
 
-        return {
-
-            success: false,
-
-            type:
-                "error",
-
-            message:
-                result.error ||
-                "Request could not be completed."
-
-        };
-
+        return formatResearch(
+            execution
+        );
     }
 
-
     if (
-        result.intent ===
-        "calculate_emi"
+        execution.category === "finance" &&
+        execution.intent === "calculate_emi"
     ) {
 
         return formatEMI(
-            result
+            execution.result
         );
-
     }
 
-
     if (
-        result.intent ===
-        "simple_interest"
+        execution.category === "finance" &&
+        execution.intent === "simple_interest"
     ) {
 
         return formatSimpleInterest(
-            result
+            execution.result
         );
-
     }
 
-
-    return {
-
-        success: true,
-
-        type:
-            "general",
-
-        message:
-            result.message ||
-            "Request processed successfully.",
-
-        data:
-            result
-
-    };
-
-}
-
-
-// ------------------------------------------------------------
-// Create final response
-// ------------------------------------------------------------
-
-function createResponse(
-    orchestrationResult
-) {
-
     if (
-        !orchestrationResult
+        execution.result &&
+        typeof execution.result.message ===
+            "string"
     ) {
 
-        return {
-
-            success: false,
-
-            message:
-                "AarHen received no result."
-
-        };
-
+        return execution.result.message;
     }
 
+    return (
+        "AarHen ne task successfully process kiya."
+    );
+}
+
+// ============================================================
+// MAIN RESPONSE CREATOR
+// ============================================================
+
+function createResponse(result = {}) {
 
     if (
-        orchestrationResult.status ===
+        result.status ===
         "approval-required"
     ) {
 
-        return {
-
-            success: true,
-
-            type:
-                "approval-required",
-
-            message:
-                orchestrationResult.message,
-
-            permission:
-                orchestrationResult.permission
-
-        };
-
+        return (
+            "Is action ko perform karne se pehle " +
+            "aapki approval required hai."
+        );
     }
 
+    if (
+        result.status ===
+        "needs-user-input"
+    ) {
 
-    return formatExecution(
-        orchestrationResult.execution
+        return formatMissingInput(
+            result.execution?.missingParameters
+        );
+    }
+
+    if (
+        result.execution
+    ) {
+
+        return formatExecution(
+            result.execution
+        );
+    }
+
+    if (
+        result.error
+    ) {
+
+        return result.error;
+    }
+
+    return (
+        "AarHen ne request process kar li hai."
     );
-
 }
 
-
-// ------------------------------------------------------------
-// Module exports
-// ------------------------------------------------------------
+// ============================================================
+// EXPORTS
+// ============================================================
 
 module.exports = {
-
     formatNumber,
-
     formatEMI,
-
     formatSimpleInterest,
-
     formatMissingInput,
-
+    formatResearch,
     formatExecution,
-
     createResponse
-
 };
