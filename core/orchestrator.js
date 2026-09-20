@@ -3,50 +3,51 @@
 // MASTER ORCHESTRATOR
 // ============================================================
 
-const Brain = require("./brain");
-const router = require("../skills/router");
-const intent = require("./intent");
-const executor = require("../skills/executor");
-const permissions = require("./permissions");
-const responseEngine = require("./response");
+const Brain =
+    require("./brain");
 
+const router =
+    require("../skills/router");
 
-// ------------------------------------------------------------
-// Select skill
-// ------------------------------------------------------------
+const intent =
+    require("./intent");
+
+const executor =
+    require("../skills/executor");
+
+const permissions =
+    require("./permissions");
+
+const responseEngine =
+    require("./response");
+
+// ============================================================
+// SKILL SELECTION
+// ============================================================
 
 function selectSkill(input) {
 
     const result =
         router.route(input);
 
-
     if (!result.success) {
         return result;
     }
 
-
     return {
-
         success: true,
-
         selectedSkill:
             result.selectedSkill,
-
         matches:
             result.matches,
-
         status:
             result.status
-
     };
-
 }
 
-
-// ------------------------------------------------------------
-// Determine required permission
-// ------------------------------------------------------------
+// ============================================================
+// PERMISSION CHECK
+// ============================================================
 
 function determinePermission(
     intentResult,
@@ -58,35 +59,24 @@ function determinePermission(
         return permissions.check(
             "execute_external_code"
         );
-
     }
-
 
     const category =
         routing.selectedSkill.category;
 
-
-    if (
-        category === "security"
-    ) {
+    if (category === "security") {
 
         return permissions.check(
             "security_testing_against_external_target"
         );
-
     }
 
-
-    if (
-        category === "coding"
-    ) {
+    if (category === "coding") {
 
         return permissions.check(
             "execute_external_code"
         );
-
     }
-
 
     if (
         category === "finance" ||
@@ -101,22 +91,18 @@ function determinePermission(
         return permissions.check(
             "read_public_information"
         );
-
     }
-
 
     return permissions.check(
         "execute_external_code"
     );
-
 }
 
+// ============================================================
+// MAIN PROCESS
+// ============================================================
 
-// ------------------------------------------------------------
-// Process complete AarHen request
-// ------------------------------------------------------------
-
-function process(
+async function process(
     input,
     context = {}
 ) {
@@ -127,23 +113,24 @@ function process(
     ) {
 
         return {
-
             success: false,
-
-            error:
-                "Invalid input."
-
+            error: "Invalid input."
         };
-
     }
-
 
     const request =
         input.trim();
 
+    if (!request) {
+
+        return {
+            success: false,
+            error: "Input is empty."
+        };
+    }
 
     // --------------------------------------------------------
-    // 1. Master Brain
+    // BRAIN
     // --------------------------------------------------------
 
     const brainResult =
@@ -152,27 +139,23 @@ function process(
             context
         );
 
-
     if (!brainResult.success) {
         return brainResult;
     }
 
-
     // --------------------------------------------------------
-    // 2. Skill Router
+    // SKILL ROUTING
     // --------------------------------------------------------
 
     const routing =
         selectSkill(request);
 
-
     if (!routing.success) {
         return routing;
     }
 
-
     // --------------------------------------------------------
-    // 3. Intent Engine
+    // INTENT
     // --------------------------------------------------------
 
     const intentResult =
@@ -180,14 +163,12 @@ function process(
             request
         );
 
-
     if (!intentResult.success) {
         return intentResult;
     }
 
-
     // --------------------------------------------------------
-    // 4. Permission Check
+    // PERMISSION
     // --------------------------------------------------------
 
     const permission =
@@ -196,14 +177,11 @@ function process(
             routing
         );
 
-
     // --------------------------------------------------------
-    // 5. Approval Required
+    // APPROVAL REQUIRED
     // --------------------------------------------------------
 
-    if (
-        permission.requiresApproval
-    ) {
+    if (permission.requiresApproval) {
 
         const approvalResult = {
 
@@ -211,11 +189,13 @@ function process(
 
             request,
 
-            brain: brainResult,
+            brain:
+                brainResult,
 
             routing,
 
-            intent: intentResult,
+            intent:
+                intentResult,
 
             permission,
 
@@ -229,36 +209,29 @@ function process(
 
             timestamp:
                 new Date().toISOString()
-
         };
 
-
         return {
-
             ...approvalResult,
 
             response:
                 responseEngine.createResponse(
                     approvalResult
                 )
-
         };
-
     }
 
-
     // --------------------------------------------------------
-    // 6. Execute Engine
+    // EXECUTE SKILL
     // --------------------------------------------------------
 
     const execution =
-        executor.executeIntent(
+        await executor.executeIntent(
             intentResult
         );
 
-
     // --------------------------------------------------------
-    // 7. Build orchestration result
+    // FINAL RESULT
     // --------------------------------------------------------
 
     const orchestrationResult = {
@@ -267,11 +240,13 @@ function process(
 
         request,
 
-        brain: brainResult,
+        brain:
+            brainResult,
 
         routing,
 
-        intent: intentResult,
+        intent:
+            intentResult,
 
         permission,
 
@@ -286,30 +261,21 @@ function process(
 
         timestamp:
             new Date().toISOString()
-
     };
-
-
-    // --------------------------------------------------------
-    // 8. Generate user response
-    // --------------------------------------------------------
 
     orchestrationResult.response =
         responseEngine.createResponse(
             orchestrationResult
         );
 
-
     return orchestrationResult;
-
 }
 
+// ============================================================
+// ALIAS
+// ============================================================
 
-// ------------------------------------------------------------
-// Backward-compatible orchestrate function
-// ------------------------------------------------------------
-
-function orchestrate(
+async function orchestrate(
     input,
     context = {}
 ) {
@@ -318,13 +284,11 @@ function orchestrate(
         input,
         context
     );
-
 }
 
-
-// ------------------------------------------------------------
-// Get orchestrator status
-// ------------------------------------------------------------
+// ============================================================
+// STATUS
+// ============================================================
 
 function getStatus() {
 
@@ -363,18 +327,18 @@ function getStatus() {
 
             "Engine Handlers",
 
+            "Research Provider",
+
+            "Tavily Web Search",
+
             "Response Engine"
-
         ]
-
     };
-
 }
 
-
-// ------------------------------------------------------------
-// Module exports
-// ------------------------------------------------------------
+// ============================================================
+// EXPORTS
+// ============================================================
 
 module.exports = {
 
@@ -387,5 +351,4 @@ module.exports = {
     determinePermission,
 
     getStatus
-
 };
