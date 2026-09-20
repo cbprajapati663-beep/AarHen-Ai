@@ -24,17 +24,29 @@ jobs:
           node server.js > server.log 2>&1 &
           sleep 3
 
-      - name: Test AarHen health endpoint
+      - name: Test health endpoint
         run: |
           curl -f http://localhost:3000/
 
-      - name: Test AarHen learning status
+      - name: Test learning status
         run: |
           curl -f http://localhost:3000/learning-status
 
-      - name: Test AarHen memory endpoint
+      - name: Test memory endpoint
         run: |
           curl -f http://localhost:3000/memory
+
+      - name: Test learning API
+        run: |
+          curl -f \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"title":"AarHen Test Knowledge","content":"AarHen continuous learning system test knowledge.","category":"system-test","source":"github-actions"}' \
+            http://localhost:3000/learn
+
+      - name: Verify learned knowledge
+        run: |
+          curl -f http://localhost:3000/learning
 
       - name: Show server log
         if: always()
