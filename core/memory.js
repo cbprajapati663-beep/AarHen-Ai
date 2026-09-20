@@ -9,6 +9,9 @@ const crypto =
 const storageProvider =
     require("./storageProvider");
 
+const memoryHistory =
+    require("./memoryHistory");
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -92,7 +95,9 @@ function remember(
         getMemoryData().find(
             item =>
                 item.fingerprint ===
-                fingerprint
+                fingerprint &&
+                item.type !==
+                    "memory-history"
         );
 
     if (existing) {
@@ -167,16 +172,46 @@ function remember(
         memory
     );
 
+    memoryHistory.recordChange({
+
+        memoryId:
+            memory.id,
+
+        action:
+            "create",
+
+        previousData:
+            null,
+
+        newData:
+            memory,
+
+        reason:
+            "Memory created.",
+
+        source:
+            data.source ||
+            "unknown",
+
+        actor:
+            "AarHen"
+    });
+
     return memory;
 }
 
 // ============================================================
-// GET ALL
+// GET ALL MEMORY
 // ============================================================
 
 function getAll() {
 
-    return storageProvider.getAll();
+    return getMemoryData()
+        .filter(
+            item =>
+                item.type !==
+                "memory-history"
+        );
 }
 
 // ============================================================
@@ -222,7 +257,7 @@ function search(
         ];
 
     const memories =
-        getMemoryData();
+        getAll();
 
     const scored =
         memories
@@ -351,7 +386,7 @@ function search(
 
 function getVerified() {
 
-    return getMemoryData()
+    return getAll()
         .filter(
             item =>
                 item.verified === true ||
@@ -367,7 +402,7 @@ function getVerified() {
 }
 
 // ============================================================
-// UPDATE
+// UPDATE MEMORY
 // ============================================================
 
 function update(
@@ -388,14 +423,65 @@ function update(
         return null;
     }
 
-    return storageProvider.update(
-        id,
-        changes
-    );
+    if (
+        existing.type ===
+        "memory-history"
+    ) {
+        return null;
+    }
+
+    const previousData =
+        {
+            ...existing
+        };
+
+    const updated =
+        storageProvider.update(
+            id,
+            changes
+        );
+
+    if (!updated) {
+        return null;
+    }
+
+    memoryHistory.recordChange({
+
+        memoryId:
+            id,
+
+        action:
+            changes.correction
+                ? "correction"
+                : changes.verificationStatus
+                    ? "verification"
+                    : "update",
+
+        previousData,
+
+        newData:
+            updated,
+
+        reason:
+            changes.correctionReason ||
+            changes.verificationNotes ||
+            "Memory updated.",
+
+        source:
+            changes.source ||
+            existing.source ||
+            "system",
+
+        actor:
+            changes.actor ||
+            "AarHen"
+    });
+
+    return updated;
 }
 
 // ============================================================
-// FORGET
+// FORGET MEMORY
 // ============================================================
 
 function forget(
@@ -425,24 +511,81 @@ function forget(
         };
     }
 
+    if (
+        existing.type ===
+        "memory-history"
+    ) {
+
+        return {
+            success: false,
+            error:
+                "Memory history records cannot be deleted through memory."
+        };
+    }
+
     const removed =
         storageProvider.remove(
             id
         );
 
+    if (!removed) {
+
+        return {
+            success: false,
+            error:
+                "Memory could not be removed."
+        };
+    }
+
+    memoryHistory.recordChange({
+
+        memoryId:
+            id,
+
+        action:
+            "forget",
+
+        previousData:
+            existing,
+
+        newData:
+            null,
+
+        reason:
+            "Memory forgotten.",
+
+        source:
+            "system",
+
+        actor:
+            "AarHen"
+    });
+
     return {
 
-        success:
-            removed,
+        success: true,
 
         memoryId:
             id,
 
         status:
-            removed
-                ? "forgotten"
-                : "not-removed"
+            "forgotten"
     };
+}
+
+// ============================================================
+// MEMORY HISTORY
+// ============================================================
+
+function getHistory(
+    memoryId,
+    limit = 50
+) {
+
+    return memoryHistory.getHistory(
+        memoryId,
+        limit
+    );
 }
 
 // ============================================================
@@ -452,7 +595,7 @@ function forget(
 function getStats() {
 
     const all =
-        getMemoryData();
+        getAll();
 
     const verified =
         all.filter(
@@ -486,6 +629,9 @@ function getStats() {
         unverified:
             all.length -
             verified.length,
+
+        historyRecords:
+            memoryHistory.countHistory(),
 
         storage:
             storageProvider.getInfo(),
@@ -524,7 +670,7 @@ function healthCheck() {
             storageProvider.healthCheck();
 
         const all =
-            getMemoryData();
+            getAll();
 
         return {
 
@@ -542,6 +688,9 @@ function healthCheck() {
 
             memoryCount:
                 all.length,
+
+            historyRecords:
+                memoryHistory.countHistory(),
 
             status:
                 storageHealth.healthy
@@ -585,6 +734,8 @@ module.exports = {
     update,
 
     forget,
+
+    getHistory,
 
     getStats,
 
