@@ -19,6 +19,9 @@ const learningApi =
 const memory =
     require("./core/memory");
 
+const memoryHistory =
+    require("./core/memoryHistory");
+
 const PORT =
     process.env.PORT || 3000;
 
