@@ -1,353 +1,297 @@
 // ============================================================
 // AARHEN CORE V5
-// API SERVER
+// HTTP SERVER
 // ============================================================
 
 const http = require("http");
 
-const {
-    orchestrate
-} = require("./core/orchestrator");
+const { orchestrate } = require("./core/orchestrator");
+const auth = require("./core/auth");
+const learningApi = require("./core/learningApi");
+const memory = require("./core/memory");
 
-const auth =
-    require("./core/auth");
+const PORT = process.env.PORT || 3000;
 
+function sendJSON(res, statusCode, data) {
+    res.writeHead(statusCode, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers":
+            "Content-Type,X-AarHen-API-Key"
+    });
 
-// ------------------------------------------------------------
-// Server configuration
-// ------------------------------------------------------------
+    res.end(JSON.stringify(data, null, 2));
+}
 
-const PORT =
-    process.env.PORT || 3000;
+function readBody(req) {
+    return new Promise((resolve, reject) => {
+        let body = "";
 
+        req.on("data", chunk => {
+            body += chunk;
+        });
 
-// ------------------------------------------------------------
-// Send JSON response
-// ------------------------------------------------------------
+        req.on("end", () => {
+            if (!body) {
+                resolve({});
+                return;
+            }
 
-function sendJSON(
-    response,
-    statusCode,
-    data
-) {
+            try {
+                resolve(JSON.parse(body));
+            } catch (error) {
+                reject(new Error("Invalid JSON body."));
+            }
+        });
 
-    response.writeHead(
-        statusCode,
-        {
-            "Content-Type":
-                "application/json",
+        req.on("error", reject);
+    });
+}
 
-            "Access-Control-Allow-Origin":
-                "*",
+function authenticateRequest(req) {
+    return auth.authenticate(req);
+}
 
-            "Access-Control-Allow-Methods":
-                "GET,POST,OPTIONS",
+const server = http.createServer(async (req, res) => {
 
+    // --------------------------------------------------------
+    // CORS PREFLIGHT
+    // --------------------------------------------------------
+
+    if (req.method === "OPTIONS") {
+        res.writeHead(204, {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
             "Access-Control-Allow-Headers":
                 "Content-Type,X-AarHen-API-Key"
+        });
+
+        res.end();
+        return;
+    }
+
+    // --------------------------------------------------------
+    // AUTHENTICATION
+    // --------------------------------------------------------
+
+    const authentication = authenticateRequest(req);
+
+    if (!authentication.authenticated &&
+        authentication.configured) {
+
+        sendJSON(res, 401, {
+            success: false,
+            error: "Unauthorized.",
+            message: "Valid AarHen API key required."
+        });
+
+        return;
+    }
+
+    // --------------------------------------------------------
+    // HEALTH CHECK
+    // --------------------------------------------------------
+
+    if (req.method === "GET" && req.url === "/") {
+
+        sendJSON(res, 200, {
+            success: true,
+            name: "AarHen",
+            version: "5.0.0",
+            status: "online",
+            authentication:
+                authentication.configured
+                    ? "protected"
+                    : "development-mode"
+        });
+
+        return;
+    }
+
+    // --------------------------------------------------------
+    // ASK
+    // --------------------------------------------------------
+
+    if (req.method === "POST" && req.url === "/ask") {
+
+        try {
+            const body = await readBody(req);
+
+            if (!body.input ||
+                typeof body.input !== "string") {
+
+                sendJSON(res, 400, {
+                    success: false,
+                    error: "Input is required."
+                });
+
+                return;
+            }
+
+            const result = orchestrate(
+                body.input,
+                body.context || {}
+            );
+
+            sendJSON(res, 200, result);
+
+        } catch (error) {
+
+            sendJSON(res, 500, {
+                success: false,
+                error: error.message
+            });
         }
-    );
 
+        return;
+    }
 
-    response.end(
-        JSON.stringify(
-            data,
-            null,
-            2
-        )
-    );
+    // --------------------------------------------------------
+    // LEARN
+    // --------------------------------------------------------
 
-}
+    if (req.method === "POST" && req.url === "/learn") {
 
+        try {
+            const body = await readBody(req);
 
-// ------------------------------------------------------------
-// Read request body
-// ------------------------------------------------------------
+            const result =
+                learningApi.learnFromUser({
+                    title: body.title,
+                    content: body.content,
+                    category: body.category || "general",
+                    source: body.source || "user"
+                });
 
-function readBody(request) {
+            if (!result.success) {
+                sendJSON(res, 400, result);
+                return;
+            }
 
-    return new Promise(
-        (resolve, reject) => {
+            sendJSON(res, 200, result);
 
-            let body = "";
+        } catch (error) {
 
-
-            request.on(
-                "data",
-                chunk => {
-
-                    body +=
-                        chunk.toString();
-
-                }
-            );
-
-
-            request.on(
-                "end",
-                () => {
-
-                    try {
-
-                        resolve(
-                            body
-                                ? JSON.parse(body)
-                                : {}
-                        );
-
-                    }
-                    catch (error) {
-
-                        reject(error);
-
-                    }
-
-                }
-            );
-
-
-            request.on(
-                "error",
-                reject
-            );
-
+            sendJSON(res, 500, {
+                success: false,
+                error: error.message
+            });
         }
-    );
 
-}
+        return;
+    }
 
+    // --------------------------------------------------------
+    // MEMORY
+    // --------------------------------------------------------
 
-// ------------------------------------------------------------
-// Create HTTP server
-// ------------------------------------------------------------
+    if (req.method === "GET" && req.url === "/memory") {
 
-const server =
-    http.createServer(
-        async (
-            request,
-            response
-        ) => {
+        try {
 
+            sendJSON(res, 200, {
+                success: true,
+                memories: memory.getAll()
+            });
 
-            // ------------------------------------------------
-            // CORS preflight
-            // ------------------------------------------------
+        } catch (error) {
 
-            if (
-                request.method === "OPTIONS"
-            ) {
+            sendJSON(res, 500, {
+                success: false,
+                error: error.message
+            });
+        }
 
-                sendJSON(
-                    response,
-                    200,
-                    {
-                        success: true
-                    }
-                );
+        return;
+    }
 
-                return;
+    // --------------------------------------------------------
+    // LEARNED KNOWLEDGE
+    // --------------------------------------------------------
 
-            }
+    if (
+        req.method === "GET" &&
+        req.url === "/learning"
+    ) {
 
+        try {
 
-            // ------------------------------------------------
-            // Health check
-            // ------------------------------------------------
+            sendJSON(res, 200, {
+                success: true,
+                knowledge:
+                    learningApi.getLearnedKnowledge()
+            });
 
-            if (
-                request.method === "GET" &&
-                request.url === "/"
-            ) {
+        } catch (error) {
 
-                sendJSON(
-                    response,
-                    200,
-                    {
+            sendJSON(res, 500, {
+                success: false,
+                error: error.message
+            });
+        }
 
-                        success: true,
+        return;
+    }
 
-                        name:
-                            "AarHen",
+    // --------------------------------------------------------
+    // LEARNING STATUS
+    // --------------------------------------------------------
 
-                        version:
-                            "5.0.0",
+    if (
+        req.method === "GET" &&
+        req.url === "/learning-status"
+    ) {
 
-                        status:
-                            "online",
-
-                        authentication:
-                            auth.isConfigured()
-                                ? "protected"
-                                : "development-mode",
-
-                        message:
-                            "AarHen API Server is running."
-
-                    }
-                );
-
-                return;
-
-            }
-
-
-            // ------------------------------------------------
-            // AarHen API
-            // ------------------------------------------------
-
-            if (
-                request.method === "POST" &&
-                request.url === "/ask"
-            ) {
-
-
-                // --------------------------------------------
-                // Authentication
-                // --------------------------------------------
-
-                const authentication =
-                    auth.authenticate(
-                        request
-                    );
-
-
-                if (
-                    auth.isConfigured() &&
-                    !authentication.authenticated
-                ) {
-
-                    sendJSON(
-                        response,
-                        401,
-                        {
-
-                            success: false,
-
-                            error:
-                                "Authentication required."
-
-                        }
-                    );
-
-                    return;
-
-                }
-
-
-                try {
-
-                    const body =
-                        await readBody(
-                            request
-                        );
-
-
-                    const input =
-                        body.input;
-
-
-                    const context =
-                        body.context || {};
-
-
-                    if (
-                        !input ||
-                        typeof input !== "string"
-                    ) {
-
-                        sendJSON(
-                            response,
-                            400,
-                            {
-
-                                success: false,
-
-                                error:
-                                    "input is required."
-
-                            }
-                        );
-
-                        return;
-
-                    }
-
-
-                    const result =
-                        orchestrate(
-                            input,
-                            context
-                        );
-
-
-                    sendJSON(
-                        response,
-                        200,
-                        result
-                    );
-
-                }
-                catch (error) {
-
-                    sendJSON(
-                        response,
-                        500,
-                        {
-
-                            success: false,
-
-                            error:
-                                error.message
-
-                        }
-                    );
-
-                }
-
-                return;
-
-            }
-
-
-            // ------------------------------------------------
-            // 404
-            // ------------------------------------------------
+        try {
 
             sendJSON(
-                response,
-                404,
-                {
-
-                    success: false,
-
-                    error:
-                        "Endpoint not found."
-
-                }
+                res,
+                200,
+                learningApi.getLearningStatus()
             );
 
+        } catch (error) {
+
+            sendJSON(res, 500, {
+                success: false,
+                error: error.message
+            });
         }
-    );
 
-
-// ------------------------------------------------------------
-// Start server
-// ------------------------------------------------------------
-
-server.listen(
-    PORT,
-    () => {
-
-        console.log(
-            `AarHen API running on port ${PORT}`
-        );
-
+        return;
     }
-);
 
+    // --------------------------------------------------------
+    // 404
+    // --------------------------------------------------------
+
+    sendJSON(res, 404, {
+        success: false,
+        error: "Route not found.",
+        path: req.url
+    });
+});
 
 // ------------------------------------------------------------
-// Module export
+// START SERVER
 // ------------------------------------------------------------
+
+server.listen(PORT, () => {
+    console.log("");
+    console.log("==============================================");
+    console.log("        AARHEN CORE V5 SERVER");
+    console.log("==============================================");
+    console.log(`AarHen running on port ${PORT}`);
+    console.log("Status: ONLINE");
+    console.log("Routes:");
+    console.log("GET  /");
+    console.log("POST /ask");
+    console.log("POST /learn");
+    console.log("GET  /memory");
+    console.log("GET  /learning");
+    console.log("GET  /learning-status");
+    console.log("==============================================");
+});
 
 module.exports = server;
