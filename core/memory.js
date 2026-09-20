@@ -3,124 +3,34 @@
 // ADVANCED LONG-TERM MEMORY
 // ============================================================
 
-const fs =
-    require("fs");
-
-const path =
-    require("path");
-
 const crypto =
     require("crypto");
 
-// ============================================================
-// MEMORY STORAGE
-// ============================================================
-
-const DATA_DIR =
-    path.join(
-        __dirname,
-        "..",
-        "data"
-    );
-
-const MEMORY_FILE =
-    path.join(
-        DATA_DIR,
-        "memory.json"
-    );
+const storage =
+    require("./storage");
 
 // ============================================================
-// INITIALIZE MEMORY
+// HELPERS
 // ============================================================
 
-function ensureMemoryFile() {
+function createId() {
 
-    if (!fs.existsSync(DATA_DIR)) {
-
-        fs.mkdirSync(
-            DATA_DIR,
-            {
-                recursive: true
-            }
-        );
-    }
-
-    if (!fs.existsSync(MEMORY_FILE)) {
-
-        fs.writeFileSync(
-            MEMORY_FILE,
-            "[]",
-            "utf8"
-        );
-    }
-}
-
-// ============================================================
-// READ MEMORY
-// ============================================================
-
-function readMemory() {
-
-    ensureMemoryFile();
-
-    try {
-
-        const data =
-            fs.readFileSync(
-                MEMORY_FILE,
-                "utf8"
-            );
-
-        const parsed =
-            JSON.parse(
-                data || "[]"
-            );
-
-        return Array.isArray(parsed)
-            ? parsed
-            : [];
-
-    } catch (error) {
-
-        return [];
-    }
-}
-
-// ============================================================
-// WRITE MEMORY
-// ============================================================
-
-function writeMemory(
-    memories
-) {
-
-    ensureMemoryFile();
-
-    fs.writeFileSync(
-        MEMORY_FILE,
-        JSON.stringify(
-            memories,
-            null,
-            2
-        ),
-        "utf8"
+    return (
+        "mem_" +
+        Date.now() +
+        "_" +
+        crypto
+            .randomBytes(4)
+            .toString("hex")
     );
 }
 
-// ============================================================
-// TEXT NORMALIZATION
-// ============================================================
-
-function normalizeText(
+function normalize(
     text = ""
 ) {
 
     return String(text || "")
         .toLowerCase()
-        .replace(
-            /[^\p{L}\p{N}\s-]/gu,
-            " "
-        )
         .replace(
             /\s+/g,
             " "
@@ -128,57 +38,29 @@ function normalizeText(
         .trim();
 }
 
-// ============================================================
-// CREATE MEMORY FINGERPRINT
-// ============================================================
-
 function createFingerprint(
-    data = {}
+    item = {}
 ) {
 
-    const text =
-        normalizeText(
-            [
-                data.type,
-                data.title,
-                data.category,
-                data.content
-            ]
-                .filter(Boolean)
-                .join(" ")
-        );
+    const source =
+        [
+            item.type || "",
+            item.title || "",
+            item.category || "",
+            item.content || ""
+        ]
+            .map(normalize)
+            .join("|");
 
     return crypto
         .createHash("sha256")
-        .update(text)
+        .update(source)
         .digest("hex");
 }
 
-// ============================================================
-// CHECK DUPLICATE
-// ============================================================
+function getMemoryData() {
 
-function findDuplicate(
-    data = {},
-    memories = null
-) {
-
-    const list =
-        memories ||
-        readMemory();
-
-    const fingerprint =
-        createFingerprint(
-            data
-        );
-
-    return (
-        list.find(
-            item =>
-                item.fingerprint ===
-                fingerprint
-        ) || null
-    );
+    return storage.getAll();
 }
 
 // ============================================================
@@ -189,212 +71,303 @@ function remember(
     data = {}
 ) {
 
-    const memories =
-        readMemory();
+    if (
+        !data.content ||
+        String(data.content)
+            .trim()
+            .length < 2
+    ) {
 
-    const duplicate =
-        findDuplicate(
-            data,
-            memories
+        throw new Error(
+            "Memory content is required."
+        );
+    }
+
+    const fingerprint =
+        createFingerprint(
+            data
         );
 
-    // --------------------------------------------------------
-    // DUPLICATE MEMORY
-    // --------------------------------------------------------
+    const existing =
+        getMemoryData().find(
+            item =>
+                item.fingerprint ===
+                fingerprint
+        );
 
-    if (duplicate) {
+    if (existing) {
 
         return {
-            ...duplicate,
+
+            ...existing,
 
             duplicate: true,
 
-            message:
-                "Existing memory found."
+            status:
+                "already-exists"
         };
     }
-
-    // --------------------------------------------------------
-    // CREATE MEMORY
-    // --------------------------------------------------------
 
     const now =
         new Date().toISOString();
 
-    const newMemory = {
+    const memory = {
 
         id:
-            crypto.randomUUID(),
+            createId(),
+
+        type:
+            data.type ||
+            "memory",
+
+        title:
+            data.title ||
+            "Untitled Memory",
+
+        category:
+            data.category ||
+            "general",
+
+        content:
+            String(
+                data.content
+            ).trim(),
+
+        source:
+            data.source ||
+            "unknown",
+
+        verified:
+            Boolean(
+                data.verified
+            ),
+
+        confidence:
+            typeof data.confidence ===
+            "number"
+                ? Math.max(
+                    0,
+                    Math.min(
+                        1,
+                        data.confidence
+                    )
+                )
+                : 0.5,
+
+        fingerprint,
 
         createdAt:
             now,
 
         updatedAt:
-            now,
-
-        fingerprint:
-            createFingerprint(
-                data
-            ),
-
-        memoryVersion:
-            1,
-
-        status:
-            data.status ||
-            "active",
-
-        ...data
+            now
     };
 
-    memories.push(
-        newMemory
+    storage.add(
+        memory
     );
 
-    writeMemory(
-        memories
-    );
-
-    return newMemory;
+    return memory;
 }
 
 // ============================================================
-// GET ALL MEMORY
+// GET ALL
 // ============================================================
 
 function getAll() {
 
-    return readMemory();
+    return getMemoryData();
 }
 
 // ============================================================
-// SEARCH MEMORY
-// ============================================================
-
-function search(
-    query
-) {
-
-    const memories =
-        readMemory();
-
-    const words =
-        normalizeText(
-            query
-        )
-            .split(/\s+/)
-            .filter(Boolean);
-
-    if (
-        words.length === 0
-    ) {
-
-        return [];
-    }
-
-    return memories
-        .map(
-            memory => {
-
-                const text =
-                    normalizeText(
-                        JSON.stringify(
-                            memory
-                        )
-                    );
-
-                let score = 0;
-
-                for (
-                    const word
-                    of words
-                ) {
-
-                    if (
-                        text.includes(
-                            word
-                        )
-                    ) {
-
-                        score++;
-                    }
-                }
-
-                // Verified memory priority
-                if (
-                    memory.verificationStatus ===
-                    "verified"
-                ) {
-
-                    score += 3;
-                }
-
-                // Corrected memory priority
-                if (
-                    memory.status ===
-                    "corrected"
-                ) {
-
-                    score += 4;
-                }
-
-                return {
-                    memory,
-                    score
-                };
-            }
-        )
-        .filter(
-            item =>
-                item.score > 0
-        )
-        .sort(
-            (a, b) =>
-                b.score -
-                a.score
-        )
-        .map(
-            item =>
-                item.memory
-        );
-}
-
-// ============================================================
-// GET VERIFIED MEMORY
-// ============================================================
-
-function getVerified() {
-
-    return readMemory()
-        .filter(
-            item =>
-                item.verificationStatus ===
-                    "verified" &&
-                Number(
-                    item.verificationConfidence ||
-                    item.confidence ||
-                    0
-                ) >= 0.8
-        );
-}
-
-// ============================================================
-// GET MEMORY BY ID
+// GET BY ID
 // ============================================================
 
 function getById(
     id
 ) {
 
-    return readMemory()
-        .find(
-            memory =>
-                memory.id === id
-        ) || null;
+    return storage.findById(
+        id
+    );
 }
 
 // ============================================================
-// UPDATE MEMORY
+// SEARCH
+// ============================================================
+
+function search(
+    query
+) {
+
+    const cleanQuery =
+        normalize(
+            query
+        );
+
+    if (!cleanQuery) {
+        return [];
+    }
+
+    const words =
+        [
+            ...new Set(
+                cleanQuery
+                    .split(/\s+/)
+                    .filter(
+                        word =>
+                            word.length >= 2
+                    )
+            )
+        ];
+
+    const memories =
+        getMemoryData();
+
+    const scored =
+        memories
+            .map(
+                item => {
+
+                    const title =
+                        normalize(
+                            item.title
+                        );
+
+                    const category =
+                        normalize(
+                            item.category
+                        );
+
+                    const content =
+                        normalize(
+                            item.content
+                        );
+
+                    const concepts =
+                        Array.isArray(
+                            item.concepts
+                        )
+                            ? item.concepts
+                                .map(
+                                    normalize
+                                )
+                            : [];
+
+                    let score = 0;
+
+                    for (
+                        const word
+                        of words
+                    ) {
+
+                        if (
+                            title.includes(
+                                word
+                            )
+                        ) {
+                            score += 5;
+                        }
+
+                        if (
+                            category.includes(
+                                word
+                            )
+                        ) {
+                            score += 3;
+                        }
+
+                        if (
+                            content.includes(
+                                word
+                            )
+                        ) {
+                            score += 1;
+                        }
+
+                        if (
+                            concepts.some(
+                                concept =>
+                                    concept.includes(
+                                        word
+                                    )
+                            )
+                        ) {
+                            score += 4;
+                        }
+                    }
+
+                    if (
+                        item.verified ===
+                        true
+                    ) {
+                        score += 4;
+                    }
+
+                    if (
+                        item.verificationStatus ===
+                        "verified"
+                    ) {
+                        score += 5;
+                    }
+
+                    if (
+                        item.status ===
+                        "corrected"
+                    ) {
+                        score += 3;
+                    }
+
+                    return {
+                        item,
+                        score
+                    };
+                }
+            )
+            .filter(
+                entry =>
+                    entry.score > 0
+            )
+            .sort(
+                (a, b) =>
+                    b.score -
+                    a.score
+            );
+
+    return scored.map(
+        entry => ({
+
+            ...entry.item,
+
+            relevanceScore:
+                entry.score
+        })
+    );
+}
+
+// ============================================================
+// VERIFIED MEMORY
+// ============================================================
+
+function getVerified() {
+
+    return getMemoryData()
+        .filter(
+            item =>
+                item.verified === true ||
+                (
+                    item.verificationStatus ===
+                    "verified" &&
+                    Number(
+                        item.verificationConfidence ||
+                        0
+                    ) >= 0.8
+                )
+        );
+}
+
+// ============================================================
+// UPDATE
 // ============================================================
 
 function update(
@@ -402,97 +375,76 @@ function update(
     changes = {}
 ) {
 
-    const memories =
-        readMemory();
-
-    const index =
-        memories.findIndex(
-            memory =>
-                memory.id === id
-        );
-
-    if (
-        index === -1
-    ) {
-
+    if (!id) {
         return null;
     }
 
     const existing =
-        memories[index];
+        storage.findById(
+            id
+        );
 
-    const updated = {
-
-        ...existing,
-
-        ...changes,
-
-        updatedAt:
-            new Date().toISOString(),
-
-        memoryVersion:
-            Number(
-                existing.memoryVersion ||
-                1
-            ) + 1
-    };
-
-    // Recalculate fingerprint if content changed
-    if (
-        changes.title !== undefined ||
-        changes.category !== undefined ||
-        changes.content !== undefined ||
-        changes.type !== undefined
-    ) {
-
-        updated.fingerprint =
-            createFingerprint(
-                updated
-            );
+    if (!existing) {
+        return null;
     }
 
-    memories[index] =
-        updated;
-
-    writeMemory(
-        memories
-    );
+    const updated =
+        storage.update(
+            id,
+            changes
+        );
 
     return updated;
 }
 
 // ============================================================
-// FORGET MEMORY
+// FORGET
 // ============================================================
 
 function forget(
     id
 ) {
 
-    const memories =
-        readMemory();
+    if (!id) {
 
-    const filtered =
-        memories.filter(
-            memory =>
-                memory.id !== id
-        );
-
-    const deleted =
-        memories.length !==
-        filtered.length;
-
-    if (deleted) {
-
-        writeMemory(
-            filtered
-        );
+        return {
+            success: false,
+            error:
+                "Memory ID is required."
+        };
     }
 
+    const existing =
+        storage.findById(
+            id
+        );
+
+    if (!existing) {
+
+        return {
+            success: false,
+            error:
+                "Memory not found."
+        };
+    }
+
+    const removed =
+        storage.remove(
+            id
+        );
+
     return {
-        deleted,
-        remaining:
-            filtered.length
+
+        success:
+            removed,
+
+        memoryId:
+            id,
+
+        status:
+            removed
+                ? "forgotten"
+                : "not-removed"
     };
 }
 
@@ -502,60 +454,44 @@ function forget(
 
 function getStats() {
 
-    const memories =
-        readMemory();
-
-    const knowledge =
-        memories.filter(
-            item =>
-                item.type ===
-                "knowledge"
-        );
+    const all =
+        getMemoryData();
 
     const verified =
-        memories.filter(
+        all.filter(
             item =>
+                item.verified ===
+                true ||
                 item.verificationStatus ===
                 "verified"
         );
 
-    const corrected =
-        memories.filter(
+    const knowledge =
+        all.filter(
             item =>
-                item.status ===
-                "corrected"
-        );
-
-    const active =
-        memories.filter(
-            item =>
-                item.status ===
-                    "active" ||
-                item.status ===
-                    "learned"
+                item.type ===
+                "knowledge"
         );
 
     return {
 
         success: true,
 
-        totalMemories:
-            memories.length,
+        total:
+            all.length,
 
-        knowledgeCount:
+        knowledge:
             knowledge.length,
 
-        verifiedCount:
+        verified:
             verified.length,
 
-        correctedCount:
-            corrected.length,
-
-        activeCount:
-            active.length,
+        unverified:
+            all.length -
+            verified.length,
 
         storage:
-            "JSON",
+            storage.getInfo(),
 
         memoryEngine:
             "Advanced Long-Term Memory",
@@ -563,6 +499,15 @@ function getStats() {
         status:
             "active"
     };
+}
+
+// ============================================================
+// STORAGE HEALTH
+// ============================================================
+
+function getStorageHealth() {
+
+    return storage.healthCheck();
 }
 
 // ============================================================
@@ -575,11 +520,11 @@ module.exports = {
 
     getAll,
 
+    getById,
+
     search,
 
     getVerified,
-
-    getById,
 
     update,
 
@@ -587,7 +532,9 @@ module.exports = {
 
     getStats,
 
+    getStorageHealth,
+
     createFingerprint,
 
-    findDuplicate
+    normalize
 };
