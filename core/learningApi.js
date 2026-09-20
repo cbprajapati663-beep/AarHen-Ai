@@ -1,10 +1,17 @@
 // ============================================================
 // AARHEN CORE V5
-// LEARNING API LAYER
+// LEARNING API
 // ============================================================
 
-const learning = require("./learning");
-const memoryStore = require("./memoryStore");
+const learning =
+    require("./learning");
+
+const memoryStore =
+    require("./memoryStore");
+
+// ============================================================
+// LEARN FROM USER
+// ============================================================
 
 function learnFromUser({
     title = "User Knowledge",
@@ -13,39 +20,73 @@ function learnFromUser({
     source = "user"
 } = {}) {
 
-    if (!content || String(content).trim().length < 10) {
+    if (
+        !content ||
+        String(content).trim().length < 10
+    ) {
         return {
             success: false,
-            error: "Learning content must contain at least 10 characters."
+            error:
+                "Learning content must contain at least 10 characters."
         };
     }
 
-    const result = learning.learn({
-        title,
-        content: String(content).trim(),
-        category,
-        source,
-        approved: true
-    });
+    const result =
+        learning.learn({
+
+            title,
+
+            content:
+                String(content).trim(),
+
+            category,
+
+            source,
+
+            approved:
+                true
+        });
 
     return {
-        success: result.success,
-        type: "user-learning",
+
+        success:
+            result.success,
+
+        type:
+            "user-learning",
+
         result,
-        status: result.success
-            ? "knowledge-stored"
-            : "learning-failed"
+
+        status:
+            result.success
+                ? "knowledge-stored"
+                : "learning-failed"
     };
 }
 
-function searchLearnedKnowledge(query, limit = 10) {
+// ============================================================
+// SEARCH LEARNED KNOWLEDGE
+// ============================================================
+
+function searchLearnedKnowledge(
+    query,
+    limit = 10
+) {
+
     return memoryStore.findKnowledge(
         query,
         limit
     );
 }
 
-function getLearnedKnowledge(limit = 20) {
+// ============================================================
+// GET LEARNED KNOWLEDGE
+// ============================================================
+
+function getLearnedKnowledge(
+    limit = 20
+) {
+
     const result =
         memoryStore.findKnowledge(
             "",
@@ -53,6 +94,7 @@ function getLearnedKnowledge(limit = 20) {
         );
 
     if (!result.success) {
+
         return {
             success: true,
             knowledge: []
@@ -60,14 +102,30 @@ function getLearnedKnowledge(limit = 20) {
     }
 
     return {
+
         success: true,
-        knowledge: result.results
+
+        knowledge:
+            result.results
     };
 }
 
-function getKnowledgeById(memoryId) {
-    return memoryStore.getMemory(memoryId);
+// ============================================================
+// GET KNOWLEDGE BY ID
+// ============================================================
+
+function getKnowledgeById(
+    memoryId
+) {
+
+    return memoryStore.getMemory(
+        memoryId
+    );
 }
+
+// ============================================================
+// CORRECT KNOWLEDGE
+// ============================================================
 
 function correctKnowledge({
     memoryId,
@@ -76,11 +134,84 @@ function correctKnowledge({
 } = {}) {
 
     return learning.learnCorrection({
+
         memoryId,
+
         correction,
+
         reason
     });
 }
+
+// ============================================================
+// ADD USER FEEDBACK
+// ============================================================
+
+function addKnowledgeFeedback({
+    memoryId,
+    feedback,
+    helpful = null,
+    reason = ""
+} = {}) {
+
+    return learning.addFeedback({
+
+        memoryId,
+
+        feedback,
+
+        helpful,
+
+        reason
+    });
+}
+
+// ============================================================
+// MARK KNOWLEDGE HELPFUL
+// ============================================================
+
+function markKnowledgeHelpful(
+    memoryId,
+    feedback
+) {
+
+    return learning.markHelpful(
+        memoryId,
+        feedback
+    );
+}
+
+// ============================================================
+// MARK KNOWLEDGE NOT HELPFUL
+// ============================================================
+
+function markKnowledgeNotHelpful(
+    memoryId,
+    feedback
+) {
+
+    return learning.markNotHelpful(
+        memoryId,
+        feedback
+    );
+}
+
+// ============================================================
+// GET LEARNING HISTORY
+// ============================================================
+
+function getLearningHistory(
+    memoryId
+) {
+
+    return learning.getLearningHistory(
+        memoryId
+    );
+}
+
+// ============================================================
+// VERIFY KNOWLEDGE
+// ============================================================
 
 function verifyKnowledge({
     memoryId,
@@ -90,23 +221,62 @@ function verifyKnowledge({
 } = {}) {
 
     return learning.verifyLearnedMemory({
+
         memoryId,
+
         sourceCount,
+
         confidence,
+
         notes
     });
 }
 
+// ============================================================
+// LEARNING STATUS
+// ============================================================
+
 function getLearningStatus() {
+
     return learning.getLearningStats();
 }
 
+// ============================================================
+// MEMORY STATUS
+// ============================================================
+
+function getMemoryStatus() {
+
+    return memoryStore.getMemoryStats();
+}
+
+// ============================================================
+// EXPORTS
+// ============================================================
+
 module.exports = {
+
     learnFromUser,
+
     searchLearnedKnowledge,
+
     getLearnedKnowledge,
+
     getKnowledgeById,
+
     correctKnowledge,
+
+    addKnowledgeFeedback,
+
+    markKnowledgeHelpful,
+
+    markKnowledgeNotHelpful,
+
+    getLearningHistory,
+
     verifyKnowledge,
-    getLearningStatus
+
+    getLearningStatus,
+
+    getMemoryStatus
 };
