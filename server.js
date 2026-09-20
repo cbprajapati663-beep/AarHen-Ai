@@ -1,6 +1,6 @@
 // ============================================================
 // AARHEN CORE V5
-// HTTP SERVER
+// MASTER SERVER
 // ============================================================
 
 const http =
@@ -122,7 +122,7 @@ function authenticateRequest(req) {
 }
 
 // ============================================================
-// HTTP SERVER
+// SERVER
 // ============================================================
 
 const server =
@@ -176,8 +176,10 @@ const server =
                     401,
                     {
                         success: false,
+
                         error:
                             "Unauthorized.",
+
                         message:
                             "Valid AarHen API key required."
                     }
@@ -186,9 +188,9 @@ const server =
                 return;
             }
 
-            // ------------------------------------------------
-            // HEALTH CHECK
-            // ------------------------------------------------
+            // =================================================
+            // HEALTH / ROOT
+            // =================================================
 
             if (
                 req.method === "GET" &&
@@ -199,10 +201,17 @@ const server =
                     res,
                     200,
                     {
+
                         success: true,
-                        name: "AarHen",
-                        version: "5.0.0",
-                        status: "online",
+
+                        name:
+                            "AarHen",
+
+                        version:
+                            "5.0.0",
+
+                        status:
+                            "online",
 
                         authentication:
                             authentication.configured
@@ -210,16 +219,35 @@ const server =
                                 : "development-mode",
 
                         capabilities: [
+
                             "reasoning",
+
                             "memory",
+
                             "learning",
+
+                            "feedback",
+
+                            "correction",
+
                             "web-research",
+
                             "knowledge",
+
+                            "rag",
+
+                            "verification",
+
                             "finance",
+
                             "coding",
+
                             "cybersecurity",
+
                             "business",
+
                             "documents",
+
                             "data-analysis"
                         ]
                     }
@@ -228,9 +256,9 @@ const server =
                 return;
             }
 
-            // ------------------------------------------------
+            // =================================================
             // ASK
-            // ------------------------------------------------
+            // =================================================
 
             if (
                 req.method === "POST" &&
@@ -291,9 +319,9 @@ const server =
                 return;
             }
 
-            // ------------------------------------------------
+            // =================================================
             // LEARN
-            // ------------------------------------------------
+            // =================================================
 
             if (
                 req.method === "POST" &&
@@ -308,22 +336,210 @@ const server =
                         );
 
                     const result =
-                        learningApi.learnFromUser(
-                            {
-                                title:
-                                    body.title,
+                        learningApi.learnFromUser({
 
-                                content:
-                                    body.content,
+                            title:
+                                body.title,
 
-                                category:
-                                    body.category ||
-                                    "general",
+                            content:
+                                body.content,
 
-                                source:
-                                    body.source ||
-                                    "user"
-                            }
+                            category:
+                                body.category ||
+                                "general",
+
+                            source:
+                                body.source ||
+                                "user"
+                        });
+
+                    if (!result.success) {
+
+                        sendJSON(
+                            res,
+                            400,
+                            result
+                        );
+
+                        return;
+                    }
+
+                    sendJSON(
+                        res,
+                        200,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // =================================================
+            // FEEDBACK
+            // =================================================
+
+            if (
+                req.method === "POST" &&
+                req.url === "/feedback"
+            ) {
+
+                try {
+
+                    const body =
+                        await readBody(
+                            req
+                        );
+
+                    const result =
+                        learningApi.addKnowledgeFeedback({
+
+                            memoryId:
+                                body.memoryId,
+
+                            feedback:
+                                body.feedback,
+
+                            helpful:
+                                body.helpful,
+
+                            reason:
+                                body.reason || ""
+                        });
+
+                    if (!result.success) {
+
+                        sendJSON(
+                            res,
+                            400,
+                            result
+                        );
+
+                        return;
+                    }
+
+                    sendJSON(
+                        res,
+                        200,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // =================================================
+            // CORRECT
+            // =================================================
+
+            if (
+                req.method === "POST" &&
+                req.url === "/correct"
+            ) {
+
+                try {
+
+                    const body =
+                        await readBody(
+                            req
+                        );
+
+                    const result =
+                        learningApi.correctKnowledge({
+
+                            memoryId:
+                                body.memoryId,
+
+                            correction:
+                                body.correction,
+
+                            reason:
+                                body.reason || ""
+                        });
+
+                    if (!result.success) {
+
+                        sendJSON(
+                            res,
+                            400,
+                            result
+                        );
+
+                        return;
+                    }
+
+                    sendJSON(
+                        res,
+                        200,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // =================================================
+            // LEARNING HISTORY
+            // =================================================
+
+            if (
+                req.method === "GET" &&
+                req.url.startsWith(
+                    "/learning-history"
+                )
+            ) {
+
+                try {
+
+                    const url =
+                        new URL(
+                            req.url,
+                            `http://localhost:${PORT}`
+                        );
+
+                    const memoryId =
+                        url.searchParams.get(
+                            "memoryId"
+                        );
+
+                    const result =
+                        learningApi.getLearningHistory(
+                            memoryId
                         );
 
                     if (!result.success) {
@@ -359,9 +575,9 @@ const server =
                 return;
             }
 
-            // ------------------------------------------------
+            // =================================================
             // MEMORY
-            // ------------------------------------------------
+            // =================================================
 
             if (
                 req.method === "GET" &&
@@ -375,6 +591,7 @@ const server =
                         200,
                         {
                             success: true,
+
                             memories:
                                 memory.getAll()
                         }
@@ -396,9 +613,9 @@ const server =
                 return;
             }
 
-            // ------------------------------------------------
+            // =================================================
             // LEARNING
-            // ------------------------------------------------
+            // =================================================
 
             if (
                 req.method === "GET" &&
@@ -410,13 +627,7 @@ const server =
                     sendJSON(
                         res,
                         200,
-                        {
-                            success: true,
-
-                            knowledge:
-                                learningApi
-                                    .getLearnedKnowledge()
-                        }
+                        learningApi.getLearnedKnowledge()
                     );
 
                 } catch (error) {
@@ -435,14 +646,13 @@ const server =
                 return;
             }
 
-            // ------------------------------------------------
+            // =================================================
             // LEARNING STATUS
-            // ------------------------------------------------
+            // =================================================
 
             if (
                 req.method === "GET" &&
-                req.url ===
-                    "/learning-status"
+                req.url === "/learning-status"
             ) {
 
                 try {
@@ -450,8 +660,7 @@ const server =
                     sendJSON(
                         res,
                         200,
-                        learningApi
-                            .getLearningStatus()
+                        learningApi.getLearningStatus()
                     );
 
                 } catch (error) {
@@ -470,17 +679,53 @@ const server =
                 return;
             }
 
-            // ------------------------------------------------
+            // =================================================
+            // MEMORY STATUS
+            // =================================================
+
+            if (
+                req.method === "GET" &&
+                req.url === "/memory-status"
+            ) {
+
+                try {
+
+                    sendJSON(
+                        res,
+                        200,
+                        learningApi.getMemoryStatus()
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // =================================================
             // 404
-            // ------------------------------------------------
+            // =================================================
 
             sendJSON(
                 res,
                 404,
                 {
+
                     success: false,
+
                     error:
                         "Route not found.",
+
                     path:
                         req.url
                 }
@@ -535,6 +780,18 @@ server.listen(
         );
 
         console.log(
+            "POST /feedback"
+        );
+
+        console.log(
+            "POST /correct"
+        );
+
+        console.log(
+            "GET  /learning-history?memoryId=..."
+        );
+
+        console.log(
             "GET  /memory"
         );
 
@@ -547,7 +804,15 @@ server.listen(
         );
 
         console.log(
+            "GET  /memory-status"
+        );
+
+        console.log(
             "Web Research: Tavily"
+        );
+
+        console.log(
+            "Learning: Continuous Feedback Loop"
         );
 
         console.log(
@@ -556,5 +821,8 @@ server.listen(
     }
 );
 
-module.exports =
-    server;
+// ============================================================
+// EXPORT
+// ============================================================
+
+module.exports = server;
