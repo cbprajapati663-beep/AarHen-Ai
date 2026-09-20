@@ -26,9 +26,7 @@ const responseEngine =
 // ============================================================
 
 function selectSkill(input) {
-
-    const result =
-        router.route(input);
+    const result = router.route(input);
 
     if (!result.success) {
         return result;
@@ -36,26 +34,19 @@ function selectSkill(input) {
 
     return {
         success: true,
-        selectedSkill:
-            result.selectedSkill,
-        matches:
-            result.matches,
-        status:
-            result.status
+        selectedSkill: result.selectedSkill,
+        matches: result.matches,
+        status: result.status
     };
 }
 
 // ============================================================
-// PERMISSION CHECK
+// PERMISSION DECISION
 // ============================================================
 
-function determinePermission(
-    intentResult,
-    routing
-) {
+function determinePermission(intentResult, routing) {
 
     if (!routing.selectedSkill) {
-
         return permissions.check(
             "execute_external_code"
         );
@@ -65,14 +56,12 @@ function determinePermission(
         routing.selectedSkill.category;
 
     if (category === "security") {
-
         return permissions.check(
             "security_testing_against_external_target"
         );
     }
 
     if (category === "coding") {
-
         return permissions.check(
             "execute_external_code"
         );
@@ -87,7 +76,6 @@ function determinePermission(
         category === "documents" ||
         category === "business"
     ) {
-
         return permissions.check(
             "read_public_information"
         );
@@ -96,6 +84,57 @@ function determinePermission(
     return permissions.check(
         "execute_external_code"
     );
+}
+
+// ============================================================
+// BUILD EXECUTION CONTEXT
+// ============================================================
+
+function buildExecutionContext(
+    brainResult,
+    routing,
+    intentResult,
+    context = {}
+) {
+    return {
+        ...context,
+
+        brain: {
+            request:
+                brainResult.request,
+
+            language:
+                brainResult.language,
+
+            memory:
+                brainResult.memory,
+
+            knowledge:
+                brainResult.knowledge,
+
+            thinkingContext:
+                brainResult.thinkingContext
+        },
+
+        routing: {
+            selectedSkill:
+                routing.selectedSkill,
+
+            matches:
+                routing.matches
+        },
+
+        intent: {
+            category:
+                intentResult.category,
+
+            intent:
+                intentResult.intent,
+
+            parameters:
+                intentResult.parameters
+        }
+    };
 }
 
 // ============================================================
@@ -111,7 +150,6 @@ async function process(
         !input ||
         typeof input !== "string"
     ) {
-
         return {
             success: false,
             error: "Invalid input."
@@ -122,7 +160,6 @@ async function process(
         input.trim();
 
     if (!request) {
-
         return {
             success: false,
             error: "Input is empty."
@@ -130,7 +167,7 @@ async function process(
     }
 
     // --------------------------------------------------------
-    // BRAIN
+    // 1. BRAIN THINKING
     // --------------------------------------------------------
 
     const brainResult =
@@ -144,7 +181,7 @@ async function process(
     }
 
     // --------------------------------------------------------
-    // SKILL ROUTING
+    // 2. SKILL ROUTING
     // --------------------------------------------------------
 
     const routing =
@@ -155,7 +192,7 @@ async function process(
     }
 
     // --------------------------------------------------------
-    // INTENT
+    // 3. INTENT ANALYSIS
     // --------------------------------------------------------
 
     const intentResult =
@@ -168,7 +205,7 @@ async function process(
     }
 
     // --------------------------------------------------------
-    // PERMISSION
+    // 4. PERMISSION CHECK
     // --------------------------------------------------------
 
     const permission =
@@ -178,7 +215,19 @@ async function process(
         );
 
     // --------------------------------------------------------
-    // APPROVAL REQUIRED
+    // 5. EXECUTION CONTEXT
+    // --------------------------------------------------------
+
+    const executionContext =
+        buildExecutionContext(
+            brainResult,
+            routing,
+            intentResult,
+            context
+        );
+
+    // --------------------------------------------------------
+    // 6. APPROVAL CHECK
     // --------------------------------------------------------
 
     if (permission.requiresApproval) {
@@ -198,6 +247,8 @@ async function process(
                 intentResult,
 
             permission,
+
+            executionContext,
 
             execution: null,
 
@@ -222,16 +273,21 @@ async function process(
     }
 
     // --------------------------------------------------------
-    // EXECUTE SKILL
+    // 7. EXECUTE SKILL
     // --------------------------------------------------------
 
     const execution =
         await executor.executeIntent(
-            intentResult
+            {
+                ...intentResult,
+
+                context:
+                    executionContext
+            }
         );
 
     // --------------------------------------------------------
-    // FINAL RESULT
+    // 8. FINAL ORCHESTRATION RESULT
     // --------------------------------------------------------
 
     const orchestrationResult = {
@@ -250,6 +306,8 @@ async function process(
 
         permission,
 
+        executionContext,
+
         execution,
 
         status:
@@ -263,6 +321,10 @@ async function process(
             new Date().toISOString()
     };
 
+    // --------------------------------------------------------
+    // 9. RESPONSE GENERATION
+    // --------------------------------------------------------
+
     orchestrationResult.response =
         responseEngine.createResponse(
             orchestrationResult
@@ -272,14 +334,13 @@ async function process(
 }
 
 // ============================================================
-// ALIAS
+// ORCHESTRATE ALIAS
 // ============================================================
 
 async function orchestrate(
     input,
     context = {}
 ) {
-
     return process(
         input,
         context
@@ -309,9 +370,13 @@ function getStatus() {
 
             "Language Engine",
 
-            "Memory Engine",
+            "Advanced Long-Term Memory",
+
+            "RAG Knowledge Engine",
 
             "Verification Engine",
+
+            "Continuous Learning Engine",
 
             "Permission & Safety Brain",
 
@@ -332,6 +397,29 @@ function getStatus() {
             "Tavily Web Search",
 
             "Response Engine"
+        ],
+
+        workflow: [
+
+            "Input",
+
+            "Brain Analysis",
+
+            "Memory Recall",
+
+            "RAG Retrieval",
+
+            "Skill Routing",
+
+            "Intent Analysis",
+
+            "Permission Check",
+
+            "Context Injection",
+
+            "Skill Execution",
+
+            "Response Generation"
         ]
     };
 }
@@ -341,14 +429,10 @@ function getStatus() {
 // ============================================================
 
 module.exports = {
-
     process,
-
     orchestrate,
-
     selectSkill,
-
     determinePermission,
-
+    buildExecutionContext,
     getStatus
 };
