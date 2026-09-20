@@ -6,8 +6,8 @@
 const crypto =
     require("crypto");
 
-const storage =
-    require("./storage");
+const storageProvider =
+    require("./storageProvider");
 
 // ============================================================
 // HELPERS
@@ -60,7 +60,7 @@ function createFingerprint(
 
 function getMemoryData() {
 
-    return storage.getAll();
+    return storageProvider.getAll();
 }
 
 // ============================================================
@@ -163,7 +163,7 @@ function remember(
             now
     };
 
-    storage.add(
+    storageProvider.add(
         memory
     );
 
@@ -176,7 +176,7 @@ function remember(
 
 function getAll() {
 
-    return getMemoryData();
+    return storageProvider.getAll();
 }
 
 // ============================================================
@@ -187,7 +187,7 @@ function getById(
     id
 ) {
 
-    return storage.findById(
+    return storageProvider.findById(
         id
     );
 }
@@ -380,7 +380,7 @@ function update(
     }
 
     const existing =
-        storage.findById(
+        storageProvider.findById(
             id
         );
 
@@ -388,13 +388,10 @@ function update(
         return null;
     }
 
-    const updated =
-        storage.update(
-            id,
-            changes
-        );
-
-    return updated;
+    return storageProvider.update(
+        id,
+        changes
+    );
 }
 
 // ============================================================
@@ -415,7 +412,7 @@ function forget(
     }
 
     const existing =
-        storage.findById(
+        storageProvider.findById(
             id
         );
 
@@ -429,7 +426,7 @@ function forget(
     }
 
     const removed =
-        storage.remove(
+        storageProvider.remove(
             id
         );
 
@@ -491,10 +488,15 @@ function getStats() {
             verified.length,
 
         storage:
-            storage.getInfo(),
+            storageProvider.getInfo(),
 
         memoryEngine:
             "Advanced Long-Term Memory",
+
+        storageProvider:
+            storageProvider
+                .getProviderInfo()
+                .name,
 
         status:
             "active"
@@ -507,7 +509,61 @@ function getStats() {
 
 function getStorageHealth() {
 
-    return storage.healthCheck();
+    return storageProvider.healthCheck();
+}
+
+// ============================================================
+// MEMORY HEALTH
+// ============================================================
+
+function healthCheck() {
+
+    try {
+
+        const storageHealth =
+            storageProvider.healthCheck();
+
+        const all =
+            getMemoryData();
+
+        return {
+
+            success:
+                storageHealth.success,
+
+            healthy:
+                storageHealth.healthy,
+
+            memoryEngine:
+                "Advanced Long-Term Memory",
+
+            storage:
+                storageHealth,
+
+            memoryCount:
+                all.length,
+
+            status:
+                storageHealth.healthy
+                    ? "memory-online"
+                    : "memory-storage-error"
+        };
+
+    } catch (error) {
+
+        return {
+
+            success: false,
+
+            healthy: false,
+
+            error:
+                error.message,
+
+            status:
+                "memory-error"
+        };
+    }
 }
 
 // ============================================================
@@ -533,6 +589,8 @@ module.exports = {
     getStats,
 
     getStorageHealth,
+
+    healthCheck,
 
     createFingerprint,
 
