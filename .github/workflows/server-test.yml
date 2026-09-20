@@ -1,0 +1,42 @@
+name: AarHen Server Test
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  server-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Start AarHen server
+        run: |
+          node server.js > server.log 2>&1 &
+          sleep 3
+
+      - name: Test AarHen health endpoint
+        run: |
+          curl -f http://localhost:3000/
+
+      - name: Test AarHen learning status
+        run: |
+          curl -f http://localhost:3000/learning-status
+
+      - name: Test AarHen memory endpoint
+        run: |
+          curl -f http://localhost:3000/memory
+
+      - name: Show server log
+        if: always()
+        run: |
+          cat server.log
