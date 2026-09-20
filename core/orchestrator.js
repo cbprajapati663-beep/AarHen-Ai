@@ -5,10 +5,12 @@
 
 const Brain = require("./brain");
 const router = require("../skills/router");
+const intent = require("./intent");
+const executor = require("../skills/executor");
 
 
 // ------------------------------------------------------------
-// Route request to the correct skill
+// Select skill
 // ------------------------------------------------------------
 
 function selectSkill(input) {
@@ -16,9 +18,11 @@ function selectSkill(input) {
     const result =
         router.route(input);
 
+
     if (!result.success) {
         return result;
     }
+
 
     return {
 
@@ -34,11 +38,12 @@ function selectSkill(input) {
             result.status
 
     };
+
 }
 
 
 // ------------------------------------------------------------
-// Orchestrate AarHen request
+// Process complete request
 // ------------------------------------------------------------
 
 function orchestrate(input, context = {}) {
@@ -56,6 +61,7 @@ function orchestrate(input, context = {}) {
                 "Invalid input."
 
         };
+
     }
 
 
@@ -63,7 +69,9 @@ function orchestrate(input, context = {}) {
         input.trim();
 
 
-    // Step 1: Brain analysis
+    // --------------------------------------------------------
+    // 1. Master Brain
+    // --------------------------------------------------------
 
     const brainResult =
         Brain.think(
@@ -77,7 +85,9 @@ function orchestrate(input, context = {}) {
     }
 
 
-    // Step 2: Skill routing
+    // --------------------------------------------------------
+    // 2. Skill Router
+    // --------------------------------------------------------
 
     const routing =
         selectSkill(request);
@@ -88,7 +98,32 @@ function orchestrate(input, context = {}) {
     }
 
 
-    // Step 3: Build orchestration result
+    // --------------------------------------------------------
+    // 3. Intent Analysis
+    // --------------------------------------------------------
+
+    const intentResult =
+        intent.analyzeIntent(request);
+
+
+    if (!intentResult.success) {
+        return intentResult;
+    }
+
+
+    // --------------------------------------------------------
+    // 4. Engine Execution
+    // --------------------------------------------------------
+
+    const execution =
+        executor.executeIntent(
+            intentResult
+        );
+
+
+    // --------------------------------------------------------
+    // 5. Final orchestration result
+    // --------------------------------------------------------
 
     return {
 
@@ -109,6 +144,7 @@ function orchestrate(input, context = {}) {
 
         },
 
+
         routing: {
 
             selectedSkill:
@@ -122,18 +158,37 @@ function orchestrate(input, context = {}) {
 
         },
 
-        nextAction:
-            routing.selectedSkill
-                ? `Use ${routing.selectedSkill.name} skill`
-                : "Use general reasoning",
+
+        intent: {
+
+            category:
+                intentResult.category,
+
+            intent:
+                intentResult.intent,
+
+            parameters:
+                intentResult.parameters
+
+        },
+
+
+        execution,
+
 
         status:
-            "orchestration-complete",
+            execution.success
+                ? "completed"
+                : execution.needsInput
+                    ? "needs-user-input"
+                    : "execution-error",
+
 
         timestamp:
             new Date().toISOString()
 
     };
+
 }
 
 
@@ -154,25 +209,30 @@ function getStatus() {
         status:
             "active",
 
-        flow: [
+        connectedLayers: [
 
-            "Receive Request",
+            "Master Brain",
 
-            "Brain Analysis",
+            "Language Engine",
 
-            "Language Detection",
+            "Memory Engine",
 
-            "Memory Recall",
+            "Skill Registry",
 
-            "Skill Routing",
+            "Skill Router",
 
-            "Engine Selection",
+            "Intent Engine",
 
-            "Response Generation"
+            "Parameter Extraction",
+
+            "Skill Executor",
+
+            "Engine Handlers"
 
         ]
 
     };
+
 }
 
 
