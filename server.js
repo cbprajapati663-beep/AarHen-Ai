@@ -26,7 +26,7 @@ const PORT =
     process.env.PORT || 3000;
 
 // ============================================================
-// JSON RESPONSE
+// SEND JSON RESPONSE
 // ============================================================
 
 function sendJSON(
@@ -34,7 +34,6 @@ function sendJSON(
     statusCode,
     data
 ) {
-
     res.writeHead(
         statusCode,
         {
@@ -84,7 +83,9 @@ function readBody(req) {
                 () => {
 
                     if (!body) {
+
                         resolve({});
+
                         return;
                     }
 
@@ -119,9 +120,7 @@ function readBody(req) {
 
 function authenticateRequest(req) {
 
-    return auth.authenticate(
-        req
-    );
+    return auth.authenticate(req);
 }
 
 // ============================================================
@@ -132,9 +131,9 @@ const server =
     http.createServer(
         async (req, res) => {
 
-            // ------------------------------------------------
+            // ==================================================
             // CORS PREFLIGHT
-            // ------------------------------------------------
+            // ==================================================
 
             if (
                 req.method ===
@@ -160,14 +159,12 @@ const server =
                 return;
             }
 
-            // ------------------------------------------------
+            // ==================================================
             // AUTH
-            // ------------------------------------------------
+            // ==================================================
 
             const authentication =
-                authenticateRequest(
-                    req
-                );
+                authenticateRequest(req);
 
             if (
                 !authentication.authenticated &&
@@ -191,9 +188,9 @@ const server =
                 return;
             }
 
-            // =================================================
+            // ==================================================
             // HEALTH / ROOT
-            // =================================================
+            // ==================================================
 
             if (
                 req.method === "GET" &&
@@ -204,7 +201,6 @@ const server =
                     res,
                     200,
                     {
-
                         success: true,
 
                         name:
@@ -227,11 +223,17 @@ const server =
 
                             "memory",
 
+                            "long-term-memory",
+
                             "learning",
 
                             "feedback",
 
                             "correction",
+
+                            "memory-history",
+
+                            "memory-health",
 
                             "web-research",
 
@@ -259,9 +261,9 @@ const server =
                 return;
             }
 
-            // =================================================
+            // ==================================================
             // ASK
-            // =================================================
+            // ==================================================
 
             if (
                 req.method === "POST" &&
@@ -271,9 +273,7 @@ const server =
                 try {
 
                     const body =
-                        await readBody(
-                            req
-                        );
+                        await readBody(req);
 
                     if (
                         !body.input ||
@@ -286,6 +286,7 @@ const server =
                             400,
                             {
                                 success: false,
+
                                 error:
                                     "Input is required."
                             }
@@ -313,6 +314,7 @@ const server =
                         500,
                         {
                             success: false,
+
                             error:
                                 error.message
                         }
@@ -322,9 +324,9 @@ const server =
                 return;
             }
 
-            // =================================================
+            // ==================================================
             // LEARN
-            // =================================================
+            // ==================================================
 
             if (
                 req.method === "POST" &&
@@ -334,9 +336,7 @@ const server =
                 try {
 
                     const body =
-                        await readBody(
-                            req
-                        );
+                        await readBody(req);
 
                     const result =
                         learningApi.learnFromUser({
@@ -380,6 +380,7 @@ const server =
                         500,
                         {
                             success: false,
+
                             error:
                                 error.message
                         }
@@ -389,9 +390,9 @@ const server =
                 return;
             }
 
-            // =================================================
+            // ==================================================
             // FEEDBACK
-            // =================================================
+            // ==================================================
 
             if (
                 req.method === "POST" &&
@@ -401,9 +402,7 @@ const server =
                 try {
 
                     const body =
-                        await readBody(
-                            req
-                        );
+                        await readBody(req);
 
                     const result =
                         learningApi.addKnowledgeFeedback({
@@ -445,6 +444,7 @@ const server =
                         500,
                         {
                             success: false,
+
                             error:
                                 error.message
                         }
@@ -454,9 +454,9 @@ const server =
                 return;
             }
 
-            // =================================================
+            // ==================================================
             // CORRECT
-            // =================================================
+            // ==================================================
 
             if (
                 req.method === "POST" &&
@@ -466,9 +466,7 @@ const server =
                 try {
 
                     const body =
-                        await readBody(
-                            req
-                        );
+                        await readBody(req);
 
                     const result =
                         learningApi.correctKnowledge({
@@ -507,6 +505,7 @@ const server =
                         500,
                         {
                             success: false,
+
                             error:
                                 error.message
                         }
@@ -516,9 +515,9 @@ const server =
                 return;
             }
 
-            // =================================================
+            // ==================================================
             // LEARNING HISTORY
-            // =================================================
+            // ==================================================
 
             if (
                 req.method === "GET" &&
@@ -569,6 +568,7 @@ const server =
                         500,
                         {
                             success: false,
+
                             error:
                                 error.message
                         }
@@ -578,9 +578,9 @@ const server =
                 return;
             }
 
-            // =================================================
-            // MEMORY
-            // =================================================
+            // ==================================================
+            // ALL MEMORY
+            // ==================================================
 
             if (
                 req.method === "GET" &&
@@ -607,6 +607,7 @@ const server =
                         500,
                         {
                             success: false,
+
                             error:
                                 error.message
                         }
@@ -616,9 +617,193 @@ const server =
                 return;
             }
 
-            // =================================================
+            // ==================================================
+            // MEMORY STATUS
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                req.url === "/memory-status"
+            ) {
+
+                try {
+
+                    sendJSON(
+                        res,
+                        200,
+                        memory.getStats()
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY HISTORY
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                req.url.startsWith(
+                    "/memory-history"
+                )
+            ) {
+
+                try {
+
+                    const url =
+                        new URL(
+                            req.url,
+                            `http://localhost:${PORT}`
+                        );
+
+                    const memoryId =
+                        url.searchParams.get(
+                            "memoryId"
+                        );
+
+                    const limit =
+                        Number(
+                            url.searchParams.get(
+                                "limit"
+                            )
+                        ) || 50;
+
+                    const result =
+                        memoryHistory.getHistory(
+                            memoryId,
+                            limit
+                        );
+
+                    if (!result.success) {
+
+                        sendJSON(
+                            res,
+                            400,
+                            result
+                        );
+
+                        return;
+                    }
+
+                    sendJSON(
+                        res,
+                        200,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY HEALTH
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                req.url === "/memory-health"
+            ) {
+
+                try {
+
+                    const result =
+                        memory.healthCheck();
+
+                    sendJSON(
+                        res,
+                        result.healthy
+                            ? 200
+                            : 500,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            healthy: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // MEMORY HISTORY STATUS
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                req.url ===
+                    "/memory-history-status"
+            ) {
+
+                try {
+
+                    const result =
+                        memoryHistory.getHistoryStats();
+
+                    sendJSON(
+                        res,
+                        200,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
             // LEARNING
-            // =================================================
+            // ==================================================
 
             if (
                 req.method === "GET" &&
@@ -640,6 +825,7 @@ const server =
                         500,
                         {
                             success: false,
+
                             error:
                                 error.message
                         }
@@ -649,13 +835,14 @@ const server =
                 return;
             }
 
-            // =================================================
+            // ==================================================
             // LEARNING STATUS
-            // =================================================
+            // ==================================================
 
             if (
                 req.method === "GET" &&
-                req.url === "/learning-status"
+                req.url ===
+                    "/learning-status"
             ) {
 
                 try {
@@ -673,6 +860,7 @@ const server =
                         500,
                         {
                             success: false,
+
                             error:
                                 error.message
                         }
@@ -682,48 +870,14 @@ const server =
                 return;
             }
 
-            // =================================================
-            // MEMORY STATUS
-            // =================================================
-
-            if (
-                req.method === "GET" &&
-                req.url === "/memory-status"
-            ) {
-
-                try {
-
-                    sendJSON(
-                        res,
-                        200,
-                        learningApi.getMemoryStatus()
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // =================================================
-            // 404
-            // =================================================
+            // ==================================================
+            // FINAL 404
+            // ==================================================
 
             sendJSON(
                 res,
                 404,
                 {
-
                     success: false,
 
                     error:
@@ -799,6 +953,22 @@ server.listen(
         );
 
         console.log(
+            "GET  /memory-status"
+        );
+
+        console.log(
+            "GET  /memory-history?memoryId=..."
+        );
+
+        console.log(
+            "GET  /memory-health"
+        );
+
+        console.log(
+            "GET  /memory-history-status"
+        );
+
+        console.log(
             "GET  /learning"
         );
 
@@ -807,15 +977,15 @@ server.listen(
         );
 
         console.log(
-            "GET  /memory-status"
-        );
-
-        console.log(
             "Web Research: Tavily"
         );
 
         console.log(
             "Learning: Continuous Feedback Loop"
+        );
+
+        console.log(
+            "Memory: Long-Term + History + Health"
         );
 
         console.log(
@@ -828,4 +998,5 @@ server.listen(
 // EXPORT
 // ============================================================
 
-module.exports = server;
+module.exports =
+    server;
