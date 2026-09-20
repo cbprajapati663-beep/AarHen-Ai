@@ -6,6 +6,13 @@
 const handlers =
     require("./handlers");
 
+const research =
+    require("../engines/research");
+
+// ============================================================
+// MAIN EXECUTOR
+// ============================================================
+
 async function executeIntent(intentData = {}) {
 
     if (!intentData.success) {
@@ -45,6 +52,7 @@ async function executeIntent(intentData = {}) {
         category === "finance" &&
         intent === "calculate_emi"
     ) {
+
         const missing = [];
 
         if (!parameters.amount) {
@@ -63,6 +71,7 @@ async function executeIntent(intentData = {}) {
         }
 
         if (missing.length > 0) {
+
             return {
                 success: false,
                 needsInput: true,
@@ -101,6 +110,7 @@ async function executeIntent(intentData = {}) {
         category === "finance" &&
         intent === "simple_interest"
     ) {
+
         const missing = [];
 
         if (!parameters.amount) {
@@ -119,6 +129,7 @@ async function executeIntent(intentData = {}) {
         }
 
         if (missing.length > 0) {
+
             return {
                 success: false,
                 needsInput: true,
@@ -150,7 +161,7 @@ async function executeIntent(intentData = {}) {
     }
 
     // ========================================================
-    // RESEARCH - ACTUAL WEB SEARCH
+    // WEB RESEARCH + VERIFICATION + LEARNING
     // ========================================================
 
     if (category === "research") {
@@ -165,6 +176,7 @@ async function executeIntent(intentData = {}) {
             });
 
         if (!searchResult.success) {
+
             return {
                 success: false,
                 category,
@@ -176,30 +188,136 @@ async function executeIntent(intentData = {}) {
             };
         }
 
+        const sources =
+            (searchResult.results || [])
+                .map(item => ({
+                    title:
+                        item.title,
+
+                    url:
+                        item.url,
+
+                    publisher:
+                        item.publisher,
+
+                    publishedAt:
+                        item.publishedAt
+                }));
+
+        // ----------------------------------------------------
+        // BUILD RESEARCH RESULT
+        // ----------------------------------------------------
+
+        const researchResult =
+            research.createResearchResult({
+                query,
+                sources,
+                summary:
+                    searchResult.answer || "",
+                confidence:
+                    sources.length >= 2
+                        ? 0.8
+                        : sources.length === 1
+                            ? 0.6
+                            : 0
+            });
+
+        // ----------------------------------------------------
+        // VERIFY RESEARCH
+        // ----------------------------------------------------
+
+        const verificationResult =
+            research.verifyResearch({
+                result:
+                    researchResult,
+
+                sourceCount:
+                    sources.length,
+
+                confidence:
+                    researchResult.confidence,
+
+                notes:
+                    "Verification based on available research sources."
+            });
+
+        // ----------------------------------------------------
+        // AUTOMATIC LEARNING
+        // ----------------------------------------------------
+
+        let learningResult = null;
+
+        if (
+            verificationResult.verified &&
+            researchResult.summary
+        ) {
+
+            learningResult =
+                research.learnVerifiedResearch({
+                    title:
+                        `Web Research: ${query}`,
+
+                    query,
+
+                    summary:
+                        researchResult.summary,
+
+                    sources,
+
+                    category:
+                        "web-research",
+
+                    confidence:
+                        verificationResult.confidence
+                });
+        }
+
         return {
+
             success: true,
+
             category,
+
             intent,
+
             parameters,
 
             result: {
-                success: true,
+
                 provider:
                     searchResult.provider,
+
                 query:
                     searchResult.query,
+
                 answer:
                     searchResult.answer || "",
+
                 results:
                     searchResult.results || [],
+
                 sourceCount:
                     searchResult.sourceCount || 0,
+
                 responseTime:
-                    searchResult.responseTime || null
+                    searchResult.responseTime || null,
+
+                verification:
+                    verificationResult,
+
+                learning:
+                    learningResult,
+
+                researchStatus:
+                    verificationResult.verified
+                        ? "verified"
+                        : "review-required"
             },
 
             executionStatus:
-                "web-search-completed"
+                verificationResult.verified
+                    ? "research-verified-and-learned"
+                    : "research-completed-review-required"
         };
     }
 
@@ -267,10 +385,12 @@ async function executeIntent(intentData = {}) {
         return {
             success:
                 result.success !== false,
+
             category,
             intent,
             parameters,
             result,
+
             executionStatus:
                 "coding-analysis-completed"
         };
@@ -290,10 +410,12 @@ async function executeIntent(intentData = {}) {
         return {
             success:
                 result.success !== false,
+
             category,
             intent,
             parameters,
             result,
+
             executionStatus:
                 "security-analysis-completed"
         };
@@ -319,6 +441,7 @@ async function executeIntent(intentData = {}) {
             intent,
             parameters,
             result,
+
             executionStatus:
                 "data-engine-connected"
         };
@@ -339,6 +462,7 @@ async function executeIntent(intentData = {}) {
             intent,
             parameters,
             result,
+
             executionStatus:
                 "document-engine-connected"
         };
@@ -358,10 +482,12 @@ async function executeIntent(intentData = {}) {
         return {
             success:
                 result.success !== false,
+
             category,
             intent,
             parameters,
             result,
+
             executionStatus:
                 "business-analysis-completed"
         };
@@ -387,6 +513,10 @@ async function executeIntent(intentData = {}) {
     };
 }
 
+// ============================================================
+// ENGINE FUNCTIONS
+// ============================================================
+
 function getEngineFunctions(category) {
 
     const engine =
@@ -403,6 +533,10 @@ function getEngineFunctions(category) {
                 "function"
         );
 }
+
+// ============================================================
+// EXPORTS
+// ============================================================
 
 module.exports = {
     executeIntent,
