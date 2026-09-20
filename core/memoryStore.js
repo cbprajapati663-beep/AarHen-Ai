@@ -34,21 +34,50 @@ function saveKnowledge(data = {}) {
     };
 }
 
-function findKnowledge(query, limit = 10) {
-    if (!query || String(query).trim() === "") {
+function findKnowledge(query = "", limit = 10) {
+
+    const cleanQuery =
+        String(query || "").trim();
+
+    const allMemory =
+        memory.getAll();
+
+    const knowledge =
+        allMemory.filter(
+            item => item.type === "knowledge"
+        );
+
+    if (!cleanQuery) {
+        const results =
+            knowledge
+                .slice(-Number(limit) || 10)
+                .reverse();
+
         return {
-            success: false,
-            error: "Search query is required."
+            success: true,
+            query: "",
+            count: results.length,
+            results
         };
     }
 
-    const results = memory.search(query);
+    const results =
+        memory.search(cleanQuery)
+            .filter(
+                item => item.type === "knowledge"
+            );
+
+    const finalResults =
+        results.slice(
+            0,
+            Number(limit) || 10
+        );
 
     return {
         success: true,
-        query: String(query),
-        count: Math.min(results.length, Number(limit) || 10),
-        results: results.slice(0, Number(limit) || 10)
+        query: cleanQuery,
+        count: finalResults.length,
+        results: finalResults
     };
 }
 
