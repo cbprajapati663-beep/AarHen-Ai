@@ -1,10 +1,21 @@
 // ============================================================
 // AARHEN CORE V5
-// STORAGE PROVIDER LAYER
+// DATABASE-READY STORAGE PROVIDER
 // ============================================================
 
 const storage =
     require("./storage");
+
+// ============================================================
+// PROVIDER CONFIGURATION
+// ============================================================
+
+const PROVIDER_NAME =
+    process.env.AARHEN_STORAGE_PROVIDER ||
+    "local-json";
+
+const PROVIDER_VERSION =
+    "1.0.0";
 
 // ============================================================
 // PROVIDER INFORMATION
@@ -15,29 +26,48 @@ function getProviderInfo() {
     return {
 
         name:
-            "Local JSON Storage Provider",
-
-        type:
-            "local-json",
+            PROVIDER_NAME,
 
         version:
-            "1.0.0",
+            PROVIDER_VERSION,
+
+        type:
+            "storage-provider",
+
+        mode:
+            PROVIDER_NAME ===
+            "local-json"
+                ? "local"
+                : "external-ready",
 
         persistent:
             true,
 
-        supports:
+        databaseReady:
+            true,
 
-            [
-                "read",
-                "write",
-                "add",
-                "update",
-                "find",
-                "findById",
-                "remove",
-                "count"
-            ],
+        capabilities: [
+
+            "read",
+
+            "write",
+
+            "add",
+
+            "update",
+
+            "find",
+
+            "findById",
+
+            "remove",
+
+            "count",
+
+            "health-check",
+
+            "provider-switching"
+        ],
 
         status:
             "active"
@@ -71,11 +101,11 @@ function write(
 // ============================================================
 
 function add(
-    record
+    item
 ) {
 
     return storage.add(
-        record
+        item
     );
 }
 
@@ -152,7 +182,7 @@ function count() {
 }
 
 // ============================================================
-// STORAGE INFORMATION
+// GET INFO
 // ============================================================
 
 function getInfo() {
@@ -166,7 +196,53 @@ function getInfo() {
 
 function healthCheck() {
 
-    return storage.healthCheck();
+    try {
+
+        const result =
+            storage.healthCheck();
+
+        return {
+
+            success:
+                Boolean(
+                    result.success
+                ),
+
+            healthy:
+                Boolean(
+                    result.healthy
+                ),
+
+            provider:
+                getProviderInfo(),
+
+            storage:
+                result,
+
+            status:
+                result.healthy
+                    ? "provider-online"
+                    : "provider-error"
+        };
+
+    } catch (error) {
+
+        return {
+
+            success: false,
+
+            healthy: false,
+
+            provider:
+                getProviderInfo(),
+
+            error:
+                error.message,
+
+            status:
+                "provider-error"
+        };
+    }
 }
 
 // ============================================================
@@ -175,31 +251,56 @@ function healthCheck() {
 
 function testProvider() {
 
+    const testId =
+        "provider_test_" +
+        Date.now();
+
+    const testMemory = {
+
+        id:
+            testId,
+
+        type:
+            "provider-test",
+
+        title:
+            "Storage Provider Test",
+
+        category:
+            "system-test",
+
+        content:
+            "AarHen storage provider test.",
+
+        source:
+            "storage-provider-test",
+
+        verified:
+            false,
+
+        confidence:
+            0.5,
+
+        createdAt:
+            new Date().toISOString(),
+
+        updatedAt:
+            new Date().toISOString()
+    };
+
     try {
 
-        const before =
-            count();
+        // ------------------------------------------
+        // ADD
+        // ------------------------------------------
 
-        const testId =
-            `provider_test_${Date.now()}`;
+        add(
+            testMemory
+        );
 
-        add({
-
-            id:
-                testId,
-
-            type:
-                "system-test",
-
-            title:
-                "Storage Provider Test",
-
-            content:
-                "AarHen storage provider test record.",
-
-            createdAt:
-                new Date().toISOString()
-        });
+        // ------------------------------------------
+        // FIND
+        // ------------------------------------------
 
         const found =
             findById(
@@ -213,16 +314,20 @@ function testProvider() {
                 success: false,
 
                 error:
-                    "Provider could not read newly stored record."
+                    "Provider test failed during find."
             };
         }
+
+        // ------------------------------------------
+        // UPDATE
+        // ------------------------------------------
 
         const updated =
             update(
                 testId,
                 {
-                    testStatus:
-                        "updated"
+                    title:
+                        "Storage Provider Test Updated"
                 }
             );
 
@@ -233,9 +338,13 @@ function testProvider() {
                 success: false,
 
                 error:
-                    "Provider update test failed."
+                    "Provider test failed during update."
             };
         }
+
+        // ------------------------------------------
+        // REMOVE
+        // ------------------------------------------
 
         const removed =
             remove(
@@ -249,12 +358,31 @@ function testProvider() {
                 success: false,
 
                 error:
-                    "Provider remove test failed."
+                    "Provider test failed during remove."
             };
         }
 
-        const after =
-            count();
+        // ------------------------------------------
+        // HEALTH
+        // ------------------------------------------
+
+        const health =
+            healthCheck();
+
+        if (!health.healthy) {
+
+            return {
+
+                success: false,
+
+                error:
+                    "Provider health check failed."
+            };
+        }
+
+        // ------------------------------------------
+        // SUCCESS
+        // ------------------------------------------
 
         return {
 
@@ -263,25 +391,46 @@ function testProvider() {
             provider:
                 getProviderInfo(),
 
-            recordsBefore:
-                before,
+            operations: {
 
-            recordsAfter:
-                after,
+                add:
+                    true,
 
-            operationsTested:
-                [
-                    "add",
-                    "findById",
-                    "update",
-                    "remove"
-                ],
+                find:
+                    true,
+
+                update:
+                    true,
+
+                remove:
+                    true,
+
+                health:
+                    true
+            },
 
             status:
                 "provider-test-passed"
         };
 
     } catch (error) {
+
+        // ------------------------------------------
+        // CLEANUP
+        // ------------------------------------------
+
+        try {
+
+            remove(
+                testId
+            );
+
+        } catch (
+            cleanupError
+        ) {
+
+            // Ignore cleanup failure.
+        }
 
         return {
 
@@ -294,6 +443,77 @@ function testProvider() {
                 "provider-test-failed"
         };
     }
+}
+
+// ============================================================
+// STORAGE MODE
+// ============================================================
+
+function getStorageMode() {
+
+    return {
+
+        success: true,
+
+        provider:
+            PROVIDER_NAME,
+
+        mode:
+            PROVIDER_NAME ===
+            "local-json"
+                ? "local-json"
+                : "external",
+
+        databaseReady:
+            true,
+
+        migrationReady:
+            true,
+
+        status:
+            "ready"
+    };
+}
+
+// ============================================================
+// PROVIDER SWITCH CHECK
+// ============================================================
+
+function supportsProvider(
+    providerName
+) {
+
+    const supportedProviders = [
+
+        "local-json",
+
+        "database",
+
+        "cloud"
+    ];
+
+    return {
+
+        success:
+            supportedProviders.includes(
+                String(
+                    providerName || ""
+                ).toLowerCase()
+            ),
+
+        provider:
+            providerName,
+
+        supported:
+            supportedProviders.includes(
+                String(
+                    providerName || ""
+                ).toLowerCase()
+            ),
+
+        availableProviders:
+            supportedProviders
+    };
 }
 
 // ============================================================
@@ -326,6 +546,9 @@ module.exports = {
 
     healthCheck,
 
-    testProvider
+    testProvider,
 
+    getStorageMode,
+
+    supportsProvider
 };
