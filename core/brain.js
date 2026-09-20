@@ -3,36 +3,68 @@
 // MASTER BRAIN
 // ============================================================
 
-const language = require("./language");
-const memory = require("./memory");
-const verification = require("./verification");
-const knowledge = require("../engines/knowledge");
+const language =
+    require("./language");
+
+const memory =
+    require("./memory");
+
+const memoryManager =
+    require("./memoryManager");
+
+const verification =
+    require("./verification");
+
+const knowledge =
+    require("../engines/knowledge");
 
 // ============================================================
 // ANALYZE INPUT
 // ============================================================
 
-function analyze(input, context = {}) {
-    const request = String(input || "").trim();
+function analyze(
+    input,
+    context = {}
+) {
+
+    const request =
+        String(
+            input || ""
+        ).trim();
 
     if (!request) {
+
         return {
+
             success: false,
-            error: "Request is empty."
+
+            error:
+                "Request is empty."
         };
     }
 
-    const detectedLanguage = language.resolveLanguage(
-        context.language,
-        request
-    );
+    const detectedLanguage =
+        language.resolveLanguage(
+            context.language,
+            request
+        );
 
     return {
+
         success: true,
+
         request,
-        language: detectedLanguage,
-        languageInfo: language.getLanguageInfo(detectedLanguage),
-        timestamp: new Date().toISOString()
+
+        language:
+            detectedLanguage,
+
+        languageInfo:
+            language.getLanguageInfo(
+                detectedLanguage
+            ),
+
+        timestamp:
+            new Date().toISOString()
     };
 }
 
@@ -40,8 +72,15 @@ function analyze(input, context = {}) {
 // BASIC MEMORY RECALL
 // ============================================================
 
-function recall(request, limit = 5) {
-    const results = memory.search(request);
+function recall(
+    request,
+    limit = 5
+) {
+
+    const results =
+        memory.search(
+            request
+        );
 
     return results.slice(
         0,
@@ -50,28 +89,76 @@ function recall(request, limit = 5) {
 }
 
 // ============================================================
+// MANAGED MEMORY RECALL
+// ============================================================
+
+function recallManaged(
+    request,
+    options = {}
+) {
+
+    return memoryManager.recall(
+        request,
+        {
+
+            limit:
+                Number(
+                    options.limit
+                ) || 5,
+
+            verifiedOnly:
+                Boolean(
+                    options.verifiedOnly
+                ),
+
+            type:
+                options.type,
+
+            minimumImportance:
+                options.minimumImportance
+        }
+    );
+}
+
+// ============================================================
 // VERIFIED MEMORY RECALL
 // ============================================================
 
-function recallVerified(request, limit = 5) {
-    const results = recall(
-        request,
-        (Number(limit) || 3) * 2
-    );
+function recallVerified(
+    request,
+    limit = 5
+) {
 
-    return results
-        .filter(item => verification.isVerified(item))
-        .slice(
-            0,
-            Number(limit) || 3
-        );
+    return memoryManager.recallVerified(
+        request,
+        Number(limit) || 5
+    );
+}
+
+// ============================================================
+// IMPORTANT MEMORY RECALL
+// ============================================================
+
+function recallImportant(
+    request,
+    limit = 5
+) {
+
+    return memoryManager.recallImportant(
+        request,
+        Number(limit) || 5
+    );
 }
 
 // ============================================================
 // RAG KNOWLEDGE RECALL
 // ============================================================
 
-function recallKnowledge(request, limit = 5) {
+function recallKnowledge(
+    request,
+    limit = 5
+) {
+
     return knowledge.searchKnowledge(
         request,
         Number(limit) || 5
@@ -82,7 +169,11 @@ function recallKnowledge(request, limit = 5) {
 // VERIFIED RAG KNOWLEDGE RECALL
 // ============================================================
 
-function recallVerifiedKnowledge(request, limit = 5) {
+function recallVerifiedKnowledge(
+    request,
+    limit = 5
+) {
+
     return knowledge.searchVerifiedKnowledge(
         request,
         Number(limit) || 3
@@ -90,36 +181,130 @@ function recallVerifiedKnowledge(request, limit = 5) {
 }
 
 // ============================================================
+// MEMORY DECISION
+// ============================================================
+
+function analyzeMemoryDecision(
+    request,
+    context = {}
+) {
+
+    return memoryManager.analyzeMemoryDecision({
+
+        content:
+            request,
+
+        type:
+            context.memoryType,
+
+        category:
+            context.memoryCategory,
+
+        importance:
+            context.memoryImportance,
+
+        confidence:
+            context.memoryConfidence,
+
+        source:
+            context.memorySource ||
+            "user",
+
+        remember:
+            context.remember
+    });
+}
+
+// ============================================================
 // BUILD THINKING CONTEXT
 // ============================================================
 
-function buildThinkingContext(request, context = {}) {
+function buildThinkingContext(
+    request,
+    context = {}
+) {
+
     const memoryLimit =
-        Number(context.memoryLimit) || 5;
+        Number(
+            context.memoryLimit
+        ) || 5;
 
     const verifiedMemoryLimit =
-        Number(context.verifiedMemoryLimit) || 3;
+        Number(
+            context.verifiedMemoryLimit
+        ) || 3;
+
+    const importantMemoryLimit =
+        Number(
+            context.importantMemoryLimit
+        ) || 3;
 
     const knowledgeLimit =
-        Number(context.knowledgeLimit) || 5;
+        Number(
+            context.knowledgeLimit
+        ) || 5;
 
     const verifiedKnowledgeLimit =
-        Number(context.verifiedKnowledgeLimit) || 3;
+        Number(
+            context.verifiedKnowledgeLimit
+        ) || 3;
 
-    const memories = recall(
-        request,
-        memoryLimit
-    );
+    // ------------------------------------------
+    // BASIC MEMORY
+    // ------------------------------------------
 
-    const verifiedMemories = recallVerified(
-        request,
-        verifiedMemoryLimit
-    );
+    const memories =
+        recall(
+            request,
+            memoryLimit
+        );
 
-    const knowledgeResult = recallKnowledge(
-        request,
-        knowledgeLimit
-    );
+    // ------------------------------------------
+    // MANAGED MEMORY
+    // ------------------------------------------
+
+    const managedMemory =
+        recallManaged(
+            request,
+            {
+                limit:
+                    memoryLimit
+            }
+        );
+
+    // ------------------------------------------
+    // VERIFIED MEMORY
+    // ------------------------------------------
+
+    const verifiedMemories =
+        recallVerified(
+            request,
+            verifiedMemoryLimit
+        );
+
+    // ------------------------------------------
+    // IMPORTANT MEMORY
+    // ------------------------------------------
+
+    const importantMemories =
+        recallImportant(
+            request,
+            importantMemoryLimit
+        );
+
+    // ------------------------------------------
+    // KNOWLEDGE
+    // ------------------------------------------
+
+    const knowledgeResult =
+        recallKnowledge(
+            request,
+            knowledgeLimit
+        );
+
+    // ------------------------------------------
+    // VERIFIED KNOWLEDGE
+    // ------------------------------------------
 
     const verifiedKnowledgeResult =
         recallVerifiedKnowledge(
@@ -127,9 +312,28 @@ function buildThinkingContext(request, context = {}) {
             verifiedKnowledgeLimit
         );
 
+    // ------------------------------------------
+    // MEMORY DECISION
+    // ------------------------------------------
+
+    const memoryDecision =
+        analyzeMemoryDecision(
+            request,
+            context
+        );
+
     return {
+
         memories,
+
+        managedMemory:
+            managedMemory.success
+                ? managedMemory.results
+                : [],
+
         verifiedMemories,
+
+        importantMemories,
 
         knowledge:
             knowledgeResult.success
@@ -139,7 +343,12 @@ function buildThinkingContext(request, context = {}) {
         verifiedKnowledge:
             verifiedKnowledgeResult.success
                 ? verifiedKnowledgeResult.results
-                : []
+                : [],
+
+        memoryDecision:
+            memoryDecision.success
+                ? memoryDecision.decision
+                : null
     };
 }
 
@@ -147,13 +356,19 @@ function buildThinkingContext(request, context = {}) {
 // MAIN THINKING PROCESS
 // ============================================================
 
-function think(input, context = {}) {
-    const analysis = analyze(
-        input,
-        context
-    );
+function think(
+    input,
+    context = {}
+) {
+
+    const analysis =
+        analyze(
+            input,
+            context
+        );
 
     if (!analysis.success) {
+
         return analysis;
     }
 
@@ -164,63 +379,115 @@ function think(input, context = {}) {
         );
 
     return {
+
         success: true,
 
-        brain: "AarHen Master Brain",
+        brain:
+            "AarHen Master Brain",
 
-        version: "5.0.0",
+        version:
+            "5.0.0",
 
-        request: analysis.request,
+        request:
+            analysis.request,
 
-        language: analysis.language,
+        language:
+            analysis.language,
 
-        languageInfo: analysis.languageInfo,
+        languageInfo:
+            analysis.languageInfo,
 
         memory: {
+
             relatedCount:
                 thinkingContext.memories.length,
 
+            managedCount:
+                thinkingContext
+                    .managedMemory.length,
+
             verifiedCount:
-                thinkingContext.verifiedMemories.length,
+                thinkingContext
+                    .verifiedMemories.length,
+
+            importantCount:
+                thinkingContext
+                    .importantMemories.length,
 
             related:
                 thinkingContext.memories,
 
+            managed:
+                thinkingContext
+                    .managedMemory,
+
             verified:
-                thinkingContext.verifiedMemories
+                thinkingContext
+                    .verifiedMemories,
+
+            important:
+                thinkingContext
+                    .importantMemories,
+
+            decision:
+                thinkingContext
+                    .memoryDecision
         },
 
         knowledge: {
+
             relatedCount:
-                thinkingContext.knowledge.length,
+                thinkingContext
+                    .knowledge.length,
 
             verifiedCount:
-                thinkingContext.verifiedKnowledge.length,
+                thinkingContext
+                    .verifiedKnowledge.length,
 
             related:
-                thinkingContext.knowledge,
+                thinkingContext
+                    .knowledge,
 
             verified:
-                thinkingContext.verifiedKnowledge
+                thinkingContext
+                    .verifiedKnowledge
         },
 
         thinkingContext: {
+
             memory:
                 thinkingContext.memories,
 
+            managedMemory:
+                thinkingContext
+                    .managedMemory,
+
             verifiedMemory:
-                thinkingContext.verifiedMemories,
+                thinkingContext
+                    .verifiedMemories,
+
+            importantMemory:
+                thinkingContext
+                    .importantMemories,
 
             knowledge:
-                thinkingContext.knowledge,
+                thinkingContext
+                    .knowledge,
 
             verifiedKnowledge:
-                thinkingContext.verifiedKnowledge
+                thinkingContext
+                    .verifiedKnowledge,
+
+            memoryDecision:
+                thinkingContext
+                    .memoryDecision
         },
 
-        status: "thinking-context-built",
+        status:
+            "thinking-context-built",
 
-        timestamp: analysis.timestamp
+        timestamp:
+            analysis.timestamp
     };
 }
 
@@ -229,37 +496,99 @@ function think(input, context = {}) {
 // ============================================================
 
 function getStatus() {
+
     return {
-        name: "AarHen",
-        version: "5.0.0",
-        status: "active",
+
+        name:
+            "AarHen",
+
+        version:
+            "5.0.0",
+
+        status:
+            "active",
 
         capabilities: [
+
             "advanced-reasoning",
+
             "memory",
+
             "long-term-memory",
+
+            "memory-management",
+
+            "automatic-memory-decision",
+
+            "memory-classification",
+
+            "importance-scoring",
+
             "knowledge-retrieval",
+
             "verified-knowledge",
+
             "learning",
+
             "language",
+
             "verification",
+
             "skill-routing",
+
             "web-research",
+
             "finance",
+
             "coding",
+
             "cybersecurity",
+
             "data-analysis",
+
             "documents",
+
             "business"
         ],
 
         connectedBrains: [
+
             "Memory Brain",
+
+            "Memory Manager",
+
             "RAG Knowledge Brain",
+
             "Verification Brain",
+
             "Language Brain",
+
             "Learning Brain"
-        ]
+        ],
+
+        memorySystem: {
+
+            manager:
+                "Advanced Memory Manager",
+
+            automaticDecision:
+                true,
+
+            classification:
+                true,
+
+            importanceScoring:
+                true,
+
+            confidenceTracking:
+                true,
+
+            verifiedRecall:
+                true,
+
+            importantRecall:
+                true
+        }
     };
 }
 
@@ -268,12 +597,26 @@ function getStatus() {
 // ============================================================
 
 module.exports = {
+
     analyze,
+
     recall,
+
+    recallManaged,
+
     recallVerified,
+
+    recallImportant,
+
     recallKnowledge,
+
     recallVerifiedKnowledge,
+
+    analyzeMemoryDecision,
+
     buildThinkingContext,
+
     think,
+
     getStatus
 };
