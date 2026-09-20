@@ -1,193 +1,452 @@
 // ============================================================
 // AARHEN CORE V5
-// Knowledge + RAG Engine
+// ADVANCED KNOWLEDGE / RAG ENGINE
 // ============================================================
 
-const memory = require("../core/memory");
-const verification = require("../core/verification");
+const memory =
+    require("../core/memory");
 
+const verification =
+    require("../core/verification");
 
-// ------------------------------------------------------------
-// Normalize text
-// ------------------------------------------------------------
+// ============================================================
+// TEXT NORMALIZATION
+// ============================================================
 
-function normalize(text) {
+function normalize(text = "") {
+
     return String(text || "")
         .toLowerCase()
-        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .replace(/[^\p{L}\p{N}\s-]/gu, " ")
         .replace(/\s+/g, " ")
         .trim();
 }
 
+// ============================================================
+// WORD EXTRACTION
+// ============================================================
 
-// ------------------------------------------------------------
-// Create search words
-// ------------------------------------------------------------
+function getWords(text = "") {
 
-function getWords(text) {
-
-    return normalize(text)
-        .split(" ")
-        .filter(word => word.length >= 2);
+    return [
+        ...new Set(
+            normalize(text)
+                .split(/\s+/)
+                .filter(
+                    word =>
+                        word.length >= 2
+                )
+        )
+    ];
 }
 
+// ============================================================
+// SCORE KNOWLEDGE
+// ============================================================
 
-// ------------------------------------------------------------
-// Calculate relevance score
-// ------------------------------------------------------------
+function calculateScore(
+    query,
+    item
+) {
 
-function calculateScore(query, knowledge) {
+    const queryWords =
+        getWords(query);
 
-    const queryWords = getWords(query);
+    if (
+        queryWords.length === 0 ||
+        !item
+    ) {
+        return 0;
+    }
 
-    const searchableText = normalize(
-        [
-            knowledge.title,
-            knowledge.category,
-            knowledge.content,
-            ...(knowledge.concepts || [])
-        ].join(" ")
-    );
+    const title =
+        normalize(item.title);
+
+    const category =
+        normalize(item.category);
+
+    const content =
+        normalize(item.content);
+
+    const concepts =
+        Array.isArray(item.concepts)
+            ? item.concepts
+                .map(normalize)
+            : [];
 
     let score = 0;
 
     for (const word of queryWords) {
 
-        if (searchableText.includes(word)) {
-            score++;
+        // Title match = strong
+        if (title.includes(word)) {
+            score += 5;
         }
+
+        // Category match
+        if (category.includes(word)) {
+            score += 3;
+        }
+
+        // Concept match
+        if (
+            concepts.some(
+                concept =>
+                    concept.includes(word)
+            )
+        ) {
+            score += 4;
+        }
+
+        // Content match
+        if (content.includes(word)) {
+            score += 1;
+        }
+    }
+
+    // --------------------------------------------------------
+    // VERIFIED KNOWLEDGE BONUS
+    // --------------------------------------------------------
+
+    if (
+        verification.isVerified(item)
+    ) {
+        score += 5;
+    }
+
+    // --------------------------------------------------------
+    // PARTIALLY VERIFIED BONUS
+    // --------------------------------------------------------
+
+    if (
+        item.verificationStatus ===
+        "partially-verified"
+    ) {
+        score += 2;
     }
 
     return score;
 }
 
+// ============================================================
+// SEARCH KNOWLEDGE
+// ============================================================
 
-// ------------------------------------------------------------
-// Search knowledge
-// ------------------------------------------------------------
+function searchKnowledge(
+    query,
+    limit = 5
+) {
 
-function searchKnowledge(query, options = {}) {
+    const cleanQuery =
+        String(query || "").trim();
 
-    if (!query || String(query).trim().length === 0) {
+    if (!cleanQuery) {
 
         return {
             success: false,
-            error: "Search query is required."
+            error:
+                "Knowledge search query is required.",
+            results: []
         };
     }
 
+    const all =
+        memory.getAll();
 
-    const limit = Number(options.limit || 5);
+    const knowledge =
+        all.filter(
+            item =>
+                item.type ===
+                "knowledge"
+        );
 
-    const memories = memory.getAll()
-        .filter(item => item.type === "knowledge");
+    const scored =
+        knowledge
+            .map(item => ({
+                item,
+                score:
+                    calculateScore(
+                        cleanQuery,
+                        item
+                    )
+            }))
+            .filter(
+                entry =>
+                    entry.score > 0
+            )
+            .sort(
+                (a, b) =>
+                    b.score - a.score
+            );
 
-
-    const results = memories
-        .map(item => ({
-            memory: item,
-            score: calculateScore(query, item)
-        }))
-        .filter(item => item.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit);
-
+    const results =
+        scored
+            .slice(
+                0,
+                Number(limit) || 5
+            )
+            .map(entry => ({
+                ...entry.item,
+                relevanceScore:
+                    entry.score
+            }));
 
     return {
         success: true,
-        query,
-        resultCount: results.length,
-
-        results: results.map(item => ({
-            id: item.memory.id,
-            title: item.memory.title,
-            category: item.memory.category,
-            score: item.score,
-            verificationStatus:
-                item.memory.verificationStatus || "unverified",
-            confidence:
-                item.memory.verificationConfidence ?? 0,
-            content: item.memory.content
-        }))
+        query: cleanQuery,
+        count: results.length,
+        results
     };
 }
 
+// ============================================================
+// VERIFIED KNOWLEDGE SEARCH
+// ============================================================
 
-// ------------------------------------------------------------
-// Get verified knowledge only
-// ------------------------------------------------------------
+function searchVerifiedKnowledge(
+    query,
+    limit = 5
+) {
 
-function searchVerifiedKnowledge(query, options = {}) {
+    const cleanQuery =
+        String(query || "").trim();
 
-    const result = searchKnowledge(query, options);
+    if (!cleanQuery) {
 
-    if (!result.success) {
-        return result;
+        return {
+            success: false,
+            error:
+                "Verified knowledge search query is required.",
+            results: []
+        };
     }
 
+    const all =
+        memory.getAll();
 
-    result.results = result.results.filter(item => {
+    const verified =
+        all.filter(
+            item =>
+                item.type ===
+                    "knowledge" &&
+                verification.isVerified(
+                    item
+                )
+        );
 
-        const original = memory.getAll()
-            .find(memoryItem => memoryItem.id === item.id);
+    const scored =
+        verified
+            .map(item => ({
+                item,
+                score:
+                    calculateScore(
+                        cleanQuery,
+                        item
+                    )
+            }))
+            .filter(
+                entry =>
+                    entry.score > 0
+            )
+            .sort(
+                (a, b) =>
+                    b.score - a.score
+            );
 
-        return verification.isVerified(original);
-    });
-
-
-    result.resultCount = result.results.length;
-
-    return result;
-}
-
-
-// ------------------------------------------------------------
-// Build context for AarHen's brain
-// ------------------------------------------------------------
-
-function buildContext(query, options = {}) {
-
-    const result = searchKnowledge(query, options);
-
-    if (!result.success) {
-        return result;
-    }
-
-
-    const context = result.results
-        .map((item, index) => {
-
-            return [
-                `Knowledge ${index + 1}:`,
-                `Title: ${item.title}`,
-                `Category: ${item.category}`,
-                `Verification: ${item.verificationStatus}`,
-                `Confidence: ${item.confidence}`,
-                `Content: ${item.content}`
-            ].join("\n");
-
-        })
-        .join("\n\n");
-
+    const results =
+        scored
+            .slice(
+                0,
+                Number(limit) || 5
+            )
+            .map(entry => ({
+                ...entry.item,
+                relevanceScore:
+                    entry.score
+            }));
 
     return {
         success: true,
-        query,
-        resultCount: result.resultCount,
+        query: cleanQuery,
+        count: results.length,
+        verifiedOnly: true,
+        results
+    };
+}
+
+// ============================================================
+// BUILD RAG CONTEXT
+// ============================================================
+
+function buildContext(
+    query,
+    limit = 5
+) {
+
+    const search =
+        searchKnowledge(
+            query,
+            limit
+        );
+
+    if (!search.success) {
+        return search;
+    }
+
+    const context =
+        search.results
+            .map(
+                item => ({
+                    id: item.id,
+                    title:
+                        item.title,
+                    category:
+                        item.category,
+                    relevanceScore:
+                        item.relevanceScore,
+                    verificationStatus:
+                        item.verificationStatus ||
+                        "unverified",
+                    verificationConfidence:
+                        item.verificationConfidence ||
+                        item.confidence ||
+                        0,
+                    content:
+                        item.content,
+                    concepts:
+                        item.concepts || []
+                })
+            );
+
+    return {
+        success: true,
+        query:
+            String(query).trim(),
+        count:
+            context.length,
         context
     };
 }
 
+// ============================================================
+// BUILD VERIFIED RAG CONTEXT
+// ============================================================
 
-// ------------------------------------------------------------
-// Module exports
-// ------------------------------------------------------------
+function buildVerifiedContext(
+    query,
+    limit = 5
+) {
+
+    const search =
+        searchVerifiedKnowledge(
+            query,
+            limit
+        );
+
+    if (!search.success) {
+        return search;
+    }
+
+    const context =
+        search.results
+            .map(
+                item => ({
+                    id: item.id,
+                    title:
+                        item.title,
+                    category:
+                        item.category,
+                    relevanceScore:
+                        item.relevanceScore,
+                    verificationStatus:
+                        "verified",
+                    verificationConfidence:
+                        item.verificationConfidence ||
+                        item.confidence ||
+                        0,
+                    content:
+                        item.content,
+                    concepts:
+                        item.concepts || []
+                })
+            );
+
+    return {
+        success: true,
+        query:
+            String(query).trim(),
+        count:
+            context.length,
+        verifiedOnly: true,
+        context
+    };
+}
+
+// ============================================================
+// KNOWLEDGE SUMMARY
+// ============================================================
+
+function getKnowledgeStats() {
+
+    const all =
+        memory.getAll();
+
+    const knowledge =
+        all.filter(
+            item =>
+                item.type ===
+                "knowledge"
+        );
+
+    const verified =
+        knowledge.filter(
+            item =>
+                verification.isVerified(
+                    item
+                )
+        );
+
+    const partial =
+        knowledge.filter(
+            item =>
+                item.verificationStatus ===
+                "partially-verified"
+        );
+
+    return {
+        success: true,
+        total:
+            knowledge.length,
+        verified:
+            verified.length,
+        partiallyVerified:
+            partial.length,
+        reviewRequired:
+            knowledge.length -
+            verified.length -
+            partial.length
+    };
+}
+
+// ============================================================
+// EXPORTS
+// ============================================================
 
 module.exports = {
 
-    searchKnowledge,
-    searchVerifiedKnowledge,
-    buildContext,
-    calculateScore
+    normalize,
 
+    getWords,
+
+    calculateScore,
+
+    searchKnowledge,
+
+    searchVerifiedKnowledge,
+
+    buildContext,
+
+    buildVerifiedContext,
+
+    getKnowledgeStats
 };
