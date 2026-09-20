@@ -8,6 +8,7 @@ const router = require("../skills/router");
 const intent = require("./intent");
 const executor = require("../skills/executor");
 const permissions = require("./permissions");
+const responseEngine = require("./response");
 
 
 // ------------------------------------------------------------
@@ -65,11 +66,8 @@ function determinePermission(
         routing.selectedSkill.category;
 
 
-    // Security-related external testing
-
     if (
-        category === "security" &&
-        intentResult.intent !== "general_request"
+        category === "security"
     ) {
 
         return permissions.check(
@@ -78,8 +76,6 @@ function determinePermission(
 
     }
 
-
-    // Coding execution is not automatically allowed
 
     if (
         category === "coding"
@@ -91,8 +87,6 @@ function determinePermission(
 
     }
 
-
-    // Normal calculation/knowledge work
 
     if (
         category === "finance" ||
@@ -119,10 +113,10 @@ function determinePermission(
 
 
 // ------------------------------------------------------------
-// Process complete request
+// Process complete AarHen request
 // ------------------------------------------------------------
 
-function orchestrate(
+function process(
     input,
     context = {}
 ) {
@@ -178,7 +172,7 @@ function orchestrate(
 
 
     // --------------------------------------------------------
-    // 3. Intent Analysis
+    // 3. Intent Engine
     // --------------------------------------------------------
 
     const intentResult =
@@ -193,7 +187,7 @@ function orchestrate(
 
 
     // --------------------------------------------------------
-    // 4. Permission check
+    // 4. Permission Check
     // --------------------------------------------------------
 
     const permission =
@@ -204,70 +198,26 @@ function orchestrate(
 
 
     // --------------------------------------------------------
-    // 5. Stop if approval is required
+    // 5. Approval Required
     // --------------------------------------------------------
 
     if (
         permission.requiresApproval
     ) {
 
-        return {
+        const approvalResult = {
 
             success: true,
 
             request,
 
-            brain: {
+            brain: brainResult,
 
-                language:
-                    brainResult.language,
+            routing,
 
-                languageInfo:
-                    brainResult.languageInfo,
+            intent: intentResult,
 
-                memory:
-                    brainResult.memory
-
-            },
-
-            routing: {
-
-                selectedSkill:
-                    routing.selectedSkill,
-
-                matches:
-                    routing.matches,
-
-                status:
-                    routing.status
-
-            },
-
-            intent: {
-
-                category:
-                    intentResult.category,
-
-                intent:
-                    intentResult.intent,
-
-                parameters:
-                    intentResult.parameters
-
-            },
-
-            permission: {
-
-                action:
-                    permission.action,
-
-                policy:
-                    permission.policy,
-
-                requiresApproval:
-                    true
-
-            },
+            permission,
 
             execution: null,
 
@@ -282,11 +232,23 @@ function orchestrate(
 
         };
 
+
+        return {
+
+            ...approvalResult,
+
+            response:
+                responseEngine.createResponse(
+                    approvalResult
+                )
+
+        };
+
     }
 
 
     // --------------------------------------------------------
-    // 6. Engine execution
+    // 6. Execute Engine
     // --------------------------------------------------------
 
     const execution =
@@ -296,73 +258,24 @@ function orchestrate(
 
 
     // --------------------------------------------------------
-    // 7. Final result
+    // 7. Build orchestration result
     // --------------------------------------------------------
 
-    return {
+    const orchestrationResult = {
 
         success: true,
 
         request,
 
-        brain: {
+        brain: brainResult,
 
-            language:
-                brainResult.language,
+        routing,
 
-            languageInfo:
-                brainResult.languageInfo,
+        intent: intentResult,
 
-            memory:
-                brainResult.memory
-
-        },
-
-
-        routing: {
-
-            selectedSkill:
-                routing.selectedSkill,
-
-            matches:
-                routing.matches,
-
-            status:
-                routing.status
-
-        },
-
-
-        intent: {
-
-            category:
-                intentResult.category,
-
-            intent:
-                intentResult.intent,
-
-            parameters:
-                intentResult.parameters
-
-        },
-
-
-        permission: {
-
-            action:
-                permission.action,
-
-            policy:
-                permission.policy,
-
-            requiresApproval:
-                permission.requiresApproval
-
-        },
-
+        permission,
 
         execution,
-
 
         status:
             execution.success
@@ -371,11 +284,40 @@ function orchestrate(
                     ? "needs-user-input"
                     : "execution-error",
 
-
         timestamp:
             new Date().toISOString()
 
     };
+
+
+    // --------------------------------------------------------
+    // 8. Generate user response
+    // --------------------------------------------------------
+
+    orchestrationResult.response =
+        responseEngine.createResponse(
+            orchestrationResult
+        );
+
+
+    return orchestrationResult;
+
+}
+
+
+// ------------------------------------------------------------
+// Backward-compatible orchestrate function
+// ------------------------------------------------------------
+
+function orchestrate(
+    input,
+    context = {}
+) {
+
+    return process(
+        input,
+        context
+    );
 
 }
 
@@ -419,7 +361,9 @@ function getStatus() {
 
             "Skill Executor",
 
-            "Engine Handlers"
+            "Engine Handlers",
+
+            "Response Engine"
 
         ]
 
@@ -433,6 +377,8 @@ function getStatus() {
 // ------------------------------------------------------------
 
 module.exports = {
+
+    process,
 
     orchestrate,
 
