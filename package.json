@@ -1,0 +1,17 @@
+{
+  "name": "aarhen-ai",
+  "version": "5.0.0",
+  "description": "AarHen AI Core - Personal and Business AI System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "aarhen",
+    "ai",
+    "personal-ai",
+    "business-ai",
+    "vehicle-finance"
+  ],
+  "license": "MIT"
+}
