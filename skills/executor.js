@@ -3,9 +3,10 @@
 // SKILL EXECUTOR
 // ============================================================
 
-const handlers = require("./handlers");
+const handlers =
+    require("./handlers");
 
-function executeIntent(intentData = {}) {
+async function executeIntent(intentData = {}) {
 
     if (!intentData.success) {
         return {
@@ -29,21 +30,21 @@ function executeIntent(intentData = {}) {
     if (!engine) {
         return {
             success: false,
-            error: `No engine available for category: ${category}`,
+            error:
+                `No engine available for category: ${category}`,
             category,
             intent
         };
     }
 
-    // --------------------------------------------------------
-    // FINANCE
-    // --------------------------------------------------------
+    // ========================================================
+    // FINANCE - EMI
+    // ========================================================
 
     if (
         category === "finance" &&
         intent === "calculate_emi"
     ) {
-
         const missing = [];
 
         if (!parameters.amount) {
@@ -69,7 +70,8 @@ function executeIntent(intentData = {}) {
                 intent,
                 parameters,
                 missingParameters: missing,
-                executionStatus: "waiting-for-input"
+                executionStatus:
+                    "waiting-for-input"
             };
         }
 
@@ -86,19 +88,19 @@ function executeIntent(intentData = {}) {
             intent,
             parameters,
             result,
-            executionStatus: "completed"
+            executionStatus:
+                "completed"
         };
     }
 
-    // --------------------------------------------------------
-    // SIMPLE INTEREST
-    // --------------------------------------------------------
+    // ========================================================
+    // FINANCE - SIMPLE INTEREST
+    // ========================================================
 
     if (
         category === "finance" &&
         intent === "simple_interest"
     ) {
-
         const missing = [];
 
         if (!parameters.amount) {
@@ -124,7 +126,8 @@ function executeIntent(intentData = {}) {
                 intent,
                 parameters,
                 missingParameters: missing,
-                executionStatus: "waiting-for-input"
+                executionStatus:
+                    "waiting-for-input"
             };
         }
 
@@ -141,39 +144,68 @@ function executeIntent(intentData = {}) {
             intent,
             parameters,
             result,
-            executionStatus: "completed"
+            executionStatus:
+                "completed"
         };
     }
 
-    // --------------------------------------------------------
-    // RESEARCH
-    // --------------------------------------------------------
+    // ========================================================
+    // RESEARCH - ACTUAL WEB SEARCH
+    // ========================================================
 
     if (category === "research") {
 
-        const result =
-            engine.createResearchRequest({
-                query: intentData.request,
-                maxSources: 5,
-                language: "auto"
+        const query =
+            intentData.request;
+
+        const searchResult =
+            await handlers.searchWeb({
+                query,
+                maxSources: 5
             });
 
+        if (!searchResult.success) {
+            return {
+                success: false,
+                category,
+                intent,
+                parameters,
+                result: searchResult,
+                executionStatus:
+                    "research-error"
+            };
+        }
+
         return {
-            success: result.success,
+            success: true,
             category,
             intent,
             parameters,
-            result,
+
+            result: {
+                success: true,
+                provider:
+                    searchResult.provider,
+                query:
+                    searchResult.query,
+                answer:
+                    searchResult.answer || "",
+                results:
+                    searchResult.results || [],
+                sourceCount:
+                    searchResult.sourceCount || 0,
+                responseTime:
+                    searchResult.responseTime || null
+            },
+
             executionStatus:
-                result.success
-                    ? "research-request-created"
-                    : "execution-error"
+                "web-search-completed"
         };
     }
 
-    // --------------------------------------------------------
-    // KNOWLEDGE SEARCH
-    // --------------------------------------------------------
+    // ========================================================
+    // KNOWLEDGE
+    // ========================================================
 
     if (category === "knowledge") {
 
@@ -199,9 +231,9 @@ function executeIntent(intentData = {}) {
         };
     }
 
-    // --------------------------------------------------------
+    // ========================================================
     // CALCULATOR
-    // --------------------------------------------------------
+    // ========================================================
 
     if (category === "calculation") {
 
@@ -210,18 +242,20 @@ function executeIntent(intentData = {}) {
             category,
             intent,
             parameters,
+
             result: {
                 message:
                     "Calculator engine connected. Specific calculation parameters are required."
             },
+
             executionStatus:
                 "calculation-engine-connected"
         };
     }
 
-    // --------------------------------------------------------
+    // ========================================================
     // CODING
-    // --------------------------------------------------------
+    // ========================================================
 
     if (category === "coding") {
 
@@ -231,7 +265,8 @@ function executeIntent(intentData = {}) {
             );
 
         return {
-            success: result.success !== false,
+            success:
+                result.success !== false,
             category,
             intent,
             parameters,
@@ -241,9 +276,9 @@ function executeIntent(intentData = {}) {
         };
     }
 
-    // --------------------------------------------------------
+    // ========================================================
     // CYBERSECURITY
-    // --------------------------------------------------------
+    // ========================================================
 
     if (category === "security") {
 
@@ -253,7 +288,8 @@ function executeIntent(intentData = {}) {
             );
 
         return {
-            success: result.success !== false,
+            success:
+                result.success !== false,
             category,
             intent,
             parameters,
@@ -263,9 +299,9 @@ function executeIntent(intentData = {}) {
         };
     }
 
-    // --------------------------------------------------------
+    // ========================================================
     // DATA ANALYSIS
-    // --------------------------------------------------------
+    // ========================================================
 
     if (category === "data") {
 
@@ -288,9 +324,9 @@ function executeIntent(intentData = {}) {
         };
     }
 
-    // --------------------------------------------------------
+    // ========================================================
     // DOCUMENTS
-    // --------------------------------------------------------
+    // ========================================================
 
     if (category === "documents") {
 
@@ -308,9 +344,9 @@ function executeIntent(intentData = {}) {
         };
     }
 
-    // --------------------------------------------------------
-    // BUSINESS
-    // --------------------------------------------------------
+    // ========================================================
+    // HERITAGE BUSINESS
+    // ========================================================
 
     if (category === "business") {
 
@@ -320,7 +356,8 @@ function executeIntent(intentData = {}) {
             );
 
         return {
-            success: result.success !== false,
+            success:
+                result.success !== false,
             category,
             intent,
             parameters,
@@ -330,19 +367,21 @@ function executeIntent(intentData = {}) {
         };
     }
 
-    // --------------------------------------------------------
+    // ========================================================
     // DEFAULT
-    // --------------------------------------------------------
+    // ========================================================
 
     return {
         success: true,
         category,
         intent,
         parameters,
+
         result: {
             message:
                 "Skill engine connected but no specific executor is defined yet."
         },
+
         executionStatus:
             "engine-connected"
     };
@@ -360,7 +399,8 @@ function getEngineFunctions(category) {
     return Object.keys(engine)
         .filter(
             key =>
-                typeof engine[key] === "function"
+                typeof engine[key] ===
+                "function"
         );
 }
 
