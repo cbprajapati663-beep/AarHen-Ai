@@ -7,23 +7,31 @@ const handlers = require("./handlers");
 
 
 // ------------------------------------------------------------
-// Execute a selected skill
+// Execute intent
 // ------------------------------------------------------------
 
-function execute(skill, input, options = {}) {
+function executeIntent(intentData) {
 
-    if (!skill) {
+    if (!intentData || !intentData.success) {
 
         return {
             success: false,
-            error: "No skill selected."
+            error: "Invalid intent data."
         };
 
     }
 
 
     const category =
-        skill.category;
+        intentData.category;
+
+
+    const intent =
+        intentData.intent;
+
+
+    const parameters =
+        intentData.parameters || {};
 
 
     const engine =
@@ -37,7 +45,7 @@ function execute(skill, input, options = {}) {
             success: false,
 
             error:
-                `No engine available for skill category: ${category}`
+                `Engine not found for category: ${category}`
 
         };
 
@@ -45,49 +53,197 @@ function execute(skill, input, options = {}) {
 
 
     // --------------------------------------------------------
-    // Safe execution mode
+    // Finance engine
     // --------------------------------------------------------
 
-    // At this stage AarHen does not guess which engine
-    // function should receive arbitrary user text.
-    //
-    // Instead, return the available engine functions.
-    // A higher reasoning layer will choose the exact function.
+    if (
+        category === "finance"
+    ) {
 
-    const functions =
-        Object.keys(engine)
-            .filter(key =>
-                typeof engine[key] === "function"
-            );
+        try {
 
+            if (
+                intent === "calculate_emi"
+            ) {
+
+                if (
+                    parameters.amount === null ||
+                    parameters.rate === null ||
+                    parameters.years === null
+                ) {
+
+                    return {
+
+                        success: false,
+
+                        needsInput: true,
+
+                        intent,
+
+                        missingParameters: [
+
+                            parameters.amount === null
+                                ? "loan amount"
+                                : null,
+
+                            parameters.rate === null
+                                ? "interest rate"
+                                : null,
+
+                            parameters.years === null
+                                ? "loan tenure"
+                                : null
+
+                        ].filter(Boolean)
+
+                    };
+
+                }
+
+
+                const result =
+                    engine.calculateEMI(
+
+                        parameters.amount,
+
+                        parameters.rate,
+
+                        parameters.years
+
+                    );
+
+
+                return {
+
+                    success: true,
+
+                    category,
+
+                    intent,
+
+                    parameters,
+
+                    result,
+
+                    executionStatus:
+                        "completed"
+
+                };
+
+            }
+
+
+            if (
+                intent === "simple_interest"
+            ) {
+
+                if (
+                    parameters.amount === null ||
+                    parameters.rate === null ||
+                    parameters.years === null
+                ) {
+
+                    return {
+
+                        success: false,
+
+                        needsInput: true,
+
+                        intent,
+
+                        missingParameters: [
+
+                            parameters.amount === null
+                                ? "principal"
+                                : null,
+
+                            parameters.rate === null
+                                ? "interest rate"
+                                : null,
+
+                            parameters.years === null
+                                ? "years"
+                                : null
+
+                        ].filter(Boolean)
+
+                    };
+
+                }
+
+
+                const result =
+                    engine.calculateSimpleInterest(
+
+                        parameters.amount,
+
+                        parameters.rate,
+
+                        parameters.years
+
+                    );
+
+
+                return {
+
+                    success: true,
+
+                    category,
+
+                    intent,
+
+                    parameters,
+
+                    result,
+
+                    executionStatus:
+                        "completed"
+
+                };
+
+            }
+
+        }
+
+        catch (error) {
+
+            return {
+
+                success: false,
+
+                category,
+
+                intent,
+
+                error:
+                    error.message
+
+            };
+
+        }
+
+    }
+
+
+    // --------------------------------------------------------
+    // No executable function yet
+    // --------------------------------------------------------
 
     return {
 
         success: true,
 
-        skill: {
+        category,
 
-            id:
-                skill.id,
+        intent,
 
-            name:
-                skill.name,
-
-            category:
-                skill.category
-
-        },
-
-        input,
-
-        availableFunctions:
-            functions,
+        parameters,
 
         executionStatus:
-            "engine-ready",
+            "engine-connected",
 
         message:
-            "Skill engine is connected and ready for function selection."
+            "Intent recognized. Specific execution handler is not yet implemented."
 
     };
 
@@ -141,7 +297,7 @@ function getEngineFunctions(category) {
 
 module.exports = {
 
-    execute,
+    executeIntent,
 
     getEngineFunctions
 
