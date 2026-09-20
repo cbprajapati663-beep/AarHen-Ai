@@ -4,10 +4,10 @@
 // ============================================================
 
 const learning = require("./learning");
-const memory = require("./memory");
+const memoryStore = require("./memoryStore");
 
 function learnFromUser({
-    title,
+    title = "User Knowledge",
     content,
     category = "general",
     source = "user"
@@ -21,7 +21,7 @@ function learnFromUser({
     }
 
     const result = learning.learn({
-        title: title || "User Knowledge",
+        title,
         content: String(content).trim(),
         category,
         source,
@@ -29,45 +29,84 @@ function learnFromUser({
     });
 
     return {
-        success: true,
+        success: result.success,
         type: "user-learning",
         result,
-        status: "knowledge-stored"
+        status: result.success
+            ? "knowledge-stored"
+            : "learning-failed"
     };
+}
+
+function searchLearnedKnowledge(query, limit = 10) {
+    return memoryStore.findKnowledge(
+        query,
+        limit
+    );
 }
 
 function getLearnedKnowledge(limit = 20) {
-    const all = memory.getAll();
+    const result =
+        memoryStore.findKnowledge(
+            "",
+            limit
+        );
 
-    return all
-        .filter(item => item.type === "knowledge")
-        .slice(-Number(limit || 20))
-        .reverse();
-}
-
-function getLearningStatus() {
-    const all = memory.getAll();
-
-    const knowledge = all.filter(
-        item => item.type === "knowledge"
-    );
-
-    const verified = knowledge.filter(
-        item => item.verified === true ||
-                item.verificationStatus === "verified"
-    );
+    if (!result.success) {
+        return {
+            success: true,
+            knowledge: []
+        };
+    }
 
     return {
         success: true,
-        totalKnowledge: knowledge.length,
-        verifiedKnowledge: verified.length,
-        learningEngine: "active",
-        status: "ready"
+        knowledge: result.results
     };
+}
+
+function getKnowledgeById(memoryId) {
+    return memoryStore.getMemory(memoryId);
+}
+
+function correctKnowledge({
+    memoryId,
+    correction,
+    reason = ""
+} = {}) {
+
+    return learning.learnCorrection({
+        memoryId,
+        correction,
+        reason
+    });
+}
+
+function verifyKnowledge({
+    memoryId,
+    sourceCount = 1,
+    confidence = 0.5,
+    notes = ""
+} = {}) {
+
+    return learning.verifyLearnedMemory({
+        memoryId,
+        sourceCount,
+        confidence,
+        notes
+    });
+}
+
+function getLearningStatus() {
+    return learning.getLearningStats();
 }
 
 module.exports = {
     learnFromUser,
+    searchLearnedKnowledge,
     getLearnedKnowledge,
+    getKnowledgeById,
+    correctKnowledge,
+    verifyKnowledge,
     getLearningStatus
 };
