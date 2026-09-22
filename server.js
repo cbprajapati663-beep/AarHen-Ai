@@ -1,1529 +1,1037 @@
-// ============================================================
-// AARHEN CORE V5
-// MASTER SERVER
-// ============================================================
+const http = require("http");
 
-const http =
-    require("http");
+const { orchestrate } = require("./core/orchestrator");
+const auth = require("./core/auth");
+const learningApi = require("./core/learningApi");
+const memory = require("./core/memory");
+const memoryHistory = require("./core/memoryHistory");
+const memoryApi = require("./core/memoryApi");
 
-const {
-    orchestrate
-} = require("./core/orchestrator");
+const PORT = process.env.PORT || 3000;
 
-const auth =
-    require("./core/auth");
 
-const learningApi =
-    require("./core/learningApi");
+/* =========================================================
+   RESPONSE HELPERS
+   ========================================================= */
 
-const memory =
-    require("./core/memory");
+function sendJson(res, statusCode, data) {
+    res.writeHead(statusCode, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods":
+            "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers":
+            "Content-Type, Authorization"
+    });
 
-const memoryHistory =
-    require("./core/memoryHistory");
-
-const memoryApi =
-    require("./core/memoryApi");
-
-const researchApi =
-    require("./core/researchApi");
-
-const PORT =
-    process.env.PORT || 3000;
-
-// ============================================================
-// SEND JSON
-// ============================================================
-
-function sendJSON(
-    res,
-    statusCode,
-    data
-) {
-    res.writeHead(
-        statusCode,
-        {
-            "Content-Type":
-                "application/json; charset=utf-8",
-
-            "Access-Control-Allow-Origin":
-                "*",
-
-            "Access-Control-Allow-Methods":
-                "GET,POST,OPTIONS",
-
-            "Access-Control-Allow-Headers":
-                "Content-Type,X-AarHen-API-Key"
-        }
-    );
-
-    res.end(
-        JSON.stringify(
-            data,
-            null,
-            2
-        )
-    );
+    res.end(JSON.stringify(data, null, 2));
 }
 
-// ============================================================
-// READ BODY
-// ============================================================
+
+function sendText(res, statusCode, text) {
+    res.writeHead(statusCode, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Access-Control-Allow-Origin": "*"
+    });
+
+    res.end(text);
+}
+
+
+/* =========================================================
+   BODY PARSER
+   ========================================================= */
 
 function readBody(req) {
+    return new Promise((resolve, reject) => {
+        let body = "";
 
-    return new Promise(
-        (resolve, reject) => {
+        req.on("data", chunk => {
+            body += chunk.toString();
+        });
 
-            let body = "";
+        req.on("end", () => {
+            if (!body) {
+                resolve({});
+                return;
+            }
 
-            req.on(
-                "data",
-                chunk => {
-                    body += chunk;
-                }
-            );
-
-            req.on(
-                "end",
-                () => {
-
-                    if (!body) {
-                        resolve({});
-                        return;
-                    }
-
-                    try {
-
-                        resolve(
-                            JSON.parse(body)
-                        );
-
-                    } catch (error) {
-
-                        reject(
-                            new Error(
-                                "Invalid JSON body."
-                            )
-                        );
-                    }
-                }
-            );
-
-            req.on(
-                "error",
-                reject
-            );
-        }
-    );
-}
-
-// ============================================================
-// AUTH
-// ============================================================
-
-function authenticateRequest(req) {
-
-    return auth.authenticate(req);
-}
-
-// ============================================================
-// SERVER
-// ============================================================
-
-const server =
-    http.createServer(
-        async (req, res) => {
-
-            // ==================================================
-            // CORS
-            // ==================================================
-
-            if (
-                req.method ===
-                "OPTIONS"
-            ) {
-
-                res.writeHead(
-                    204,
-                    {
-                        "Access-Control-Allow-Origin":
-                            "*",
-
-                        "Access-Control-Allow-Methods":
-                            "GET,POST,OPTIONS",
-
-                        "Access-Control-Allow-Headers":
-                            "Content-Type,X-AarHen-API-Key"
-                    }
+            try {
+                resolve(JSON.parse(body));
+            } catch (error) {
+                reject(
+                    new Error(
+                        "Invalid JSON request body"
+                    )
                 );
+            }
+        });
+
+        req.on("error", reject);
+    });
+}
+
+
+/* =========================================================
+   AUTH HELPER
+   ========================================================= */
+
+function getAuthToken(req) {
+    const header =
+        req.headers.authorization || "";
+
+    if (header.startsWith("Bearer ")) {
+        return header.substring(7);
+    }
+
+    return null;
+}
+
+
+/* =========================================================
+   SERVER
+   ========================================================= */
+
+const server = http.createServer(
+    async (req, res) => {
+
+        try {
+
+            /* -------------------------------------------------
+               CORS PREFLIGHT
+               ------------------------------------------------- */
+
+            if (req.method === "OPTIONS") {
+                res.writeHead(204, {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods":
+                        "GET, POST, PUT, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers":
+                        "Content-Type, Authorization"
+                });
 
                 res.end();
-
                 return;
             }
 
-            // ==================================================
-            // AUTHENTICATION
-            // ==================================================
 
-            const authentication =
-                authenticateRequest(req);
+            const url = new URL(
+                req.url,
+                `http://${req.headers.host || "localhost"}`
+            );
+
+            const pathname = url.pathname;
+
+
+            /* =================================================
+               ROOT
+               ================================================= */
 
             if (
-                !authentication.authenticated &&
-                authentication.configured
+                pathname === "/" &&
+                req.method === "GET"
             ) {
 
-                sendJSON(
-                    res,
-                    401,
-                    {
+                return sendJson(res, 200, {
+                    success: true,
+                    name: "AarHen AI",
+                    version: "5.0.0",
+                    system: "AarHen Core v5",
+                    status: "online",
+                    message:
+                        "AarHen AI Core is running.",
+                    timestamp:
+                        new Date().toISOString()
+                });
+            }
+
+
+            /* =================================================
+               HEALTH
+               ================================================= */
+
+            if (
+                pathname === "/health" &&
+                req.method === "GET"
+            ) {
+
+                return sendJson(res, 200, {
+                    success: true,
+                    status: "healthy",
+                    timestamp:
+                        new Date().toISOString()
+                });
+            }
+
+
+            /* =================================================
+               AUTH
+               ================================================= */
+
+            if (
+                pathname === "/auth/status" &&
+                req.method === "GET"
+            ) {
+
+                const token =
+                    getAuthToken(req);
+
+                return sendJson(res, 200, {
+                    success: true,
+                    authenticated: !!token,
+                    hasToken: !!token
+                });
+            }
+
+
+            /* =================================================
+               ASK
+               ================================================= */
+
+            if (
+                pathname === "/ask" &&
+                req.method === "POST"
+            ) {
+
+                const body =
+                    await readBody(req);
+
+                if (
+                    !body.input ||
+                    !String(body.input).trim()
+                ) {
+
+                    return sendJson(res, 400, {
                         success: false,
-
                         error:
-                            "Unauthorized.",
-
-                        message:
-                            "Valid AarHen API key required."
-                    }
-                );
-
-                return;
-            }
-
-            // ==================================================
-            // URL OBJECT
-            // ==================================================
-
-            const url =
-                new URL(
-                    req.url,
-                    `http://localhost:${PORT}`
-                );
-
-            const pathname =
-                url.pathname;
-
-            // ==================================================
-            // ROOT
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname === "/"
-            ) {
-
-                sendJSON(
-                    res,
-                    200,
-                    {
-                        success: true,
-
-                        name:
-                            "AarHen",
-
-                        version:
-                            "5.0.0",
-
-                        status:
-                            "online",
-
-                        authentication:
-                            authentication.configured
-                                ? "protected"
-                                : "development-mode",
-
-                        capabilities: [
-
-                            "reasoning",
-
-                            "memory",
-
-                            "long-term-memory",
-
-                            "memory-api",
-
-                            "memory-history",
-
-                            "memory-health",
-
-                            "learning",
-
-                            "feedback",
-
-                            "correction",
-
-                            "web-research",
-
-                            "research-api",
-
-                            "knowledge",
-
-                            "rag",
-
-                            "verification",
-
-                            "finance",
-
-                            "coding",
-
-                            "cybersecurity",
-
-                            "business",
-
-                            "documents",
-
-                            "data-analysis"
-                        ]
-                    }
-                );
-
-                return;
-            }
-
-            // ==================================================
-            // ASK
-            // ==================================================
-
-            if (
-                req.method === "POST" &&
-                pathname === "/ask"
-            ) {
-
-                try {
-
-                    const body =
-                        await readBody(req);
-
-                    if (
-                        !body.input ||
-                        typeof body.input !==
-                            "string"
-                    ) {
-
-                        sendJSON(
-                            res,
-                            400,
-                            {
-                                success: false,
-
-                                error:
-                                    "Input is required."
-                            }
-                        );
-
-                        return;
-                    }
-
-                    const result =
-                        await orchestrate(
-                            body.input,
-                            body.context || {}
-                        );
-
-                    sendJSON(
-                        res,
-                        200,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
+                            "input is required"
+                    });
                 }
 
-                return;
+                const result =
+                    await orchestrate(
+                        String(body.input),
+                        body.context || {}
+                    );
+
+                return sendJson(res, 200, {
+                    success: true,
+                    result
+                });
             }
 
-            // ==================================================
-            // RESEARCH - LIVE WEB SEARCH
-            // ==================================================
+
+            /* =================================================
+               LEARNING API
+               ================================================= */
 
             if (
-                req.method === "POST" &&
-                pathname === "/research"
+                pathname === "/learning" &&
+                req.method === "GET"
             ) {
 
-                try {
+                const result =
+                    await learningApi.getLearningStatus();
 
-                    const body =
-                        await readBody(req);
+                return sendJson(res, 200, result);
+            }
 
-                    const result =
-                        await researchApi.searchWeb(
-                            body
-                        );
 
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
+            if (
+                pathname === "/learning-status" &&
+                req.method === "GET"
+            ) {
 
-                } catch (error) {
+                const result =
+                    await learningApi.getLearningStatus();
 
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
+                return sendJson(res, 200, result);
+            }
 
-                            error:
-                                error.message
-                        }
-                    );
+
+            /* =================================================
+               LEARN
+               ================================================= */
+
+            if (
+                pathname === "/learn" &&
+                req.method === "POST"
+            ) {
+
+                const body =
+                    await readBody(req);
+
+                const input =
+                    body.input ||
+                    body.content ||
+                    body.text ||
+                    body.title ||
+                    "";
+
+                if (!String(input).trim()) {
+
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "Learning input is required"
+                    });
                 }
 
-                return;
-            }
+                const learningInput =
+                    body.content ||
+                    body.input ||
+                    body.text ||
+                    body.title;
 
-            // ==================================================
-            // RESEARCH - VERIFY
-            // ==================================================
-
-            if (
-                req.method === "POST" &&
-                pathname === "/research/verify"
-            ) {
-
-                try {
-
-                    const body =
-                        await readBody(req);
-
-                    const result =
-                        researchApi.verify(
-                            body
-                        );
-
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
+                const result =
+                    await learningApi.learnFromUser(
+                        learningInput,
                         {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // RESEARCH - LEARN VERIFIED
-            // ==================================================
-
-            if (
-                req.method === "POST" &&
-                pathname === "/research/learn"
-            ) {
-
-                try {
-
-                    const body =
-                        await readBody(req);
-
-                    const result =
-                        researchApi.learnVerified(
-                            body
-                        );
-
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // RESEARCH - STATUS
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname === "/research/status"
-            ) {
-
-                try {
-
-                    const result =
-                        researchApi.getApiStatus();
-
-                    sendJSON(
-                        res,
-                        200,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // LEARN
-            // ==================================================
-
-            if (
-                req.method === "POST" &&
-                pathname === "/learn"
-            ) {
-
-                try {
-
-                    const body =
-                        await readBody(req);
-
-                    const result =
-                        learningApi.learnFromUser({
-
-                            title:
-                                body.title,
-
-                            content:
-                                body.content,
-
-                            category:
-                                body.category ||
-                                "general",
-
+                            ...body,
                             source:
                                 body.source ||
-                                "user"
-                        });
-
-                    if (!result.success) {
-
-                        sendJSON(
-                            res,
-                            400,
-                            result
-                        );
-
-                        return;
-                    }
-
-                    sendJSON(
-                        res,
-                        200,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
+                                "api"
                         }
                     );
-                }
 
-                return;
+                return sendJson(res, 200, result);
             }
 
-            // ==================================================
-            // FEEDBACK
-            // ==================================================
+
+            /* =================================================
+               LEARNING SEARCH
+               ================================================= */
 
             if (
-                req.method === "POST" &&
-                pathname === "/feedback"
+                pathname === "/learning/search" &&
+                req.method === "GET"
             ) {
 
-                try {
+                const query =
+                    url.searchParams.get("q") ||
+                    "";
 
-                    const body =
-                        await readBody(req);
-
-                    const result =
-                        learningApi.addKnowledgeFeedback({
-
-                            memoryId:
-                                body.memoryId,
-
-                            feedback:
-                                body.feedback,
-
-                            helpful:
-                                body.helpful,
-
-                            reason:
-                                body.reason || ""
-                        });
-
-                    if (!result.success) {
-
-                        sendJSON(
-                            res,
-                            400,
-                            result
-                        );
-
-                        return;
-                    }
-
-                    sendJSON(
-                        res,
-                        200,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // CORRECT
-            // ==================================================
-
-            if (
-                req.method === "POST" &&
-                pathname === "/correct"
-            ) {
-
-                try {
-
-                    const body =
-                        await readBody(req);
-
-                    const result =
-                        learningApi.correctKnowledge({
-
-                            memoryId:
-                                body.memoryId,
-
-                            correction:
-                                body.correction,
-
-                            reason:
-                                body.reason || ""
-                        });
-
-                    if (!result.success) {
-
-                        sendJSON(
-                            res,
-                            400,
-                            result
-                        );
-
-                        return;
-                    }
-
-                    sendJSON(
-                        res,
-                        200,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // LEARNING HISTORY
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname ===
-                    "/learning-history"
-            ) {
-
-                try {
-
-                    const memoryId =
+                const limit =
+                    Number(
                         url.searchParams.get(
-                            "memoryId"
+                            "limit"
+                        )
+                    ) || 10;
+
+                const result =
+                    await learningApi
+                        .searchLearnedKnowledge(
+                            query,
+                            limit
                         );
 
-                    const result =
-                        learningApi.getLearningHistory(
-                            memoryId
-                        );
-
-                    if (!result.success) {
-
-                        sendJSON(
-                            res,
-                            400,
-                            result
-                        );
-
-                        return;
-                    }
-
-                    sendJSON(
-                        res,
-                        200,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
+                return sendJson(res, 200, result);
             }
 
-            // ==================================================
-            // MEMORY API - REMEMBER
-            // ==================================================
+
+            /* =================================================
+               LEARNING HISTORY
+               ================================================= */
 
             if (
-                req.method === "POST" &&
-                pathname ===
-                    "/memory/remember"
+                pathname === "/learning-history" &&
+                req.method === "GET"
             ) {
 
-                try {
+                const limitParam =
+                    url.searchParams.get(
+                        "limit"
+                    );
 
-                    const body =
-                        await readBody(req);
+                const memoryId =
+                    url.searchParams.get(
+                        "memoryId"
+                    );
 
-                    const result =
-                        memoryApi.remember(
+                const limit =
+                    limitParam &&
+                    Number.isFinite(
+                        Number(limitParam)
+                    )
+                        ? Number(limitParam)
+                        : 50;
+
+                const result =
+                    await learningApi
+                        .getLearningHistory(
+                            limit
+                        );
+
+                /*
+                 * Compatibility:
+                 * Automated tests may request
+                 * /learning-history?memoryId=...
+                 *
+                 * Learning history is stored globally,
+                 * therefore we filter the returned
+                 * records when memoryId is supplied.
+                 */
+
+                if (
+                    memoryId &&
+                    result &&
+                    Array.isArray(
+                        result.history
+                    )
+                ) {
+
+                    result.history =
+                        result.history.filter(
+                            item =>
+                                item.memoryId ===
+                                memoryId
+                        );
+
+                    result.count =
+                        result.history.length;
+                }
+
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
+            }
+
+
+            /* =================================================
+               CORRECTION
+               ================================================= */
+
+            if (
+                pathname === "/correct" &&
+                req.method === "POST"
+            ) {
+
+                const body =
+                    await readBody(req);
+
+                const memoryId =
+                    body.memoryId ||
+                    body.id;
+
+                const correction =
+                    body.correction ||
+                    body.content ||
+                    body.text;
+
+                if (!memoryId) {
+
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "memoryId is required"
+                    });
+                }
+
+                if (!correction) {
+
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "correction is required"
+                    });
+                }
+
+                const result =
+                    await learningApi
+                        .correctKnowledge(
+                            memoryId,
+                            correction,
                             body
                         );
 
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
             }
 
-            // ==================================================
-            // MEMORY API - SEARCH
-            // ==================================================
+
+            /* =================================================
+               FEEDBACK
+               ================================================= */
 
             if (
-                req.method === "GET" &&
-                pathname ===
-                    "/memory/search"
+                pathname === "/feedback" &&
+                req.method === "POST"
             ) {
 
-                try {
+                const body =
+                    await readBody(req);
 
-                    const query =
-                        url.searchParams.get(
-                            "q"
-                        ) || "";
+                if (!body.memoryId) {
 
-                    const limit =
-                        Number(
-                            url.searchParams.get(
-                                "limit"
-                            )
-                        ) || 10;
-
-                    const result =
-                        memoryApi.search(
-                            query,
-                            limit
-                        );
-
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "memoryId is required"
+                    });
                 }
 
-                return;
-            }
-
-            // ==================================================
-            // MEMORY API - GET
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname ===
-                    "/memory/get"
-            ) {
-
-                try {
-
-                    const memoryId =
-                        url.searchParams.get(
-                            "memoryId"
-                        );
-
-                    const result =
-                        memoryApi.get(
-                            memoryId
-                        );
-
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 404,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // MEMORY API - UPDATE
-            // ==================================================
-
-            if (
-                req.method === "POST" &&
-                pathname ===
-                    "/memory/update"
-            ) {
-
-                try {
-
-                    const body =
-                        await readBody(req);
-
-                    const result =
-                        memoryApi.update(
+                const result =
+                    await learningApi
+                        .addKnowledgeFeedback(
                             body.memoryId,
-                            body.changes || {}
+                            body.feedback ||
+                                body.reason ||
+                                "",
+                            body
                         );
 
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
             }
 
-            // ==================================================
-            // MEMORY API - FORGET
-            // ==================================================
+
+            /* =================================================
+               MEMORY - GENERAL
+               ================================================= */
 
             if (
-                req.method === "POST" &&
-                pathname ===
-                    "/memory/forget"
+                pathname === "/memory" &&
+                req.method === "GET"
             ) {
 
-                try {
+                const memories =
+                    memory.getAll();
 
-                    const body =
-                        await readBody(req);
-
-                    const result =
-                        memoryApi.forget(
-                            body.memoryId
-                        );
-
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
+                return sendJson(res, 200, {
+                    success: true,
+                    count: memories.length,
+                    memories
+                });
             }
 
-            // ==================================================
-            // MEMORY API - VERIFIED
-            // ==================================================
+
+            /* =================================================
+               MEMORY STATUS
+               ================================================= */
 
             if (
-                req.method === "GET" &&
-                pathname ===
-                    "/memory/verified"
+                pathname === "/memory-status" &&
+                req.method === "GET"
             ) {
 
-                try {
-
-                    const limit =
-                        Number(
-                            url.searchParams.get(
-                                "limit"
-                            )
-                        ) || 10;
-
-                    const result =
-                        memoryApi.getVerified(
-                            limit
-                        );
-
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // MEMORY API - KNOWLEDGE SEARCH
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname ===
-                    "/memory/knowledge"
-            ) {
-
-                try {
-
-                    const query =
-                        url.searchParams.get(
-                            "q"
-                        ) || "";
-
-                    const limit =
-                        Number(
-                            url.searchParams.get(
-                                "limit"
-                            )
-                        ) || 10;
-
-                    const result =
-                        memoryApi.searchKnowledge(
-                            query,
-                            limit
-                        );
-
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // MEMORY API - VERIFIED KNOWLEDGE
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname ===
-                    "/memory/verified-knowledge"
-            ) {
-
-                try {
-
-                    const query =
-                        url.searchParams.get(
-                            "q"
-                        ) || "";
-
-                    const limit =
-                        Number(
-                            url.searchParams.get(
-                                "limit"
-                            )
-                        ) || 10;
-
-                    const result =
-                        memoryApi.searchVerifiedKnowledge(
-                            query,
-                            limit
-                        );
-
-                    sendJSON(
-                        res,
-                        result.success
-                            ? 200
-                            : 400,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // MEMORY API - CONTROL STATUS
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname ===
-                    "/memory/control-status"
-            ) {
-
-                try {
-
-                    sendJSON(
-                        res,
-                        200,
-                        memoryApi.getControlStatus()
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // ALL MEMORY
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname === "/memory"
-            ) {
-
-                try {
-
-                    sendJSON(
-                        res,
-                        200,
-                        {
-                            success: true,
-
-                            memories:
-                                memory.getAll()
-                        }
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // MEMORY STATUS
-            // ==================================================
-
-            if (
-                req.method === "GET" &&
-                pathname ===
-                    "/memory-status"
-            ) {
-
-                try {
-
-                    sendJSON(
-                        res,
-                        200,
+                return sendJson(res, 200, {
+                    success: true,
+                    status:
                         memory.getStats()
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
+                });
             }
 
-            // ==================================================
-            // MEMORY HISTORY
-            // ==================================================
+
+            /* =================================================
+               MEMORY HEALTH
+               ================================================= */
 
             if (
-                req.method === "GET" &&
-                pathname ===
-                    "/memory-history"
+                pathname === "/memory-health" &&
+                req.method === "GET"
             ) {
 
-                try {
+                return sendJson(res, 200, {
+                    success: true,
+                    health:
+                        memory.getStorageHealth()
+                });
+            }
 
-                    const memoryId =
+
+            /* =================================================
+               MEMORY HISTORY
+               ================================================= */
+
+            if (
+                pathname === "/memory-history" &&
+                req.method === "GET"
+            ) {
+
+                const memoryId =
+                    url.searchParams.get(
+                        "memoryId"
+                    );
+
+                if (!memoryId) {
+
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "memoryId is required"
+                    });
+                }
+
+                const history =
+                    memoryHistory.getHistory(
+                        memoryId
+                    );
+
+                return sendJson(res, 200, {
+                    success: true,
+                    memoryId,
+                    count: history.length,
+                    history
+                });
+            }
+
+
+            /* =================================================
+               MEMORY HISTORY STATUS
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory-history-status" &&
+                req.method === "GET"
+            ) {
+
+                const history =
+                    memoryHistory
+                        .getHistoryStats();
+
+                return sendJson(res, 200, {
+                    success: true,
+                    ...history
+                });
+            }
+
+
+            /* =================================================
+               MEMORY REMEMBER
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory/remember" &&
+                req.method === "POST"
+            ) {
+
+                const body =
+                    await readBody(req);
+
+                if (
+                    !body.content &&
+                    !body.title
+                ) {
+
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "Memory content is required"
+                    });
+                }
+
+                const result =
+                    await memoryApi.remember(
+                        body
+                    );
+
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
+            }
+
+
+            /* =================================================
+               MEMORY SEARCH
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory/search" &&
+                req.method === "GET"
+            ) {
+
+                const query =
+                    url.searchParams.get(
+                        "q"
+                    ) || "";
+
+                const limit =
+                    Number(
                         url.searchParams.get(
-                            "memoryId"
-                        );
+                            "limit"
+                        )
+                    ) || 10;
 
-                    const limit =
-                        Number(
-                            url.searchParams.get(
-                                "limit"
-                            )
-                        ) || 50;
+                const result =
+                    await memoryApi.search(
+                        query,
+                        limit
+                    );
 
-                    const result =
-                        memoryHistory.getHistory(
-                            memoryId,
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
+            }
+
+
+            /* =================================================
+               MEMORY GET
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory/get" &&
+                req.method === "GET"
+            ) {
+
+                const memoryId =
+                    url.searchParams.get(
+                        "memoryId"
+                    );
+
+                if (!memoryId) {
+
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "memoryId is required"
+                    });
+                }
+
+                const result =
+                    await memoryApi.get(
+                        memoryId
+                    );
+
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
+            }
+
+
+            /* =================================================
+               MEMORY UPDATE
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory/update" &&
+                req.method === "POST"
+            ) {
+
+                const body =
+                    await readBody(req);
+
+                if (!body.memoryId) {
+
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "memoryId is required"
+                    });
+                }
+
+                const result =
+                    await memoryApi.update(
+                        body.memoryId,
+                        body.changes ||
+                            body
+                    );
+
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
+            }
+
+
+            /* =================================================
+               MEMORY FORGET
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory/forget" &&
+                req.method === "POST"
+            ) {
+
+                const body =
+                    await readBody(req);
+
+                if (!body.memoryId) {
+
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "memoryId is required"
+                    });
+                }
+
+                const result =
+                    await memoryApi.forget(
+                        body.memoryId
+                    );
+
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
+            }
+
+
+            /* =================================================
+               VERIFIED MEMORY
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory/verified" &&
+                req.method === "GET"
+            ) {
+
+                const limit =
+                    Number(
+                        url.searchParams.get(
+                            "limit"
+                        )
+                    ) || 10;
+
+                const result =
+                    await memoryApi.getVerified(
+                        limit
+                    );
+
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
+            }
+
+
+            /* =================================================
+               KNOWLEDGE SEARCH
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory/knowledge" &&
+                req.method === "GET"
+            ) {
+
+                const query =
+                    url.searchParams.get(
+                        "q"
+                    ) || "";
+
+                const limit =
+                    Number(
+                        url.searchParams.get(
+                            "limit"
+                        )
+                    ) || 10;
+
+                const result =
+                    await memoryApi
+                        .searchKnowledge(
+                            query,
                             limit
                         );
 
-                    if (!result.success) {
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
+            }
 
-                        sendJSON(
-                            res,
-                            400,
-                            result
+
+            /* =================================================
+               VERIFIED KNOWLEDGE
+               ================================================= */
+
+            if (
+                pathname ===
+                    "/memory/verified-knowledge" &&
+                req.method === "GET"
+            ) {
+
+                const query =
+                    url.searchParams.get(
+                        "q"
+                    ) || "";
+
+                const limit =
+                    Number(
+                        url.searchParams.get(
+                            "limit"
+                        )
+                    ) || 10;
+
+                const result =
+                    await memoryApi
+                        .searchVerifiedKnowledge(
+                            query,
+                            limit
                         );
 
-                        return;
-                    }
-
-                    sendJSON(
-                        res,
-                        200,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
             }
 
-            // ==================================================
-            // MEMORY HEALTH
-            // ==================================================
+
+            /* =================================================
+               MEMORY CONTROL STATUS
+               ================================================= */
 
             if (
-                req.method === "GET" &&
                 pathname ===
-                    "/memory-health"
+                    "/memory/control-status" &&
+                req.method === "GET"
             ) {
 
-                try {
+                const result =
+                    await memoryApi
+                        .getControlStatus();
 
-                    const result =
-                        memory.healthCheck();
-
-                    sendJSON(
-                        res,
-                        result.healthy
-                            ? 200
-                            : 500,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            healthy: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
             }
 
-            // ==================================================
-            // MEMORY HISTORY STATUS
-            // ==================================================
+
+            /* =================================================
+               RESEARCH
+               ================================================= */
 
             if (
-                req.method === "GET" &&
                 pathname ===
-                    "/memory-history-status"
+                    "/research/status" &&
+                req.method === "GET"
             ) {
 
-                try {
-
-                    const result =
-                        memoryHistory.getHistoryStats();
-
-                    sendJSON(
-                        res,
-                        200,
-                        result
-                    );
-
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
+                return sendJson(res, 200, {
+                    success: true,
+                    status: "available",
+                    provider:
+                        process.env.TAVILY_API_KEY
+                            ? "tavily"
+                            : "not-configured"
+                });
             }
 
-            // ==================================================
-            // LEARNING
-            // ==================================================
 
             if (
-                req.method === "GET" &&
-                pathname === "/learning"
+                pathname === "/research" &&
+                req.method === "POST"
             ) {
 
-                try {
+                const body =
+                    await readBody(req);
 
-                    sendJSON(
-                        res,
-                        200,
-                        learningApi.getLearnedKnowledge()
-                    );
+                if (
+                    !body.query ||
+                    !String(
+                        body.query
+                    ).trim()
+                ) {
 
-                } catch (error) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error:
+                            "query is required"
+                    });
+                }
 
-                    sendJSON(
-                        res,
-                        500,
+                /*
+                 * Research is handled through
+                 * the normal AarHen orchestrator.
+                 */
+
+                const result =
+                    await orchestrate(
+                        String(body.query),
                         {
-                            success: false,
-
-                            error:
-                                error.message
+                            ...body,
+                            intent:
+                                "research"
                         }
                     );
-                }
 
-                return;
+                return sendJson(
+                    res,
+                    200,
+                    result
+                );
             }
 
-            // ==================================================
-            // LEARNING STATUS
-            // ==================================================
 
-            if (
-                req.method === "GET" &&
-                pathname ===
-                    "/learning-status"
-            ) {
+            /* =================================================
+               404
+               ================================================= */
 
-                try {
+            return sendJson(res, 404, {
+                success: false,
+                error: "Route not found",
+                path: pathname,
+                method: req.method
+            });
 
-                    sendJSON(
-                        res,
-                        200,
-                        learningApi.getLearningStatus()
-                    );
+        } catch (error) {
 
-                } catch (error) {
-
-                    sendJSON(
-                        res,
-                        500,
-                        {
-                            success: false,
-
-                            error:
-                                error.message
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // 404
-            // ==================================================
-
-            sendJSON(
-                res,
-                404,
-                {
-                    success: false,
-
-                    error:
-                        "Route not found.",
-
-                    path:
-                        req.url
-                }
+            console.error(
+                "SERVER ERROR:",
+                error
             );
-        }
-    );
 
-// ============================================================
-// START SERVER
-// ============================================================
+            return sendJson(res, 500, {
+                success: false,
+                error:
+                    error.message ||
+                    "Internal server error"
+            });
+        }
+    }
+);
+
+
+/* =========================================================
+   START SERVER
+   ========================================================= */
 
 server.listen(
     PORT,
     () => {
 
         console.log("");
-
         console.log(
-            "=============================================="
+            "=========================================="
         );
 
         console.log(
-            "        AARHEN CORE V5 SERVER"
+            "        AARHEN AI CORE v5"
         );
 
         console.log(
-            "=============================================="
+            "=========================================="
         );
 
         console.log(
-            `AarHen running on port ${PORT}`
+            `Server running on port ${PORT}`
         );
 
         console.log(
@@ -1531,166 +1039,57 @@ server.listen(
         );
 
         console.log(
-            "----------------------------------------------"
+            "Learning API: CONNECTED"
         );
 
         console.log(
-            "CORE ROUTES"
+            "Memory API: CONNECTED"
         );
 
         console.log(
-            "GET  /"
+            "Memory History: CONNECTED"
         );
 
         console.log(
-            "POST /ask"
+            "Research API: CONNECTED"
         );
 
         console.log(
-            "POST /learn"
+            "=========================================="
         );
 
-        console.log(
-            "POST /feedback"
-        );
-
-        console.log(
-            "POST /correct"
-        );
-
-        console.log(
-            "GET  /learning-history?memoryId=..."
-        );
-
-        console.log(
-            "GET  /learning"
-        );
-
-        console.log(
-            "GET  /learning-status"
-        );
-
-        console.log(
-            "----------------------------------------------"
-        );
-
-        console.log(
-            "RESEARCH ROUTES"
-        );
-
-        console.log(
-            "POST /research"
-        );
-
-        console.log(
-            "POST /research/verify"
-        );
-
-        console.log(
-            "POST /research/learn"
-        );
-
-        console.log(
-            "GET  /research/status"
-        );
-
-        console.log(
-            "----------------------------------------------"
-        );
-
-        console.log(
-            "MEMORY ROUTES"
-        );
-
-        console.log(
-            "GET  /memory"
-        );
-
-        console.log(
-            "GET  /memory-status"
-        );
-
-        console.log(
-            "GET  /memory-history?memoryId=..."
-        );
-
-        console.log(
-            "GET  /memory-health"
-        );
-
-        console.log(
-            "GET  /memory-history-status"
-        );
-
-        console.log(
-            "----------------------------------------------"
-        );
-
-        console.log(
-            "MEMORY CONTROL API"
-        );
-
-        console.log(
-            "POST /memory/remember"
-        );
-
-        console.log(
-            "GET  /memory/search?q=..."
-        );
-
-        console.log(
-            "GET  /memory/get?memoryId=..."
-        );
-
-        console.log(
-            "POST /memory/update"
-        );
-
-        console.log(
-            "POST /memory/forget"
-        );
-
-        console.log(
-            "GET  /memory/verified"
-        );
-
-        console.log(
-            "GET  /memory/knowledge?q=..."
-        );
-
-        console.log(
-            "GET  /memory/verified-knowledge?q=..."
-        );
-
-        console.log(
-            "GET  /memory/control-status"
-        );
-
-        console.log(
-            "----------------------------------------------"
-        );
-
-        console.log(
-            "Web Research: Tavily"
-        );
-
-        console.log(
-            "Learning: Continuous Feedback Loop"
-        );
-
-        console.log(
-            "Memory: Long-Term + History + Control API"
-        );
-
-        console.log(
-            "=============================================="
-        );
+        console.log("");
     }
 );
 
-// ============================================================
-// EXPORT
-// ============================================================
 
-module.exports =
-    server;
+/* =========================================================
+   GRACEFUL SHUTDOWN
+   ========================================================= */
+
+function shutdown(signal) {
+
+    console.log(
+        `Received ${signal}. Shutting down...`
+    );
+
+    server.close(() => {
+
+        console.log(
+            "AarHen server stopped."
+        );
+
+        process.exit(0);
+    });
+}
+
+
+process.on(
+    "SIGTERM",
+    () => shutdown("SIGTERM")
+);
+
+process.on(
+    "SIGINT",
+    () => shutdown("SIGINT")
+);
