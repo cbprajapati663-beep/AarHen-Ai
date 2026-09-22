@@ -343,7 +343,8 @@ async function executeIntent(
         const searchResult =
             await handlers.searchWeb({
                 query,
-                maxSources: 5
+                maxSources:
+                    parameters.maxSources || 5
             });
 
         if (!searchResult.success) {
@@ -363,27 +364,137 @@ async function executeIntent(
                 result:
                     searchResult,
 
+                research: {
+
+                    success: false,
+
+                    query,
+
+                    sources: [],
+
+                    sourceCount: 0,
+
+                    confidence: 0,
+
+                    verificationStatus:
+                        "not-verified",
+
+                    error:
+                        searchResult.error ||
+                        "Web research failed."
+                },
+
                 executionStatus:
                     "research-error"
             };
         }
 
+        // ----------------------------------------------------
+        // IMPORTANT:
+        // handlers.searchWeb() now returns "sources".
+        // Keep backward compatibility with "results" too.
+        // ----------------------------------------------------
+
+        const rawSources =
+            Array.isArray(
+                searchResult.sources
+            )
+                ? searchResult.sources
+                : Array.isArray(
+                    searchResult.results
+                )
+                    ? searchResult.results
+                    : [];
+
         const sources =
-            (searchResult.results || [])
-                .map(item => ({
+            rawSources.map(
+                (item, index) => {
 
-                    title:
-                        item.title,
+                    return {
 
-                    url:
-                        item.url,
+                        id:
+                            item.id ||
+                            `research-source-${index + 1}`,
 
-                    publisher:
-                        item.publisher,
+                        title:
+                            item.title ||
+                            "Untitled source",
 
-                    publishedAt:
-                        item.publishedAt
-                }));
+                        url:
+                            item.url ||
+                            item.link ||
+                            "",
+
+                        publisher:
+                            item.publisher ||
+                            item.source ||
+                            null,
+
+                        publishedAt:
+                            item.publishedAt ||
+                            item.publishedDate ||
+                            item.published_date ||
+                            null,
+
+                        content:
+                            item.content ||
+                            item.snippet ||
+                            item.description ||
+                            "",
+
+                        snippet:
+                            item.snippet ||
+                            item.description ||
+                            item.content ||
+                            "",
+
+                        score:
+                            typeof item.score === "number"
+                                ? item.score
+                                : null
+                    };
+                }
+            );
+
+        // ----------------------------------------------------
+        // Provider confidence
+        // ----------------------------------------------------
+
+        let providerConfidence =
+            typeof searchResult.confidence === "number"
+                ? searchResult.confidence
+                : 0;
+
+        if (
+            providerConfidence <= 0
+        ) {
+
+            if (sources.length >= 2) {
+
+                providerConfidence =
+                    0.80;
+
+            } else if (
+                sources.length === 1
+            ) {
+
+                providerConfidence =
+                    0.60;
+            }
+        }
+
+        providerConfidence =
+            Math.max(
+                0,
+                Math.min(
+                    1,
+                    providerConfidence
+                )
+            );
+
+        // ----------------------------------------------------
+        // Create research result
+        // ----------------------------------------------------
 
         const researchResult =
             research.createResearchResult({
@@ -393,15 +504,17 @@ async function executeIntent(
                 sources,
 
                 summary:
-                    searchResult.answer || "",
+                    searchResult.answer ||
+                    searchResult.summary ||
+                    "",
 
                 confidence:
-                    sources.length >= 2
-                        ? 0.8
-                        : sources.length === 1
-                            ? 0.6
-                            : 0
+                    providerConfidence
             });
+
+        // ----------------------------------------------------
+        // Verify research
+        // ----------------------------------------------------
 
         const verificationResult =
             research.verifyResearch({
@@ -418,6 +531,10 @@ async function executeIntent(
                 notes:
                     "Verification based on available research sources."
             });
+
+        // ----------------------------------------------------
+        // Learning
+        // ----------------------------------------------------
 
         let learningResult = null;
 
@@ -447,6 +564,87 @@ async function executeIntent(
                 });
         }
 
+        // ----------------------------------------------------
+        // Final verification status
+        // ----------------------------------------------------
+
+        let verificationStatus =
+            "review-required";
+
+        if (
+            verificationResult.verified
+        ) {
+
+            verificationStatus =
+                "verified";
+
+        } else if (
+            sources.length > 0
+        ) {
+
+            verificationStatus =
+                "partially-verified";
+        }
+
+        // ----------------------------------------------------
+        // STANDARDIZED RESEARCH OBJECT
+        // ----------------------------------------------------
+
+        const standardizedResearch = {
+
+            success: true,
+
+            query,
+
+            answer:
+                searchResult.answer ||
+                searchResult.summary ||
+                "",
+
+            sources,
+
+            sourceCount:
+                sources.length,
+
+            confidence:
+                researchResult.confidence,
+
+            verificationStatus,
+
+            provider:
+                searchResult.provider ||
+                "research-provider",
+
+            verification:
+                verificationResult,
+
+            learning:
+                learningResult,
+
+            responseTime:
+                searchResult.responseTime ||
+                null,
+
+            previousKnowledgeAvailable:
+                contextSummary.hasContext,
+
+            previousVerifiedKnowledgeAvailable:
+                contextSummary.hasVerifiedContext,
+
+            researchStatus:
+                verificationResult.verified
+                    ? "verified"
+                    : "review-required"
+        };
+
+        // ----------------------------------------------------
+        // IMPORTANT:
+        // Keep BOTH result and research.
+        //
+        // result = backward compatibility
+        // research = standardized API response
+        // ----------------------------------------------------
+
         return {
 
             success: true,
@@ -459,43 +657,11 @@ async function executeIntent(
 
             contextSummary,
 
-            result: {
+            research:
+                standardizedResearch,
 
-                provider:
-                    searchResult.provider,
-
-                query:
-                    searchResult.query,
-
-                answer:
-                    searchResult.answer || "",
-
-                results:
-                    searchResult.results || [],
-
-                sourceCount:
-                    searchResult.sourceCount || 0,
-
-                responseTime:
-                    searchResult.responseTime || null,
-
-                verification:
-                    verificationResult,
-
-                learning:
-                    learningResult,
-
-                previousKnowledgeAvailable:
-                    contextSummary.hasContext,
-
-                previousVerifiedKnowledgeAvailable:
-                    contextSummary.hasVerifiedContext,
-
-                researchStatus:
-                    verificationResult.verified
-                        ? "verified"
-                        : "review-required"
-            },
+            result:
+                standardizedResearch,
 
             executionStatus:
                 verificationResult.verified
