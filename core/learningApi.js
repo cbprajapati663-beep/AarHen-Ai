@@ -1,282 +1,409 @@
-// ============================================================
-// AARHEN CORE V5
-// LEARNING API
-// ============================================================
+const learning = require("./learning");
 
-const learning =
-    require("./learning");
+/**
+ * AARHEN LEARNING API
+ * Controlled API layer for the Learning Engine
+ */
 
-const memoryStore =
-    require("./memoryStore");
+/**
+ * Learn from user input
+ */
+async function learn(data = {}) {
+    const input =
+        typeof data === "string"
+            ? data
+            : data.input || data.content || data.text || "";
 
-// ============================================================
-// LEARN FROM USER
-// ============================================================
-
-function learnFromUser({
-    title = "User Knowledge",
-    content,
-    category = "general",
-    source = "user"
-} = {}) {
-
-    if (
-        !content ||
-        String(content).trim().length < 10
-    ) {
+    if (!input || !String(input).trim()) {
         return {
             success: false,
-            error:
-                "Learning content must contain at least 10 characters."
+            error: "Learning input is required"
         };
     }
 
-    const result =
-        learning.learn({
-
-            title,
-
-            content:
-                String(content).trim(),
-
-            category,
-
-            source,
-
-            approved:
-                true
-        });
-
-    return {
-
-        success:
-            result.success,
-
-        type:
-            "user-learning",
-
-        result,
-
-        status:
-            result.success
-                ? "knowledge-stored"
-                : "learning-failed"
-    };
-}
-
-// ============================================================
-// SEARCH LEARNED KNOWLEDGE
-// ============================================================
-
-function searchLearnedKnowledge(
-    query,
-    limit = 10
-) {
-
-    return memoryStore.findKnowledge(
-        query,
-        limit
-    );
-}
-
-// ============================================================
-// GET LEARNED KNOWLEDGE
-// ============================================================
-
-function getLearnedKnowledge(
-    limit = 20
-) {
-
-    const result =
-        memoryStore.findKnowledge(
-            "",
-            limit
+    try {
+        const result = await Promise.resolve(
+            learning.learnFromUser(
+                input,
+                data.context || {}
+            )
         );
-
-    if (!result.success) {
 
         return {
             success: true,
-            knowledge: []
+            action: "learn",
+            result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Search learned knowledge
+ */
+async function searchLearnedKnowledge(query, limit = 10) {
+    try {
+        const result = await Promise.resolve(
+            learning.searchLearnedKnowledge(
+                query || "",
+                Number(limit) || 10
+            )
+        );
+
+        return {
+            success: true,
+            query: query || "",
+            count: Array.isArray(result) ? result.length : 0,
+            results: result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Get learned knowledge
+ */
+async function getLearnedKnowledge(limit = 50) {
+    try {
+        const result = await Promise.resolve(
+            learning.getLearnedKnowledge(
+                Number(limit) || 50
+            )
+        );
+
+        return {
+            success: true,
+            count: Array.isArray(result) ? result.length : 0,
+            knowledge: result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Get one knowledge/memory record
+ */
+async function getKnowledgeById(memoryId) {
+    if (!memoryId) {
+        return {
+            success: false,
+            error: "memoryId is required"
         };
     }
 
-    return {
+    try {
+        const result = await Promise.resolve(
+            learning.getKnowledgeById(memoryId)
+        );
 
-        success: true,
-
-        knowledge:
-            result.results
-    };
+        return {
+            success: true,
+            result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
-// ============================================================
-// GET KNOWLEDGE BY ID
-// ============================================================
+/**
+ * Correct learned knowledge
+ */
+async function correctKnowledge(memoryId, correction, options = {}) {
+    if (!memoryId) {
+        return {
+            success: false,
+            error: "memoryId is required"
+        };
+    }
 
-function getKnowledgeById(
-    memoryId
-) {
+    if (!correction) {
+        return {
+            success: false,
+            error: "correction is required"
+        };
+    }
 
-    return memoryStore.getMemory(
-        memoryId
-    );
+    try {
+        const result = await Promise.resolve(
+            learning.correctKnowledge(
+                memoryId,
+                correction,
+                options
+            )
+        );
+
+        return {
+            success: true,
+            action: "correct",
+            result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
-// ============================================================
-// CORRECT KNOWLEDGE
-// ============================================================
-
-function correctKnowledge({
-    memoryId,
-    correction,
-    reason = ""
-} = {}) {
-
-    return learning.learnCorrection({
-
-        memoryId,
-
-        correction,
-
-        reason
-    });
-}
-
-// ============================================================
-// ADD USER FEEDBACK
-// ============================================================
-
-function addKnowledgeFeedback({
+/**
+ * Add feedback to knowledge
+ */
+async function addKnowledgeFeedback(
     memoryId,
     feedback,
-    helpful = null,
-    reason = ""
-} = {}) {
-
-    return learning.addFeedback({
-
-        memoryId,
-
-        feedback,
-
-        helpful,
-
-        reason
-    });
-}
-
-// ============================================================
-// MARK KNOWLEDGE HELPFUL
-// ============================================================
-
-function markKnowledgeHelpful(
-    memoryId,
-    feedback
+    options = {}
 ) {
+    if (!memoryId) {
+        return {
+            success: false,
+            error: "memoryId is required"
+        };
+    }
 
-    return learning.markHelpful(
-        memoryId,
-        feedback
-    );
+    try {
+        const result = await Promise.resolve(
+            learning.addKnowledgeFeedback(
+                memoryId,
+                feedback,
+                options
+            )
+        );
+
+        return {
+            success: true,
+            action: "feedback",
+            result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
-// ============================================================
-// MARK KNOWLEDGE NOT HELPFUL
-// ============================================================
+/**
+ * Mark knowledge helpful
+ */
+async function markKnowledgeHelpful(memoryId) {
+    if (!memoryId) {
+        return {
+            success: false,
+            error: "memoryId is required"
+        };
+    }
 
-function markKnowledgeNotHelpful(
-    memoryId,
-    feedback
-) {
+    try {
+        const result = await Promise.resolve(
+            learning.markKnowledgeHelpful(memoryId)
+        );
 
-    return learning.markNotHelpful(
-        memoryId,
-        feedback
-    );
+        return {
+            success: true,
+            action: "helpful",
+            result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
-// ============================================================
-// GET LEARNING HISTORY
-// ============================================================
+/**
+ * Mark knowledge not helpful
+ */
+async function markKnowledgeNotHelpful(memoryId) {
+    if (!memoryId) {
+        return {
+            success: false,
+            error: "memoryId is required"
+        };
+    }
 
-function getLearningHistory(
-    memoryId
-) {
+    try {
+        const result = await Promise.resolve(
+            learning.markKnowledgeNotHelpful(memoryId)
+        );
 
-    return learning.getLearningHistory(
-        memoryId
-    );
+        return {
+            success: true,
+            action: "not-helpful",
+            result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
-// ============================================================
-// VERIFY KNOWLEDGE
-// ============================================================
+/**
+ * Get learning history
+ */
+async function getLearningHistory(limit = 50) {
+    try {
+        const result = await Promise.resolve(
+            learning.getLearningHistory(
+                Number(limit) || 50
+            )
+        );
 
-function verifyKnowledge({
-    memoryId,
-    sourceCount = 1,
-    confidence = 0.5,
-    notes = ""
-} = {}) {
-
-    return learning.verifyLearnedMemory({
-
-        memoryId,
-
-        sourceCount,
-
-        confidence,
-
-        notes
-    });
+        return {
+            success: true,
+            count: Array.isArray(result) ? result.length : 0,
+            history: result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
-// ============================================================
-// LEARNING STATUS
-// ============================================================
+/**
+ * Verify learned knowledge
+ */
+async function verifyKnowledge(memoryId, options = {}) {
+    if (!memoryId) {
+        return {
+            success: false,
+            error: "memoryId is required"
+        };
+    }
 
-function getLearningStatus() {
+    try {
+        const result = await Promise.resolve(
+            learning.verifyKnowledge(
+                memoryId,
+                options
+            )
+        );
 
-    return learning.getLearningStats();
+        return {
+            success: true,
+            action: "verify",
+            result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
-// ============================================================
-// MEMORY STATUS
-// ============================================================
+/**
+ * Learning system status
+ */
+async function getLearningStatus() {
+    try {
+        const result = await Promise.resolve(
+            learning.getLearningStatus()
+        );
 
-function getMemoryStatus() {
-
-    return memoryStore.getMemoryStats();
+        return {
+            success: true,
+            status: result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
-// ============================================================
-// EXPORTS
-// ============================================================
+/**
+ * Memory status used by Learning Engine
+ */
+async function getMemoryStatus() {
+    try {
+        const result = await Promise.resolve(
+            learning.getMemoryStatus()
+        );
 
+        return {
+            success: true,
+            status: result
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+
+/**
+ * Learning API health
+ */
+async function health() {
+    try {
+        const learningStatus =
+            await getLearningStatus();
+
+        const memoryStatus =
+            await getMemoryStatus();
+
+        return {
+            success:
+                learningStatus.success &&
+                memoryStatus.success,
+
+            service: "AarHen Learning API",
+
+            learning: learningStatus,
+
+            memory: memoryStatus,
+
+            timestamp: new Date().toISOString()
+        };
+    } catch (error) {
+        return {
+            success: false,
+            service: "AarHen Learning API",
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
+    }
+}
+
+
+/**
+ * Public API
+ */
 module.exports = {
-
-    learnFromUser,
-
+    learn,
     searchLearnedKnowledge,
-
     getLearnedKnowledge,
-
     getKnowledgeById,
-
     correctKnowledge,
-
     addKnowledgeFeedback,
-
     markKnowledgeHelpful,
-
     markKnowledgeNotHelpful,
-
     getLearningHistory,
-
     verifyKnowledge,
-
     getLearningStatus,
-
-    getMemoryStatus
+    getMemoryStatus,
+    health
 };
