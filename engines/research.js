@@ -2,6 +2,20 @@
 // AARHEN CORE V5
 // ADVANCED WEB RESEARCH ENGINE
 // ============================================================
+// VERSION: 5.2.0
+// FEATURES:
+// - Web Research Result Processing
+// - Source Validation
+// - Duplicate Source Removal
+// - Source Comparison
+// - Conflict Detection
+// - Conflict-Aware Confidence
+// - Claim Extraction
+// - Evidence Mapping
+// - Claim Confidence
+// - Evidence Strength
+// - Verified Learning
+// ============================================================
 
 const verification =
     require("../core/verification");
@@ -14,7 +28,7 @@ const learning =
 // CONSTANTS
 // ============================================================
 
-const RESEARCH_VERSION = "5.1.0";
+const RESEARCH_VERSION = "5.2.0";
 
 const MIN_VERIFIED_SOURCES = 2;
 
@@ -23,6 +37,12 @@ const MIN_VERIFIED_CONFIDENCE = 0.80;
 const MIN_PARTIAL_SOURCES = 1;
 
 const MIN_PARTIAL_CONFIDENCE = 0.60;
+
+const MIN_CLAIM_CONFIDENCE = 0.60;
+
+const HIGH_EVIDENCE_SCORE = 0.75;
+
+const MEDIUM_EVIDENCE_SCORE = 0.50;
 
 
 // ============================================================
@@ -169,6 +189,12 @@ function createResearchRequest({
             true,
 
         learningEnabled:
+            true,
+
+        claimExtraction:
+            true,
+
+        evidenceMapping:
             true,
 
         verified:
@@ -485,6 +511,796 @@ function extractNumbers(
 
 
 // ============================================================
+// SPLIT INTO SENTENCES
+// ============================================================
+
+function splitSentences(
+    text = ""
+) {
+
+    const clean =
+        normalize(text);
+
+    if (!clean) {
+        return [];
+    }
+
+    return clean
+        .split(
+            /(?<=[.!?])\s+|\n+/
+        )
+        .map(
+            sentence =>
+                normalize(sentence)
+        )
+        .filter(
+            sentence =>
+                sentence.length >= 15
+        );
+}
+
+
+// ============================================================
+// CHECK IF TEXT LOOKS LIKE A CLAIM
+// ============================================================
+
+function looksLikeClaim(
+    sentence = ""
+) {
+
+    const text =
+        normalize(sentence);
+
+    if (
+        text.length < 15
+    ) {
+
+        return false;
+    }
+
+    const words =
+        text.split(/\s+/);
+
+    if (
+        words.length < 4
+    ) {
+
+        return false;
+    }
+
+    if (
+        text.endsWith("?")
+    ) {
+
+        return false;
+    }
+
+    return true;
+}
+
+
+// ============================================================
+// CLAIM SIMILARITY
+// ============================================================
+
+function calculateClaimSimilarity(
+    claim = "",
+    evidence = ""
+) {
+
+    const claimTokens =
+        new Set(
+            tokenize(
+                claim
+            )
+        );
+
+    const evidenceTokens =
+        new Set(
+            tokenize(
+                evidence
+            )
+        );
+
+    if (
+        claimTokens.size === 0 ||
+        evidenceTokens.size === 0
+    ) {
+
+        return 0;
+    }
+
+    let intersection = 0;
+
+    for (
+        const token of claimTokens
+    ) {
+
+        if (
+            evidenceTokens.has(token)
+        ) {
+
+            intersection++;
+        }
+    }
+
+    const union =
+        new Set([
+            ...claimTokens,
+            ...evidenceTokens
+        ]).size;
+
+    if (!union) {
+        return 0;
+    }
+
+    return clamp(
+        intersection / union
+    );
+}
+
+
+// ============================================================
+// CLAIM CONFLICT CHECK
+// ============================================================
+
+function detectClaimConflict(
+    claim = "",
+    evidence = ""
+) {
+
+    const claimText =
+        normalizeText(
+            claim
+        );
+
+    const evidenceText =
+        normalizeText(
+            evidence
+        );
+
+    const claimNumbers =
+        extractNumbers(
+            claimText
+        );
+
+    const evidenceNumbers =
+        extractNumbers(
+            evidenceText
+        );
+
+    const numericDifference =
+        claimNumbers.length > 0 &&
+        evidenceNumbers.length > 0 &&
+        claimNumbers.some(
+            number =>
+                !evidenceNumbers.includes(
+                    number
+                )
+        ) &&
+        evidenceNumbers.some(
+            number =>
+                !claimNumbers.includes(
+                    number
+                )
+        );
+
+    const evidenceConflictSignal =
+        CONFLICT_PATTERNS.some(
+            pattern =>
+                pattern.test(
+                    evidenceText
+                )
+        );
+
+    return {
+
+        numericDifference,
+
+        conflictSignal:
+            evidenceConflictSignal,
+
+        possibleConflict:
+            numericDifference ||
+            evidenceConflictSignal
+    };
+}
+
+
+// ============================================================
+// EXTRACT CLAIMS
+// ============================================================
+
+function extractClaims({
+    query = "",
+    summary = "",
+    sources = []
+} = {}) {
+
+    const cleanQuery =
+        normalize(query);
+
+    const cleanSummary =
+        normalize(summary);
+
+    const validSources =
+        validateSources(
+            sources
+        );
+
+    const candidates = [];
+
+    // --------------------------------------------------------
+    // Summary claims
+    // --------------------------------------------------------
+
+    const summarySentences =
+        splitSentences(
+            cleanSummary
+        );
+
+    summarySentences.forEach(
+        sentence => {
+
+            if (
+                looksLikeClaim(
+                    sentence
+                )
+            ) {
+
+                candidates.push({
+
+                    text:
+                        sentence,
+
+                    origin:
+                        "summary"
+                });
+            }
+        }
+    );
+
+
+    // --------------------------------------------------------
+    // Source claims
+    // --------------------------------------------------------
+
+    validSources.forEach(
+        (source, index) => {
+
+            const sourceText =
+                getSourceText(
+                    source
+                );
+
+            const sentences =
+                splitSentences(
+                    sourceText
+                );
+
+            sentences
+                .slice(0, 10)
+                .forEach(
+                    sentence => {
+
+                        if (
+                            looksLikeClaim(
+                                sentence
+                            )
+                        ) {
+
+                            candidates.push({
+
+                                text:
+                                    sentence,
+
+                                origin:
+                                    "source",
+
+                                sourceIndex:
+                                    index
+                            });
+                        }
+                    }
+                );
+        }
+    );
+
+
+    // --------------------------------------------------------
+    // Deduplicate claims
+    // --------------------------------------------------------
+
+    const seen =
+        new Set();
+
+    const claims = [];
+
+
+    candidates.forEach(
+        candidate => {
+
+            const normalizedClaim =
+                normalizeText(
+                    candidate.text
+                );
+
+            if (
+                normalizedClaim.length < 15
+            ) {
+
+                return;
+            }
+
+            if (
+                seen.has(
+                    normalizedClaim
+                )
+            ) {
+
+                return;
+            }
+
+            seen.add(
+                normalizedClaim
+            );
+
+            claims.push({
+
+                id:
+                    `claim-${claims.length + 1}`,
+
+                claim:
+                    candidate.text,
+
+                normalizedClaim,
+
+                origin:
+                    candidate.origin,
+
+                sourceIndex:
+                    candidate.sourceIndex ??
+                    null
+            });
+        }
+    );
+
+
+    // --------------------------------------------------------
+    // Limit claims
+    // --------------------------------------------------------
+
+    const limitedClaims =
+        claims.slice(
+            0,
+            25
+        );
+
+
+    return {
+
+        success: true,
+
+        query:
+            cleanQuery,
+
+        claimCount:
+            limitedClaims.length,
+
+        claims:
+            limitedClaims,
+
+        status:
+            limitedClaims.length > 0
+                ? "claims-extracted"
+                : "no-claims-extracted"
+    };
+}
+
+
+// ============================================================
+// MAP EVIDENCE TO CLAIM
+// ============================================================
+
+function mapClaimEvidence(
+    claim = {},
+    sources = []
+) {
+
+    const validSources =
+        validateSources(
+            sources
+        );
+
+    const evidence = [];
+
+
+    validSources.forEach(
+        (source, index) => {
+
+            const sourceText =
+                getSourceText(
+                    source
+                );
+
+            const similarity =
+                calculateClaimSimilarity(
+                    claim.claim,
+                    sourceText
+                );
+
+
+            if (
+                similarity < 0.15
+            ) {
+
+                return;
+            }
+
+
+            const conflict =
+                detectClaimConflict(
+                    claim.claim,
+                    sourceText
+                );
+
+
+            let relationship =
+                "neutral";
+
+
+            if (
+                conflict.possibleConflict
+            ) {
+
+                relationship =
+                    "conflicting";
+
+            } else if (
+                similarity >= 0.25
+            ) {
+
+                relationship =
+                    "supporting";
+            }
+
+
+            let strength =
+                "low";
+
+
+            if (
+                similarity >=
+                HIGH_EVIDENCE_SCORE
+            ) {
+
+                strength =
+                    "high";
+
+            } else if (
+                similarity >=
+                MEDIUM_EVIDENCE_SCORE
+            ) {
+
+                strength =
+                    "medium";
+            }
+
+
+            evidence.push({
+
+                sourceId:
+                    `source-${index + 1}`,
+
+                title:
+                    source.title,
+
+                url:
+                    source.url,
+
+                relationship,
+
+                similarity:
+                    Number(
+                        similarity.toFixed(3)
+                    ),
+
+                evidenceStrength:
+                    strength,
+
+                numericDifference:
+                    conflict.numericDifference,
+
+                conflictSignal:
+                    conflict.conflictSignal
+            });
+        }
+    );
+
+
+    return evidence;
+}
+
+
+// ============================================================
+// CALCULATE CLAIM CONFIDENCE
+// ============================================================
+
+function calculateClaimConfidence(
+    evidence = []
+) {
+
+    if (
+        !Array.isArray(evidence) ||
+        evidence.length === 0
+    ) {
+
+        return 0;
+    }
+
+
+    const supporting =
+        evidence.filter(
+            item =>
+                item.relationship ===
+                "supporting"
+        );
+
+
+    const conflicting =
+        evidence.filter(
+            item =>
+                item.relationship ===
+                "conflicting"
+        );
+
+
+    const high =
+        supporting.filter(
+            item =>
+                item.evidenceStrength ===
+                "high"
+        );
+
+
+    const medium =
+        supporting.filter(
+            item =>
+                item.evidenceStrength ===
+                "medium"
+        );
+
+
+    let score = 0;
+
+
+    score +=
+        Math.min(
+            0.60,
+            supporting.length * 0.20
+        );
+
+
+    score +=
+        Math.min(
+            0.25,
+            high.length * 0.10 +
+            medium.length * 0.05
+        );
+
+
+    score -=
+        Math.min(
+            0.40,
+            conflicting.length * 0.20
+        );
+
+
+    return clamp(
+        score
+    );
+}
+
+
+// ============================================================
+// BUILD EVIDENCE MAPPING
+// ============================================================
+
+function buildEvidenceMapping({
+    query = "",
+    summary = "",
+    sources = []
+} = {}) {
+
+    const claimResult =
+        extractClaims({
+
+            query,
+
+            summary,
+
+            sources
+        });
+
+
+    const mappedClaims =
+        claimResult.claims.map(
+            claim => {
+
+                const evidence =
+                    mapClaimEvidence(
+                        claim,
+                        sources
+                    );
+
+
+                const confidence =
+                    calculateClaimConfidence(
+                        evidence
+                    );
+
+
+                const supportingCount =
+                    evidence.filter(
+                        item =>
+                            item.relationship ===
+                            "supporting"
+                    ).length;
+
+
+                const conflictingCount =
+                    evidence.filter(
+                        item =>
+                            item.relationship ===
+                            "conflicting"
+                    ).length;
+
+
+                let status =
+                    "needs-review";
+
+
+                if (
+                    conflictingCount > 0
+                ) {
+
+                    status =
+                        "conflicting";
+
+                } else if (
+                    confidence >=
+                    MIN_CLAIM_CONFIDENCE
+                ) {
+
+                    status =
+                        "supported";
+                }
+
+
+                return {
+
+                    id:
+                        claim.id,
+
+                    claim:
+                        claim.claim,
+
+                    normalizedClaim:
+                        claim.normalizedClaim,
+
+                    origin:
+                        claim.origin,
+
+                    evidence,
+
+                    evidenceCount:
+                        evidence.length,
+
+                    supportingSources:
+                        supportingCount,
+
+                    conflictingSources:
+                        conflictingCount,
+
+                    confidence:
+                        Number(
+                            confidence.toFixed(3)
+                        ),
+
+                    status
+                };
+            }
+        );
+
+
+    const supportedClaims =
+        mappedClaims.filter(
+            claim =>
+                claim.status ===
+                "supported"
+        ).length;
+
+
+    const conflictingClaims =
+        mappedClaims.filter(
+            claim =>
+                claim.status ===
+                "conflicting"
+        ).length;
+
+
+    const reviewClaims =
+        mappedClaims.filter(
+            claim =>
+                claim.status ===
+                "needs-review"
+        ).length;
+
+
+    const total =
+        mappedClaims.length;
+
+
+    const averageConfidence =
+        total > 0
+
+            ? mappedClaims.reduce(
+                (
+                    sum,
+                    claim
+                ) =>
+                    sum +
+                    claim.confidence,
+                0
+            ) / total
+
+            : 0;
+
+
+    return {
+
+        success: true,
+
+        query:
+            normalize(query),
+
+        claimCount:
+            total,
+
+        claims:
+            mappedClaims,
+
+        supportedClaims,
+
+        conflictingClaims,
+
+        reviewClaims,
+
+        averageConfidence:
+            Number(
+                clamp(
+                    averageConfidence
+                ).toFixed(3)
+            ),
+
+        conflictDetected:
+            conflictingClaims > 0,
+
+        status:
+            conflictingClaims > 0
+
+                ? "claim-conflicts-detected"
+
+                : supportedClaims > 0
+
+                    ? "claims-supported"
+
+                    : "claims-require-review"
+    };
+}
+
+
+// ============================================================
 // COMPARE SOURCE PAIR
 // ============================================================
 
@@ -576,10 +1392,6 @@ function compareSourcePair(
             "related";
     }
 
-
-    // --------------------------------------------------------
-    // Conservative conflict detection
-    // --------------------------------------------------------
 
     const possibleConflict =
         numericDifference &&
@@ -742,6 +1554,18 @@ function createResearchResult({
         );
 
 
+    const evidenceMapping =
+        buildEvidenceMapping({
+
+            query,
+
+            summary,
+
+            sources:
+                validSources
+        });
+
+
     return {
 
         success: true,
@@ -763,8 +1587,16 @@ function createResearchResult({
 
         comparison,
 
+        evidenceMapping,
+
+        claimCount:
+            evidenceMapping.claimCount,
+
         conflictDetected:
-            comparison.conflictDetected,
+            Boolean(
+                comparison.conflictDetected ||
+                evidenceMapping.conflictDetected
+            ),
 
         verified:
             false,
@@ -810,8 +1642,11 @@ function buildResearchContext(
     const sourceText =
         sources
             .map(
-                source =>
-                    `${source.title} - ${source.url}`
+                (
+                    source,
+                    index
+                ) =>
+                    `Source ${index + 1}: ${source.title} - ${source.url}`
             )
             .join("\n");
 
@@ -821,6 +1656,20 @@ function buildResearchContext(
         compareSources(
             sources
         );
+
+
+    const evidenceMapping =
+        result.evidenceMapping ||
+        buildEvidenceMapping({
+
+            query:
+                result.query,
+
+            summary:
+                result.summary,
+
+            sources
+        });
 
 
     return {
@@ -858,10 +1707,16 @@ function buildResearchContext(
 
         comparison,
 
+        evidenceMapping,
+
+        claimCount:
+            evidenceMapping.claimCount,
+
         conflictDetected:
             Boolean(
                 result.conflictDetected ||
-                comparison.conflictDetected
+                comparison.conflictDetected ||
+                evidenceMapping.conflictDetected
             )
     };
 }
@@ -874,7 +1729,8 @@ function buildResearchContext(
 function calculateResearchConfidence({
     sources = [],
     confidence = 0,
-    comparison = null
+    comparison = null,
+    evidenceMapping = null
 } = {}) {
 
     const validSources =
@@ -942,8 +1798,17 @@ function calculateResearchConfidence({
         );
 
 
+    const evidenceResult =
+        evidenceMapping ||
+        buildEvidenceMapping({
+
+            sources:
+                validSources
+        });
+
+
     // --------------------------------------------------------
-    // Conflict penalty
+    // Source conflict penalty
     // --------------------------------------------------------
 
     if (
@@ -966,6 +1831,50 @@ function calculateResearchConfidence({
         baseConfidence =
             baseConfidence -
             penalty;
+    }
+
+
+    // --------------------------------------------------------
+    // Claim conflict penalty
+    // --------------------------------------------------------
+
+    if (
+        evidenceResult.conflictDetected
+    ) {
+
+        const conflictingClaims =
+            Number(
+                evidenceResult.conflictingClaims
+            ) || 1;
+
+
+        const penalty =
+            Math.min(
+                0.20,
+                conflictingClaims * 0.05
+            );
+
+
+        baseConfidence =
+            baseConfidence -
+            penalty;
+    }
+
+
+    // --------------------------------------------------------
+    // Evidence support bonus
+    // --------------------------------------------------------
+
+    if (
+        evidenceResult.supportedClaims > 0 &&
+        evidenceResult.averageConfidence >= 0.70
+    ) {
+
+        baseConfidence =
+            Math.min(
+                1,
+                baseConfidence + 0.05
+            );
     }
 
 
@@ -1021,6 +1930,21 @@ function verifyResearch({
         );
 
 
+    const evidenceMapping =
+        result.evidenceMapping ||
+        buildEvidenceMapping({
+
+            query:
+                result.query,
+
+            summary:
+                result.summary,
+
+            sources:
+                actualSources
+        });
+
+
     const score =
         typeof confidence ===
         "number"
@@ -1035,7 +1959,9 @@ function verifyResearch({
                 confidence:
                     result.confidence,
 
-                comparison
+                comparison,
+
+                evidenceMapping
             });
 
 
@@ -1048,7 +1974,8 @@ function verifyResearch({
     // --------------------------------------------------------
 
     if (
-        comparison.conflictDetected
+        comparison.conflictDetected ||
+        evidenceMapping.conflictDetected
     ) {
 
         status =
@@ -1098,10 +2025,16 @@ function verifyResearch({
 
         conflictDetected:
             Boolean(
-                comparison.conflictDetected
+                comparison.conflictDetected ||
+                evidenceMapping.conflictDetected
             ),
 
         comparison,
+
+        evidenceMapping,
+
+        claimCount:
+            evidenceMapping.claimCount,
 
         verifiedAt:
             new Date().toISOString()
@@ -1184,7 +2117,8 @@ function verifyWithEngine({
 function buildLearningContent({
     summary = "",
     sources = [],
-    comparison = null
+    comparison = null,
+    evidenceMapping = null
 } = {}) {
 
     const cleanSummary =
@@ -1208,8 +2142,11 @@ function buildLearningContent({
     const sourceText =
         validSources
             .map(
-                source =>
-                    `${source.title}: ${source.url}`
+                (
+                    source,
+                    index
+                ) =>
+                    `Source ${index + 1}: ${source.title}: ${source.url}`
             )
             .join("\n");
 
@@ -1221,12 +2158,25 @@ function buildLearningContent({
         );
 
 
+    const evidenceResult =
+        evidenceMapping ||
+        buildEvidenceMapping({
+
+            summary:
+                cleanSummary,
+
+            sources:
+                validSources
+        });
+
+
     let comparisonText =
         "";
 
 
     if (
-        comparisonResult.conflictDetected
+        comparisonResult.conflictDetected ||
+        evidenceResult.conflictDetected
     ) {
 
         comparisonText =
@@ -1239,10 +2189,55 @@ function buildLearningContent({
     }
 
 
+    // --------------------------------------------------------
+    // Claim evidence section
+    // --------------------------------------------------------
+
+    let claimText =
+        "";
+
+
+    if (
+        evidenceResult.claimCount > 0
+    ) {
+
+        const claimLines =
+            evidenceResult.claims
+                .map(
+                    claim => {
+
+                        const sourceIds =
+                            claim.evidence
+                                .map(
+                                    item =>
+                                        item.sourceId
+                                )
+                                .join(", ");
+
+
+                        return (
+                            `${claim.id} | ` +
+                            `${claim.status} | ` +
+                            `confidence=${claim.confidence} | ` +
+                            `sources=${sourceIds || "none"} | ` +
+                            `${claim.claim}`
+                        );
+                    }
+                )
+                .join("\n");
+
+
+        claimText =
+            "\n\nClaims & Evidence:\n" +
+            claimLines;
+    }
+
+
     if (!sourceText) {
 
         return (
             cleanSummary +
+            claimText +
             comparisonText
         );
     }
@@ -1255,6 +2250,8 @@ function buildLearningContent({
         `Sources:\n` +
 
         sourceText +
+
+        claimText +
 
         comparisonText
     );
@@ -1340,6 +2337,24 @@ function learnVerifiedResearch({
 
 
     // --------------------------------------------------------
+    // EVIDENCE MAPPING
+    // --------------------------------------------------------
+
+    const evidenceMapping =
+        buildEvidenceMapping({
+
+            query:
+                cleanQuery,
+
+            summary:
+                cleanSummary,
+
+            sources:
+                validSources
+        });
+
+
+    // --------------------------------------------------------
     // RESEARCH RESULT
     // --------------------------------------------------------
 
@@ -1364,26 +2379,36 @@ function learnVerifiedResearch({
     // VERIFY
     // --------------------------------------------------------
 
+    const finalConfidence =
+        calculateResearchConfidence({
+
+            sources:
+                validSources,
+
+            confidence:
+                confidence,
+
+            comparison,
+
+            evidenceMapping
+        });
+
+
     const verificationResult =
         verifyResearch({
 
             result:
-                researchResult,
+                {
+                    ...researchResult,
+
+                    evidenceMapping
+                },
 
             sourceCount:
                 validSources.length,
 
             confidence:
-                calculateResearchConfidence({
-
-                    sources:
-                        validSources,
-
-                    confidence:
-                        confidence,
-
-                    comparison
-                }),
+                finalConfidence,
 
             notes
         });
@@ -1409,13 +2434,23 @@ function learnVerifiedResearch({
 
             comparison,
 
+            evidenceMapping,
+
             status:
-                comparison.conflictDetected
+                (
+                    comparison.conflictDetected ||
+                    evidenceMapping.conflictDetected
+                )
+
                     ? "conflicting-research"
+
                     : "verification-required",
 
             message:
-                comparison.conflictDetected
+                (
+                    comparison.conflictDetected ||
+                    evidenceMapping.conflictDetected
+                )
 
                     ? "Conflicting research evidence detected. AarHen will not store this as verified knowledge until the information is resolved."
 
@@ -1437,7 +2472,9 @@ function learnVerifiedResearch({
             sources:
                 validSources,
 
-            comparison
+            comparison,
+
+            evidenceMapping
         });
 
 
@@ -1488,6 +2525,8 @@ function learnVerifiedResearch({
 
             comparison,
 
+            evidenceMapping,
+
             learning:
                 learned,
 
@@ -1513,6 +2552,8 @@ function learnVerifiedResearch({
 
         comparison,
 
+        evidenceMapping,
+
         learning:
             learned,
 
@@ -1523,11 +2564,17 @@ function learnVerifiedResearch({
         sourceCount:
             validSources.length,
 
+        claimCount:
+            evidenceMapping.claimCount,
+
         confidence:
             verificationResult.confidence,
 
         conflictDetected:
-            comparison.conflictDetected,
+            Boolean(
+                comparison.conflictDetected ||
+                evidenceMapping.conflictDetected
+            ),
 
         status:
             "verified-research-learned"
@@ -1627,11 +2674,26 @@ function getResearchStatus() {
         conflictAwareConfidence:
             true,
 
+        claimExtraction:
+            true,
+
+        evidenceMapping:
+            true,
+
+        claimConfidence:
+            true,
+
+        evidenceStrength:
+            true,
+
         minimumVerifiedSources:
             MIN_VERIFIED_SOURCES,
 
         minimumVerifiedConfidence:
             MIN_VERIFIED_CONFIDENCE,
+
+        minimumClaimConfidence:
+            MIN_CLAIM_CONFIDENCE,
 
         pipeline: [
 
@@ -1639,11 +2701,17 @@ function getResearchStatus() {
 
             "validate-sources",
 
-            "compare",
+            "compare-sources",
+
+            "extract-claims",
+
+            "map-evidence",
 
             "detect-conflicts",
 
-            "calculate-confidence",
+            "calculate-claim-confidence",
+
+            "calculate-research-confidence",
 
             "verify",
 
@@ -1674,6 +2742,18 @@ module.exports = {
     buildResearchContext,
 
     calculateResearchConfidence,
+
+    calculateSourceSimilarity,
+
+    calculateClaimSimilarity,
+
+    extractClaims,
+
+    mapClaimEvidence,
+
+    calculateClaimConfidence,
+
+    buildEvidenceMapping,
 
     compareSourcePair,
 
