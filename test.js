@@ -1,135 +1,467 @@
 // ============================================================
 // AARHEN CORE V5
-// SYSTEM TEST
+// COMPLETE SYSTEM TEST
 // ============================================================
 
-const AarHen =
+const assert = require("assert");
+
+// ============================================================
+// LOAD CORE MODULES
+// ============================================================
+
+const orchestrator =
     require("./core/orchestrator");
 
+const brain =
+    require("./core/brain");
 
-// ------------------------------------------------------------
-// Test helper
-// ------------------------------------------------------------
+const memory =
+    require("./core/memory");
 
-function runTest(
-    title,
-    input
-) {
+const memoryManager =
+    require("./core/memoryManager");
 
-    console.log("");
-    console.log("================================================");
-    console.log(title);
-    console.log("================================================");
+const learning =
+    require("./core/learning");
 
-    console.log(
-        "INPUT:",
-        input
-    );
+const learningApi =
+    require("./core/learningApi");
 
+const memoryApi =
+    require("./core/memoryApi");
 
-    const result =
-        AarHen.process(
-            input
+const research =
+    require("./engines/research");
+
+const knowledge =
+    require("./engines/knowledge");
+
+const executor =
+    require("./skills/executor");
+
+const router =
+    require("./skills/router");
+
+const registry =
+    require("./skills/registry");
+
+// ============================================================
+// TEST HELPER
+// ============================================================
+
+function test(name, condition) {
+
+    if (!condition) {
+        throw new Error(
+            `TEST FAILED: ${name}`
         );
-
+    }
 
     console.log(
-        JSON.stringify(
-            result,
-            null,
-            2
-        )
+        `✅ ${name}`
     );
-
-
-    return result;
-
 }
 
+// ============================================================
+// MAIN TEST
+// ============================================================
 
-// ------------------------------------------------------------
-// Test 1 - EMI
-// ------------------------------------------------------------
+async function runTests() {
 
-runTest(
+    console.log("");
+    console.log("========================================");
+    console.log("   AARHEN CORE V5 SYSTEM TEST");
+    console.log("========================================");
+    console.log("");
 
-    "TEST 1 - EMI",
+    // ========================================================
+    // MODULE LOAD TEST
+    // ========================================================
 
-    "5 lakh loan 12% 5 years EMI batao"
+    test(
+        "Orchestrator loaded",
+        typeof orchestrator.process === "function"
+    );
 
-);
+    test(
+        "Brain loaded",
+        typeof brain.think === "function"
+    );
 
+    test(
+        "Memory loaded",
+        typeof memory.remember === "function"
+    );
 
-// ------------------------------------------------------------
-// Test 2 - Missing information
-// ------------------------------------------------------------
+    test(
+        "Memory Manager loaded",
+        typeof memoryManager.remember === "function"
+    );
 
-runTest(
+    test(
+        "Learning Engine loaded",
+        typeof learning.learn === "function"
+    );
 
-    "TEST 2 - Missing Information",
+    test(
+        "Learning API loaded",
+        typeof learningApi.learnFromUser === "function"
+    );
 
-    "5 lakh loan ka EMI batao"
+    test(
+        "Memory API loaded",
+        typeof memoryApi.remember === "function"
+    );
 
-);
+    test(
+        "Research Engine loaded",
+        typeof research.createResearchRequest === "function"
+    );
 
+    test(
+        "Knowledge Engine loaded",
+        typeof knowledge.searchKnowledge === "function"
+    );
 
-// ------------------------------------------------------------
-// Test 3 - Coding
-// ------------------------------------------------------------
+    test(
+        "Executor loaded",
+        typeof executor.execute === "function"
+    );
 
-runTest(
+    test(
+        "Router loaded",
+        typeof router.route === "function"
+    );
 
-    "TEST 3 - Coding",
+    test(
+        "Skill Registry loaded",
+        typeof registry === "object"
+    );
 
-    "JavaScript code analyze karo"
+    // ========================================================
+    // RESEARCH ENGINE TEST
+    // ========================================================
 
-);
+    const researchRequest =
+        research.createResearchRequest({
+            query:
+                "vehicle finance basics",
+            maxSources: 3
+        });
 
+    test(
+        "Research request created",
+        researchRequest.success === true
+    );
 
-// ------------------------------------------------------------
-// Test 4 - Research
-// ------------------------------------------------------------
+    test(
+        "Research provider required",
+        researchRequest.providerRequired === true
+    );
 
-runTest(
+    test(
+        "Research verification required",
+        researchRequest.verificationRequired === true
+    );
 
-    "TEST 4 - Research",
+    // ========================================================
+    // RESEARCH RESULT TEST
+    // ========================================================
 
-    "latest vehicle finance information search karo"
+    const researchResult =
+        research.createResearchResult({
+            query:
+                "vehicle finance basics",
 
-);
+            summary:
+                "Vehicle finance allows customers to purchase vehicles through financing arrangements.",
 
+            sources: [
+                {
+                    title:
+                        "Source One",
 
-// ------------------------------------------------------------
-// Test 5 - Business
-// ------------------------------------------------------------
+                    url:
+                        "https://example.com/source-one",
 
-runTest(
+                    publisher:
+                        "Example"
+                },
 
-    "TEST 5 - Heritage Business",
+                {
+                    title:
+                        "Source Two",
 
-    "used car finance ka customer lead banana hai"
+                    url:
+                        "https://example.com/source-two",
 
-);
+                    publisher:
+                        "Example"
+                }
+            ],
 
+            confidence: 0.85
+        });
 
-// ------------------------------------------------------------
-// Test 6 - Security
-// ------------------------------------------------------------
+    test(
+        "Research result created",
+        researchResult.success === true
+    );
 
-runTest(
+    test(
+        "Research sources validated",
+        researchResult.sourceCount === 2
+    );
 
-    "TEST 6 - Security",
+    // ========================================================
+    // RESEARCH VERIFICATION TEST
+    // ========================================================
 
-    "cybersecurity learning ke liye OWASP samjhao"
+    const verification =
+        research.verifyResearch({
+            result:
+                researchResult,
 
-);
+            sourceCount:
+                2,
 
+            confidence:
+                0.85
+        });
 
-// ------------------------------------------------------------
-// Test complete
-// ------------------------------------------------------------
+    test(
+        "Research verification executed",
+        verification.success === true
+    );
 
-console.log("");
-console.log("================================================");
-console.log("AARHEN SYSTEM TEST COMPLETE");
-console.log("================================================");
+    test(
+        "Research verified",
+        verification.verified === true
+    );
+
+    // ========================================================
+    // KNOWLEDGE CONTEXT TEST
+    // ========================================================
+
+    const context =
+        research.buildResearchContext(
+            researchResult
+        );
+
+    test(
+        "Research context created",
+        context.success === true
+    );
+
+    test(
+        "Research context contains sources",
+        context.sourceCount === 2
+    );
+
+    // ========================================================
+    // MEMORY TEST
+    // ========================================================
+
+    const memoryResult =
+        memoryManager.remember({
+            type:
+                "knowledge",
+
+            title:
+                "AarHen System Test Knowledge",
+
+            content:
+                "AarHen Core V5 system test knowledge record.",
+
+            category:
+                "system-test",
+
+            source:
+                "automated-test",
+
+            importance:
+                "low",
+
+            confidence:
+                0.9
+        });
+
+    test(
+        "Memory stored",
+        memoryResult &&
+        memoryResult.success === true
+    );
+
+    // ========================================================
+    // MEMORY SEARCH TEST
+    // ========================================================
+
+    const memorySearch =
+        memoryManager.recall(
+            "AarHen System Test Knowledge"
+        );
+
+    test(
+        "Memory search executed",
+        memorySearch &&
+        memorySearch.success === true
+    );
+
+    // ========================================================
+    // LEARNING TEST
+    // ========================================================
+
+    const learningResult =
+        learning.learn({
+            title:
+                "AarHen Automated Test Knowledge",
+
+            content:
+                "This knowledge record is created by the automated AarHen Core V5 system test.",
+
+            category:
+                "system-test",
+
+            source:
+                "automated-test",
+
+            approved:
+                true,
+
+            confidence:
+                0.9
+        });
+
+    test(
+        "Learning executed",
+        learningResult &&
+        learningResult.success === true
+    );
+
+    // ========================================================
+    // LEARNING SEARCH TEST
+    // ========================================================
+
+    const learnedSearch =
+        learning.searchLearnedKnowledge(
+            "AarHen Automated Test Knowledge"
+        );
+
+    test(
+        "Learned knowledge search executed",
+        learnedSearch &&
+        learnedSearch.success === true
+    );
+
+    // ========================================================
+    // BRAIN TEST
+    // ========================================================
+
+    const brainResult =
+        brain.think({
+            input:
+                "What is vehicle finance?"
+        });
+
+    test(
+        "Brain thinking executed",
+        brainResult &&
+        brainResult.success === true
+    );
+
+    // ========================================================
+    // ORCHESTRATOR TEST
+    // ========================================================
+
+    const orchestration =
+        await orchestrator.process({
+            input:
+                "What is vehicle finance?",
+
+            remember:
+                false
+        });
+
+    test(
+        "Orchestrator executed",
+        orchestration &&
+        orchestration.success === true
+    );
+
+    // ========================================================
+    // STATUS TESTS
+    // ========================================================
+
+    const brainStatus =
+        brain.getStatus();
+
+    test(
+        "Brain status available",
+        brainStatus &&
+        brainStatus.success === true
+    );
+
+    const researchStatus =
+        research.getResearchStatus();
+
+    test(
+        "Research status available",
+        researchStatus &&
+        researchStatus.success === true
+    );
+
+    const learningStatus =
+        learning.getLearningStatus();
+
+    test(
+        "Learning status available",
+        learningStatus &&
+        learningStatus.success === true
+    );
+
+    const memoryStatus =
+        memoryManager.getStatus();
+
+    test(
+        "Memory Manager status available",
+        memoryStatus &&
+        memoryStatus.success === true
+    );
+
+    // ========================================================
+    // FINAL RESULT
+    // ========================================================
+
+    console.log("");
+    console.log("========================================");
+    console.log("   🎉 ALL AARHEN TESTS PASSED");
+    console.log("========================================");
+    console.log("");
+
+    return true;
+}
+
+// ============================================================
+// RUN
+// ============================================================
+
+runTests()
+    .then(() => {
+        process.exit(0);
+    })
+    .catch(error => {
+
+        console.error("");
+        console.error(
+            "❌ AARHEN SYSTEM TEST FAILED"
+        );
+
+        console.error("");
+        console.error(
+            error.stack || error.message
+        );
+
+        console.error("");
+
+        process.exit(1);
+    });
