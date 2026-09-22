@@ -2173,6 +2173,10 @@ function buildLearningContent(
     };
 }
 
+/* =========================================================
+   VERIFIED RESEARCH LEARNING
+========================================================= */
+
 function learnVerifiedResearch(
     result
 ) {
@@ -2185,38 +2189,144 @@ function learnVerifiedResearch(
         return {
             success: false,
             learned: false,
+            verified: false,
+            approved: false,
+            status:
+                "research-not-verified",
             reason:
-                "Research is not verified"
+                "Research is not verified."
         };
     }
 
     const content =
         buildLearningContent(item);
 
+    const confidence =
+        clamp(item.confidence);
+
+    if (
+        confidence <
+        MIN_VERIFIED_CONFIDENCE
+    ) {
+        return {
+            success: false,
+            learned: false,
+            verified: false,
+            approved: false,
+            status:
+                "confidence-too-low",
+            confidence,
+            reason:
+                "Verified learning requires minimum confidence."
+        };
+    }
+
     try {
+
         if (
             learning &&
-            typeof learning.learn ===
+            typeof learning.learnVerified ===
                 "function"
         ) {
+
             const learned =
-                learning.learn(content);
+                learning.learnVerified({
+
+                    title:
+                        item.query
+                            ? `AarHen Web Research: ${item.query}`
+                            : "AarHen Verified Web Knowledge",
+
+                    content:
+                        item.answer ||
+                        item.summary ||
+                        "",
+
+                    category:
+                        "research",
+
+                    source:
+                        item.provider ||
+                        "web-research",
+
+                    memoryType:
+                        "knowledge",
+
+                    importance:
+                        "important",
+
+                    confidence,
+
+                    verified: true,
+
+                    approved: true,
+
+                    learn: true
+                });
 
             return {
-                success: true,
-                learned: true,
+                success:
+                    Boolean(
+                        learned &&
+                        learned.success
+                    ),
+
+                learned:
+                    Boolean(
+                        learned &&
+                        learned.learned
+                    ),
+
+                verified: true,
+
+                approved: true,
+
+                status:
+                    learned &&
+                    learned.status
+                        ? learned.status
+                        : "verified-knowledge-learned",
+
+                confidence,
+
+                memoryId:
+                    learned &&
+                    learned.memoryId
+                        ? learned.memoryId
+                        : null,
+
                 content,
-                result: learned
+
+                result:
+                    learned
             };
         }
-    } catch {
-        // Internal fallback below.
+
+    } catch (error) {
+
+        return {
+            success: false,
+            learned: false,
+            verified: true,
+            approved: true,
+            status:
+                "verified-learning-error",
+            confidence,
+            error:
+                error.message
+        };
     }
 
     return {
-        success: true,
-        learned: true,
-        content
+        success: false,
+        learned: false,
+        verified: true,
+        approved: true,
+        status:
+            "learning-engine-unavailable",
+        confidence,
+        error:
+            "Verified learning engine is unavailable."
     };
 }
 
@@ -2273,8 +2383,12 @@ function processResearchResult({
 
     result.researchStatus =
         verificationResult.verified
-            ? "research-verified-and-learned"
-            : "research-verified-but-learning-skipped";
+            ? (
+                learningResult.learned
+                    ? "research-verified-and-learned"
+                    : "research-verified-but-learning-failed"
+            )
+            : "research-review";
 
     result.context =
         buildResearchContext(
