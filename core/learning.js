@@ -414,7 +414,18 @@ function learn(input = {}) {
                     record.learningEngine,
 
                 learningVersion:
-                    record.learningVersion
+                    record.learningVersion,
+
+                verified:
+                    Boolean(
+                        input.verified
+                    ),
+
+                confidence:
+                    typeof input.confidence ===
+                    "number"
+                        ? input.confidence
+                        : 0.60
             });
 
         const memoryResult =
@@ -453,6 +464,29 @@ function learn(input = {}) {
             memory:
                 memoryResult,
 
+            memoryId:
+                memoryResult &&
+                (
+                    memoryResult.memoryId ||
+                    memoryResult.id
+                )
+                    ? (
+                        memoryResult.memoryId ||
+                        memoryResult.id
+                    )
+                    : null,
+
+            verified:
+                Boolean(
+                    input.verified
+                ),
+
+            confidence:
+                typeof input.confidence ===
+                "number"
+                    ? input.confidence
+                    : 0.60,
+
             timestamp:
                 record.learnedAt
         };
@@ -467,6 +501,266 @@ function learn(input = {}) {
 
             status:
                 "learning-error",
+
+            error:
+                error.message
+        };
+    }
+}
+
+// ============================================================
+// LEARN VERIFIED
+// ============================================================
+// Used by the Advanced Web Research Engine.
+//
+// IMPORTANT:
+// This function does not bypass verification.
+// The caller must provide:
+//   verified: true
+//   approved: true
+//   confidence >= required level
+//
+// Research engine already performs source verification
+// before calling this function.
+// ============================================================
+
+function learnVerified(input = {}) {
+
+    const content =
+        normalize(
+            input.content
+        );
+
+    if (!content) {
+
+        return {
+
+            success: false,
+
+            learned: false,
+
+            verified: false,
+
+            status:
+                "verified-learning-failed",
+
+            error:
+                "Verified learning content is required."
+        };
+    }
+
+    const confidence =
+        typeof input.confidence ===
+        "number"
+            ? Math.max(
+                0,
+                Math.min(
+                    1,
+                    input.confidence
+                )
+            )
+            : 0;
+
+    // --------------------------------------------------------
+    // Verified learning must explicitly be verified.
+    // --------------------------------------------------------
+
+    if (
+        input.verified !== true
+    ) {
+
+        return {
+
+            success: false,
+
+            learned: false,
+
+            verified: false,
+
+            status:
+                "verification-required",
+
+            error:
+                "Verified learning requires verified=true."
+        };
+    }
+
+    // --------------------------------------------------------
+    // Approved flag is also required for automatic learning.
+    // --------------------------------------------------------
+
+    if (
+        input.approved !== true
+    ) {
+
+        return {
+
+            success: false,
+
+            learned: false,
+
+            verified: false,
+
+            status:
+                "approval-required",
+
+            error:
+                "Verified learning requires approved=true."
+        };
+    }
+
+    // --------------------------------------------------------
+    // Safe minimum confidence.
+    // The research engine normally sends >= 0.80.
+    // --------------------------------------------------------
+
+    if (
+        confidence < 0.80
+    ) {
+
+        return {
+
+            success: false,
+
+            learned: false,
+
+            verified: false,
+
+            status:
+                "confidence-too-low",
+
+            confidence,
+
+            error:
+                "Verified learning requires confidence of at least 0.80."
+        };
+    }
+
+    try {
+
+        const result =
+            learn({
+
+                title:
+                    input.title ||
+                    "AarHen Verified Web Knowledge",
+
+                content,
+
+                category:
+                    input.category ||
+                    "research",
+
+                source:
+                    input.source ||
+                    "web-research",
+
+                memoryType:
+                    input.memoryType ||
+                    "knowledge",
+
+                importance:
+                    input.importance ||
+                    "important",
+
+                confidence,
+
+                verified: true,
+
+                learn: true
+            });
+
+        if (
+            !result ||
+            !result.success
+        ) {
+
+            return {
+
+                success: false,
+
+                learned: false,
+
+                verified: false,
+
+                status:
+                    "verified-learning-failed",
+
+                learning:
+                    result || null,
+
+                error:
+                    result &&
+                    result.error
+                        ? result.error
+                        : "Verified learning failed."
+            };
+        }
+
+        return {
+
+            success: true,
+
+            learned: true,
+
+            verified: true,
+
+            approved: true,
+
+            status:
+                "verified-knowledge-learned",
+
+            title:
+                result.title,
+
+            category:
+                result.category,
+
+            source:
+                result.source,
+
+            confidence,
+
+            memoryId:
+                result.memoryId ||
+                null,
+
+            knowledge:
+                result.knowledge ||
+                null,
+
+            memory:
+                result.memory ||
+                null,
+
+            concepts:
+                result.concepts ||
+                [],
+
+            chunkCount:
+                result.chunkCount ||
+                0,
+
+            learning:
+                result,
+
+            timestamp:
+                result.timestamp ||
+                new Date().toISOString()
+        };
+
+    } catch (error) {
+
+        return {
+
+            success: false,
+
+            learned: false,
+
+            verified: false,
+
+            status:
+                "verified-learning-error",
 
             error:
                 error.message
@@ -567,7 +861,6 @@ function searchLearnedKnowledge(
 
     try {
 
-        // Primary search through existing memory store
         const results =
             memoryStore.findKnowledge(
                 cleanQuery
@@ -606,7 +899,6 @@ function searchLearnedKnowledge(
 
     } catch (error) {
 
-        // Fallback to Memory Manager
         try {
 
             const fallback =
@@ -1084,10 +1376,8 @@ function addFeedback(
                 storedMemory
                     .feedbackHistory
             )
-
                 ? storedMemory
                     .feedbackHistory
-
                 : [];
 
         history.push({
@@ -1441,6 +1731,8 @@ function getLearningStatus() {
 
             "text-learning",
 
+            "verified-learning",
+
             "concept-extraction",
 
             "text-chunking",
@@ -1529,6 +1821,8 @@ module.exports = {
     saveLearningToMemory,
 
     learn,
+
+    learnVerified,
 
     learnFromUser,
 
