@@ -2,7 +2,7 @@
 // AARHEN CORE V5
 // ADVANCED WEB RESEARCH ENGINE
 // ============================================================
-// VERSION: 5.4.0
+// VERSION: 5.5.0
 // FEATURES:
 // - Web Research Result Processing
 // - Source Validation
@@ -23,6 +23,11 @@
 // - Evidence Traceability
 // - Source-to-Claim Linking
 // - Claim Provenance Summary
+// - Source Independence Scoring
+// - Duplicate Source Detection
+// - Related Source Detection
+// - Source Diversity Scoring
+// - Independent Domain Tracking
 // ============================================================
 
 const verification =
@@ -36,7 +41,7 @@ const learning =
 // CONSTANTS
 // ============================================================
 
-const RESEARCH_VERSION = "5.4.0";
+const RESEARCH_VERSION = "5.5.0";
 
 const MIN_VERIFIED_SOURCES = 2;
 
@@ -88,6 +93,22 @@ const FRESHNESS_WEIGHTS = {
     old: 0.55,
 
     stale: 0.35,
+
+    unknown: 0.50
+};
+
+
+// ============================================================
+// SOURCE INDEPENDENCE CONSTANTS
+// ============================================================
+
+const INDEPENDENCE_WEIGHTS = {
+
+    independent: 1.00,
+
+    related: 0.70,
+
+    duplicate: 0.20,
 
     unknown: 0.50
 };
@@ -172,6 +193,7 @@ function tokenize(
         normalizeText(value);
 
     if (!text) {
+
         return [];
     }
 
@@ -181,6 +203,70 @@ function tokenize(
             token =>
                 token.length >= 4
         );
+}
+
+
+// ============================================================
+// TEXT TOKEN SIMILARITY
+// ============================================================
+
+function calculateTextTokenSimilarity(
+    textA = "",
+    textB = ""
+) {
+
+    const tokensA =
+        new Set(
+            tokenize(textA)
+        );
+
+    const tokensB =
+        new Set(
+            tokenize(textB)
+        );
+
+
+    if (
+        tokensA.size === 0 ||
+        tokensB.size === 0
+    ) {
+
+        return 0;
+    }
+
+
+    let intersection = 0;
+
+
+    for (
+        const token of tokensA
+    ) {
+
+        if (
+            tokensB.has(token)
+        ) {
+
+            intersection++;
+        }
+    }
+
+
+    const union =
+        new Set([
+            ...tokensA,
+            ...tokensB
+        ]).size;
+
+
+    if (!union) {
+
+        return 0;
+    }
+
+
+    return clamp(
+        intersection / union
+    );
 }
 
 
@@ -197,6 +283,7 @@ function createResearchRequest({
     const cleanQuery =
         normalize(query);
 
+
     if (!cleanQuery) {
 
         return {
@@ -208,6 +295,7 @@ function createResearchRequest({
         };
     }
 
+
     const sourceLimit =
         Math.max(
             1,
@@ -216,6 +304,7 @@ function createResearchRequest({
                 20
             )
         );
+
 
     return {
 
@@ -260,6 +349,15 @@ function createResearchRequest({
         evidenceTraceability:
             true,
 
+        sourceIndependenceScoring:
+            true,
+
+        sourceDiversityScoring:
+            true,
+
+        duplicateSourceDetection:
+            true,
+
         verified:
             false,
 
@@ -291,15 +389,18 @@ function validateSource(
         };
     }
 
+
     const title =
         normalize(
             source.title
         );
 
+
     const url =
         normalize(
             source.url
         );
+
 
     if (!title) {
 
@@ -311,6 +412,7 @@ function validateSource(
                 "Source title is missing."
         };
     }
+
 
     if (!url) {
 
@@ -324,6 +426,7 @@ function validateSource(
             title
         };
     }
+
 
     return {
 
@@ -383,6 +486,7 @@ function validateSources(
         return [];
     }
 
+
     const validated =
         sources
             .map(
@@ -409,12 +513,14 @@ function validateSources(
                         ""
                     );
 
+
             if (
                 seen.has(key)
             ) {
 
                 return false;
             }
+
 
             seen.add(key);
 
@@ -455,9 +561,12 @@ function getSourceDomain(
     const cleanUrl =
         normalize(url);
 
+
     if (!cleanUrl) {
+
         return "";
     }
+
 
     try {
 
@@ -479,6 +588,242 @@ function getSourceDomain(
 
 
 // ============================================================
+// SOURCE FINGERPRINT
+// ============================================================
+
+function createSourceFingerprint(
+    source = {}
+) {
+
+    const title =
+        normalizeText(
+            source.title
+        );
+
+
+    const publisher =
+        normalizeText(
+            source.publisher
+        );
+
+
+    const domain =
+        getSourceDomain(
+            source.url
+        );
+
+
+    const text =
+        normalizeText(
+            getSourceText(
+                source
+            )
+        );
+
+
+    return {
+
+        domain,
+
+        publisher,
+
+        title,
+
+        text
+    };
+}
+
+
+// ============================================================
+// SOURCE INDEPENDENCE
+// ============================================================
+
+function classifySourceIndependence(
+    source = {},
+    allSources = []
+) {
+
+    const fingerprint =
+        createSourceFingerprint(
+            source
+        );
+
+
+    let duplicateCount = 0;
+
+    let relatedCount = 0;
+
+    let sameDomainCount = 0;
+
+
+    if (
+        !Array.isArray(allSources)
+    ) {
+
+        allSources = [];
+    }
+
+
+    allSources.forEach(
+        other => {
+
+            if (
+                other === source
+            ) {
+
+                return;
+            }
+
+
+            const otherFingerprint =
+                createSourceFingerprint(
+                    other
+                );
+
+
+            if (
+                fingerprint.domain &&
+                otherFingerprint.domain &&
+                fingerprint.domain ===
+                    otherFingerprint.domain
+            ) {
+
+                sameDomainCount++;
+            }
+
+
+            const titleSimilarity =
+                calculateTextTokenSimilarity(
+                    fingerprint.title,
+                    otherFingerprint.title
+                );
+
+
+            const contentSimilarity =
+                calculateTextTokenSimilarity(
+                    fingerprint.text,
+                    otherFingerprint.text
+                );
+
+
+            if (
+                titleSimilarity >= 0.80 &&
+                contentSimilarity >= 0.70
+            ) {
+
+                duplicateCount++;
+
+            } else if (
+                titleSimilarity >= 0.45 ||
+                contentSimilarity >= 0.45
+            ) {
+
+                relatedCount++;
+            }
+        }
+    );
+
+
+    if (
+        duplicateCount > 0
+    ) {
+
+        return {
+
+            category:
+                "duplicate",
+
+            score:
+                INDEPENDENCE_WEIGHTS.duplicate,
+
+            duplicateCount,
+
+            relatedCount,
+
+            sameDomainCount,
+
+            reason:
+                "Highly similar source content detected."
+        };
+    }
+
+
+    if (
+        relatedCount > 0 ||
+        sameDomainCount > 0
+    ) {
+
+        return {
+
+            category:
+                "related",
+
+            score:
+                INDEPENDENCE_WEIGHTS.related,
+
+            duplicateCount,
+
+            relatedCount,
+
+            sameDomainCount,
+
+            reason:
+                "Related or same-domain source detected."
+        };
+    }
+
+
+    if (
+        fingerprint.domain
+    ) {
+
+        return {
+
+            category:
+                "independent",
+
+            score:
+                INDEPENDENCE_WEIGHTS.independent,
+
+            duplicateCount:
+                0,
+
+            relatedCount:
+                0,
+
+            sameDomainCount:
+                0,
+
+            reason:
+                "No strong duplication or same-domain relationship detected."
+        };
+    }
+
+
+    return {
+
+        category:
+            "unknown",
+
+        score:
+            INDEPENDENCE_WEIGHTS.unknown,
+
+        duplicateCount:
+            0,
+
+        relatedCount:
+            0,
+
+        sameDomainCount:
+            0,
+
+        reason:
+            "Source independence could not be determined."
+    };
+}
+
+
+// ============================================================
 // AUTHORITY CLASSIFICATION
 // ============================================================
 
@@ -491,10 +836,12 @@ function classifySourceAuthority(
             source.url
         );
 
+
     const publisher =
         normalize(
             source.publisher
         );
+
 
     const domain =
         getSourceDomain(
@@ -596,16 +943,27 @@ function classifySourceAuthority(
     const majorNewsDomains = [
 
         "reuters.com",
+
         "bbc.com",
+
         "bbc.co.uk",
+
         "apnews.com",
+
         "theguardian.com",
+
         "nytimes.com",
+
         "wsj.com",
+
         "ft.com",
+
         "bloomberg.com",
+
         "economist.com",
+
         "aljazeera.com",
+
         "cnn.com"
     ];
 
@@ -721,8 +1079,7 @@ function classifySourceFreshness(
     const timestamp =
         new Date(
             publishedAt
-        )
-            .getTime();
+        ).getTime();
 
 
     if (
@@ -949,6 +1306,26 @@ function scoreSources(
                     });
 
 
+                const independence =
+                    classifySourceIndependence(
+                        source,
+                        validSources
+                    );
+
+
+                const combinedQuality =
+                    clamp(
+                        (
+                            quality.score *
+                            0.75
+                        ) +
+                        (
+                            independence.score *
+                            0.25
+                        )
+                    );
+
+
                 return {
 
                     ...source,
@@ -957,16 +1334,31 @@ function scoreSources(
                         `source-${index + 1}`,
 
                     quality:
+                        Number(
+                            combinedQuality.toFixed(3)
+                        ),
+
+                    baseQuality:
                         quality.score,
 
                     qualityLevel:
-                        quality.level,
+                        combinedQuality >= 0.80
+
+                            ? "high"
+
+                            : combinedQuality >= 0.60
+
+                                ? "medium"
+
+                                : "low",
 
                     authority:
                         quality.authority,
 
                     freshness:
-                        quality.freshness
+                        quality.freshness,
+
+                    independence
                 };
             }
         );
@@ -987,6 +1379,55 @@ function scoreSources(
                 scoredSources.length
 
             : 0;
+
+
+    const independentSources =
+        scoredSources.filter(
+            source =>
+                source.independence &&
+                source.independence.category ===
+                "independent"
+        ).length;
+
+
+    const relatedSources =
+        scoredSources.filter(
+            source =>
+                source.independence &&
+                source.independence.category ===
+                "related"
+        ).length;
+
+
+    const duplicateSources =
+        scoredSources.filter(
+            source =>
+                source.independence &&
+                source.independence.category ===
+                "duplicate"
+        ).length;
+
+
+    const unknownSources =
+        scoredSources.filter(
+            source =>
+                source.independence &&
+                source.independence.category ===
+                "unknown"
+        ).length;
+
+
+    const domains =
+        new Set(
+            scoredSources
+                .map(
+                    source =>
+                        getSourceDomain(
+                            source.url
+                        )
+                )
+                .filter(Boolean)
+        );
 
 
     const highQuality =
@@ -1013,6 +1454,28 @@ function scoreSources(
         ).length;
 
 
+    const sourceDiversity =
+        scoredSources.length > 0
+
+            ? clamp(
+                domains.size /
+                scoredSources.length
+            )
+
+            : 0;
+
+
+    const independentRatio =
+        scoredSources.length > 0
+
+            ? clamp(
+                independentSources /
+                scoredSources.length
+            )
+
+            : 0;
+
+
     return {
 
         success: true,
@@ -1030,6 +1493,27 @@ function scoreSources(
                 ).toFixed(3)
             ),
 
+        independentSources,
+
+        relatedSources,
+
+        duplicateSources,
+
+        unknownSources,
+
+        independentDomainCount:
+            domains.size,
+
+        sourceDiversity:
+            Number(
+                sourceDiversity.toFixed(3)
+            ),
+
+        independentRatio:
+            Number(
+                independentRatio.toFixed(3)
+            ),
+
         highQualitySources:
             highQuality,
 
@@ -1041,7 +1525,9 @@ function scoreSources(
 
         status:
             scoredSources.length > 0
+
                 ? "sources-scored"
+
                 : "no-sources-scored"
     };
 }
@@ -1056,58 +1542,9 @@ function calculateSourceSimilarity(
     sourceB = {}
 ) {
 
-    const tokensA =
-        new Set(
-            tokenize(
-                getSourceText(
-                    sourceA
-                )
-            )
-        );
-
-    const tokensB =
-        new Set(
-            tokenize(
-                getSourceText(
-                    sourceB
-                )
-            )
-        );
-
-    if (
-        tokensA.size === 0 ||
-        tokensB.size === 0
-    ) {
-
-        return 0;
-    }
-
-    let intersection = 0;
-
-    for (
-        const token of tokensA
-    ) {
-
-        if (
-            tokensB.has(token)
-        ) {
-
-            intersection++;
-        }
-    }
-
-    const union =
-        new Set([
-            ...tokensA,
-            ...tokensB
-        ]).size;
-
-    if (!union) {
-        return 0;
-    }
-
-    return clamp(
-        intersection / union
+    return calculateTextTokenSimilarity(
+        getSourceText(sourceA),
+        getSourceText(sourceB)
     );
 }
 
@@ -1119,22 +1556,39 @@ function calculateSourceSimilarity(
 const CONFLICT_PATTERNS = [
 
     /\bnot\b/i,
+
     /\bno\b/i,
+
     /\bnever\b/i,
+
     /\bfalse\b/i,
+
     /\bincorrect\b/i,
+
     /\bwrong\b/i,
+
     /\bdenied\b/i,
+
     /\bdenies\b/i,
+
     /\brefutes\b/i,
+
     /\brefuted\b/i,
+
     /\bcontrary\b/i,
+
     /\bunlike\b/i,
+
     /\bdifferent\b/i,
+
     /\bdispute\b/i,
+
     /\bdisputed\b/i,
+
     /\bcontroversial\b/i,
+
     /\bconflict\b/i,
+
     /\bconflicting\b/i
 ];
 
@@ -1170,9 +1624,12 @@ function splitSentences(
     const clean =
         normalize(text);
 
+
     if (!clean) {
+
         return [];
     }
+
 
     return clean
         .split(
@@ -1200,6 +1657,7 @@ function looksLikeClaim(
     const text =
         normalize(sentence);
 
+
     if (
         text.length < 15
     ) {
@@ -1207,8 +1665,10 @@ function looksLikeClaim(
         return false;
     }
 
+
     const words =
         text.split(/\s+/);
+
 
     if (
         words.length < 4
@@ -1217,12 +1677,14 @@ function looksLikeClaim(
         return false;
     }
 
+
     if (
         text.endsWith("?")
     ) {
 
         return false;
     }
+
 
     return true;
 }
@@ -1237,56 +1699,9 @@ function calculateClaimSimilarity(
     evidence = ""
 ) {
 
-    const claimTokens =
-        new Set(
-            tokenize(
-                claim
-            )
-        );
-
-    const evidenceTokens =
-        new Set(
-            tokenize(
-                evidence
-            )
-        );
-
-    if (
-        claimTokens.size === 0 ||
-        evidenceTokens.size === 0
-    ) {
-
-        return 0;
-    }
-
-    let intersection = 0;
-
-    for (
-        const token of claimTokens
-    ) {
-
-        if (
-            evidenceTokens.has(
-                token
-            )
-        ) {
-
-            intersection++;
-        }
-    }
-
-    const union =
-        new Set([
-            ...claimTokens,
-            ...evidenceTokens
-        ]).size;
-
-    if (!union) {
-        return 0;
-    }
-
-    return clamp(
-        intersection / union
+    return calculateTextTokenSimilarity(
+        claim,
+        evidence
     );
 }
 
@@ -1305,20 +1720,24 @@ function detectClaimConflict(
             claim
         );
 
+
     const evidenceText =
         normalizeText(
             evidence
         );
+
 
     const claimNumbers =
         extractNumbers(
             claimText
         );
 
+
     const evidenceNumbers =
         extractNumbers(
             evidenceText
         );
+
 
     const numericDifference =
         claimNumbers.length > 0 &&
@@ -1336,6 +1755,7 @@ function detectClaimConflict(
                 )
         );
 
+
     const evidenceConflictSignal =
         CONFLICT_PATTERNS.some(
             pattern =>
@@ -1343,6 +1763,7 @@ function detectClaimConflict(
                     evidenceText
                 )
         );
+
 
     return {
 
@@ -1371,13 +1792,16 @@ function extractClaims({
     const cleanQuery =
         normalize(query);
 
+
     const cleanSummary =
         normalize(summary);
+
 
     const validSources =
         validateSources(
             sources
         );
+
 
     const candidates = [];
 
@@ -1420,10 +1844,14 @@ function extractClaims({
                     source
                 );
 
+
             splitSentences(
                 sourceText
             )
-                .slice(0, 10)
+                .slice(
+                    0,
+                    10
+                )
                 .forEach(
                     sentence => {
 
@@ -1453,6 +1881,7 @@ function extractClaims({
 
     const seen =
         new Set();
+
 
     const claims = [];
 
@@ -1531,7 +1960,9 @@ function extractClaims({
 
         status:
             limitedClaims.length > 0
+
                 ? "claims-extracted"
+
                 : "no-claims-extracted"
     };
 }
@@ -1634,13 +2065,22 @@ function mapClaimEvidence(
             }
 
 
+            const independenceScore =
+                source.independence
+                    ? source.independence.score
+                    : INDEPENDENCE_WEIGHTS.unknown;
+
+
             const evidenceScore =
                 clamp(
                     (
-                        similarity * 0.60
+                        similarity * 0.50
                     ) +
                     (
-                        source.quality * 0.40
+                        source.quality * 0.30
+                    ) +
+                    (
+                        independenceScore * 0.20
                     )
                 );
 
@@ -1713,6 +2153,9 @@ function mapClaimEvidence(
 
                 freshness:
                     source.freshness,
+
+                independence:
+                    source.independence,
 
                 numericDifference:
                     conflict.numericDifference,
@@ -1796,7 +2239,10 @@ function buildClaimProvenance(
                     item.authority,
 
                 freshness:
-                    item.freshness
+                    item.freshness,
+
+                independence:
+                    item.independence
             })
         );
 
@@ -1833,7 +2279,10 @@ function buildClaimProvenance(
                     item.authority,
 
                 freshness:
-                    item.freshness
+                    item.freshness,
+
+                independence:
+                    item.independence
             })
         );
 
@@ -1910,6 +2359,7 @@ function buildClaimProvenance(
 
         strongestEvidence:
             strongestEvidence
+
                 ? {
 
                     evidenceId:
@@ -1934,8 +2384,12 @@ function buildClaimProvenance(
                         strongestEvidence.authority,
 
                     freshness:
-                        strongestEvidence.freshness
+                        strongestEvidence.freshness,
+
+                    independence:
+                        strongestEvidence.independence
                 }
+
                 : null
     };
 }
@@ -2145,6 +2599,15 @@ function calculateClaimConfidence(
         );
 
 
+    const independentSupport =
+        supporting.filter(
+            item =>
+                item.independence &&
+                item.independence.category ===
+                "independent"
+        );
+
+
     const highEvidence =
         supporting.filter(
             item =>
@@ -2166,15 +2629,22 @@ function calculateClaimConfidence(
 
     score +=
         Math.min(
-            0.40,
-            supporting.length * 0.15
+            0.35,
+            supporting.length * 0.13
         );
 
 
     score +=
         Math.min(
-            0.25,
-            highQualitySupport.length * 0.10
+            0.20,
+            highQualitySupport.length * 0.08
+        );
+
+
+    score +=
+        Math.min(
+            0.15,
+            independentSupport.length * 0.07
         );
 
 
@@ -2310,6 +2780,9 @@ function buildEvidenceMapping({
                     origin:
                         claim.origin,
 
+                    sourceIndex:
+                        claim.sourceIndex,
+
                     evidence,
 
                     evidenceCount:
@@ -2381,7 +2854,8 @@ function buildEvidenceMapping({
                     sum +
                     claim.confidence,
                 0
-            ) / total
+            ) /
+                total
 
             : 0;
 
@@ -2457,6 +2931,7 @@ function compareSourcePair(
             sourceA
         );
 
+
     const textB =
         getSourceText(
             sourceB
@@ -2474,6 +2949,7 @@ function compareSourcePair(
         extractNumbers(
             textA
         );
+
 
     const numbersB =
         extractNumbers(
@@ -2513,6 +2989,26 @@ function compareSourcePair(
                 pattern.test(
                     textB
                 )
+        );
+
+
+    const independenceA =
+        classifySourceIndependence(
+            sourceA,
+            [
+                sourceA,
+                sourceB
+            ]
+        );
+
+
+    const independenceB =
+        classifySourceIndependence(
+            sourceB,
+            [
+                sourceA,
+                sourceB
+            ]
         );
 
 
@@ -2567,6 +3063,15 @@ function compareSourcePair(
                 conflictSignalB
         },
 
+        independence: {
+
+            sourceA:
+                independenceA,
+
+            sourceB:
+                independenceB
+        },
+
         possibleConflict
     };
 }
@@ -2587,6 +3092,7 @@ function compareSources(
 
 
     const comparisons = [];
+
 
     let supportingPairs = 0;
 
@@ -2667,7 +3173,9 @@ function compareSources(
 
         status:
             conflictPairs > 0
+
                 ? "conflict-detected"
+
                 : "sources-consistent"
     };
 }
@@ -2840,10 +3348,14 @@ function buildResearchContext(
         success: true,
 
         query:
-            normalize(result.query),
+            normalize(
+                result.query
+            ),
 
         summary:
-            normalize(result.summary),
+            normalize(
+                result.summary
+            ),
 
         sources:
             sourceText,
@@ -3067,6 +3579,64 @@ function calculateResearchConfidence({
         baseConfidence =
             baseConfidence +
             qualityAdjustment;
+    }
+
+
+    // ========================================================
+    // SOURCE INDEPENDENCE / DIVERSITY ADJUSTMENT
+    // ========================================================
+
+    if (
+        qualityResult &&
+        qualityResult.sourceCount > 0
+    ) {
+
+        const independentRatio =
+            clamp(
+                qualityResult.independentRatio
+            );
+
+
+        const diversity =
+            clamp(
+                qualityResult.sourceDiversity
+            );
+
+
+        const independenceAdjustment =
+            (
+                independentRatio -
+                0.50
+            ) *
+            0.10;
+
+
+        const diversityAdjustment =
+            (
+                diversity -
+                0.50
+            ) *
+            0.05;
+
+
+        baseConfidence =
+            baseConfidence +
+            independenceAdjustment +
+            diversityAdjustment;
+
+
+        if (
+            qualityResult.duplicateSources > 0
+        ) {
+
+            baseConfidence =
+                baseConfidence -
+                Math.min(
+                    0.15,
+                    qualityResult.duplicateSources *
+                    0.05
+                );
+        }
     }
 
 
@@ -3353,7 +3923,7 @@ function buildLearningContent({
         qualityResult.sources
             .map(
                 source =>
-                    `${source.sourceId}: ${source.title}: ${source.url} | quality=${source.quality} | authority=${source.authority.category} | freshness=${source.freshness.category}`
+                    `${source.sourceId}: ${source.title}: ${source.url} | quality=${source.quality} | authority=${source.authority.category} | freshness=${source.freshness.category} | independence=${source.independence.category} | independenceScore=${source.independence.score}`
             )
             .join("\n");
 
@@ -3396,6 +3966,15 @@ function buildLearningContent({
     }
 
 
+    const diversityText =
+        `\n\nSource diversity: ` +
+        `${qualityResult.sourceDiversity} | ` +
+        `independent sources=${qualityResult.independentSources} | ` +
+        `related sources=${qualityResult.relatedSources} | ` +
+        `duplicate sources=${qualityResult.duplicateSources} | ` +
+        `independent domains=${qualityResult.independentDomainCount}`;
+
+
     let claimText =
         "";
 
@@ -3420,8 +3999,10 @@ function buildLearningContent({
 
                         const provenanceStatus =
                             claim.provenance
+
                                 ? claim.provenance
                                     .provenanceStatus
+
                                 : "unknown";
 
 
@@ -3438,12 +4019,19 @@ function buildLearningContent({
 
 
                         return (
+
                             `${claim.id} | ` +
+
                             `${claim.status} | ` +
+
                             `provenance=${provenanceStatus} | ` +
+
                             `confidence=${claim.confidence} | ` +
+
                             `sources=${sourceIds || "none"} | ` +
+
                             `strongest=${strongestSource} | ` +
+
                             `${claim.claim}`
                         );
                     }
@@ -3460,9 +4048,14 @@ function buildLearningContent({
     if (!sourceText) {
 
         return (
+
             cleanSummary +
+
             claimText +
-            comparisonText
+
+            comparisonText +
+
+            diversityText
         );
     }
 
@@ -3477,7 +4070,9 @@ function buildLearningContent({
 
         claimText +
 
-        comparisonText
+        comparisonText +
+
+        diversityText
     );
 }
 
@@ -3614,6 +4209,7 @@ function learnVerifiedResearch({
 
             result:
                 {
+
                     ...researchResult,
 
                     sourceQuality,
@@ -3655,6 +4251,7 @@ function learnVerifiedResearch({
                 evidenceMapping.provenanceIndex,
 
             status:
+
                 (
                     comparison.conflictDetected ||
                     evidenceMapping.conflictDetected
@@ -3665,6 +4262,7 @@ function learnVerifiedResearch({
                     : "verification-required",
 
             message:
+
                 (
                     comparison.conflictDetected ||
                     evidenceMapping.conflictDetected
@@ -3928,6 +4526,21 @@ function getResearchStatus() {
         provenanceIndex:
             true,
 
+        sourceIndependenceScoring:
+            true,
+
+        sourceDiversityScoring:
+            true,
+
+        duplicateSourceDetection:
+            true,
+
+        relatedSourceDetection:
+            true,
+
+        independentDomainTracking:
+            true,
+
         minimumVerifiedSources:
             MIN_VERIFIED_SOURCES,
 
@@ -3948,6 +4561,16 @@ function getResearchStatus() {
             "classify-authority",
 
             "evaluate-freshness",
+
+            "score-source-independence",
+
+            "detect-duplicate-sources",
+
+            "detect-related-sources",
+
+            "calculate-source-diversity",
+
+            "track-independent-domains",
 
             "compare-sources",
 
@@ -3999,11 +4622,17 @@ module.exports = {
 
     calculateClaimSimilarity,
 
+    calculateTextTokenSimilarity,
+
     calculateSourceQuality,
 
     classifySourceAuthority,
 
     classifySourceFreshness,
+
+    createSourceFingerprint,
+
+    classifySourceIndependence,
 
     scoreSources,
 
