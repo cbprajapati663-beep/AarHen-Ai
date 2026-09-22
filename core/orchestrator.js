@@ -27,6 +27,7 @@ const memoryManager =
 const researchApi =
     require("./researchApi");
 
+
 // ============================================================
 // SELECT SKILL
 // ============================================================
@@ -57,6 +58,7 @@ function selectSkill(input) {
     };
 }
 
+
 // ============================================================
 // DETECT WHETHER LIVE RESEARCH IS REQUIRED
 // ============================================================
@@ -73,15 +75,19 @@ function shouldResearch(
     // --------------------------------------------------------
 
     if (
-        context.research === true
+        context.research === true ||
+        context.intent === "research"
     ) {
 
         return {
+
             required: true,
+
             reason:
                 "Live research explicitly requested by context."
         };
     }
+
 
     // --------------------------------------------------------
     // Explicitly disable research
@@ -92,11 +98,14 @@ function shouldResearch(
     ) {
 
         return {
+
             required: false,
+
             reason:
                 "Live research explicitly disabled by context."
         };
     }
+
 
     // --------------------------------------------------------
     // Intent category
@@ -108,22 +117,19 @@ function shouldResearch(
         )
             .toLowerCase();
 
-    const intentName =
-        String(
-            intentResult.intent || ""
-        )
-            .toLowerCase();
-
     if (
         category === "research"
     ) {
 
         return {
+
             required: true,
+
             reason:
                 "Intent category requires web research."
         };
     }
+
 
     // --------------------------------------------------------
     // Selected research skill
@@ -158,11 +164,14 @@ function shouldResearch(
     ) {
 
         return {
+
             required: true,
+
             reason:
                 "Research skill selected by router."
         };
     }
+
 
     // --------------------------------------------------------
     // Current/fresh information signals
@@ -242,11 +251,14 @@ function shouldResearch(
     if (matchedSignal) {
 
         return {
+
             required: true,
+
             reason:
                 `Fresh-web signal detected: ${matchedSignal}.`
         };
     }
+
 
     // --------------------------------------------------------
     // Research intent keywords
@@ -276,11 +288,14 @@ function shouldResearch(
     if (matchedKeyword) {
 
         return {
+
             required: true,
+
             reason:
                 `Research keyword detected: ${matchedKeyword}.`
         };
     }
+
 
     // --------------------------------------------------------
     // Default
@@ -294,6 +309,7 @@ function shouldResearch(
             "Live web research not required."
     };
 }
+
 
 // ============================================================
 // PERFORM LIVE RESEARCH
@@ -410,6 +426,7 @@ async function performResearch(
     }
 }
 
+
 // ============================================================
 // DETERMINE PERMISSION
 // ============================================================
@@ -476,6 +493,7 @@ function determinePermission(
     );
 }
 
+
 // ============================================================
 // BUILD EXECUTION CONTEXT
 // ============================================================
@@ -490,10 +508,6 @@ function buildExecutionContext(
     return {
 
         ...context,
-
-        // ----------------------------------------------------
-        // BRAIN
-        // ----------------------------------------------------
 
         brain: {
 
@@ -513,10 +527,6 @@ function buildExecutionContext(
                 brainResult
                     .thinkingContext
         },
-
-        // ----------------------------------------------------
-        // MEMORY MANAGEMENT
-        // ----------------------------------------------------
 
         memoryManagement: {
 
@@ -541,10 +551,6 @@ function buildExecutionContext(
                     ?.verified || []
         },
 
-        // ----------------------------------------------------
-        // ROUTING
-        // ----------------------------------------------------
-
         routing: {
 
             selectedSkill:
@@ -555,10 +561,6 @@ function buildExecutionContext(
                 routing
                     .matches
         },
-
-        // ----------------------------------------------------
-        // INTENT
-        // ----------------------------------------------------
 
         intent: {
 
@@ -577,6 +579,7 @@ function buildExecutionContext(
     };
 }
 
+
 // ============================================================
 // DETERMINE MEMORY ACTION
 // ============================================================
@@ -590,10 +593,6 @@ function determineMemoryAction(
         brainResult
             ?.memory
             ?.decision;
-
-    // --------------------------------------------------------
-    // NO DECISION
-    // --------------------------------------------------------
 
     if (!decision) {
 
@@ -609,10 +608,6 @@ function determineMemoryAction(
                 "No memory decision available."
         };
     }
-
-    // --------------------------------------------------------
-    // USER EXPLICITLY DISABLES MEMORY
-    // --------------------------------------------------------
 
     if (
         context.remember === false
@@ -630,10 +625,6 @@ function determineMemoryAction(
                 "Memory explicitly disabled by user."
         };
     }
-
-    // --------------------------------------------------------
-    // USER EXPLICITLY REQUESTS MEMORY
-    // --------------------------------------------------------
 
     if (
         context.remember === true
@@ -666,10 +657,6 @@ function determineMemoryAction(
                 decision.confidence
         };
     }
-
-    // --------------------------------------------------------
-    // AUTOMATIC MEMORY MODE
-    // --------------------------------------------------------
 
     if (
         context.autoRemember === true
@@ -723,10 +710,6 @@ function determineMemoryAction(
         };
     }
 
-    // --------------------------------------------------------
-    // SAFE DEFAULT
-    // --------------------------------------------------------
-
     return {
 
         action:
@@ -754,6 +737,7 @@ function determineMemoryAction(
             decision.confidence
     };
 }
+
 
 // ============================================================
 // STORE MEMORY
@@ -787,10 +771,6 @@ function storeMemory(
                 "Memory storage not requested."
         };
     }
-
-    // --------------------------------------------------------
-    // EXPLICIT USER MEMORY
-    // --------------------------------------------------------
 
     if (
         context.remember === true
@@ -859,10 +839,6 @@ function storeMemory(
         });
     }
 
-    // --------------------------------------------------------
-    // AUTOMATIC MEMORY
-    // --------------------------------------------------------
-
     return memoryManager.autoRemember({
 
         type:
@@ -907,6 +883,7 @@ function storeMemory(
     });
 }
 
+
 // ============================================================
 // PROCESS REQUEST
 // ============================================================
@@ -948,6 +925,7 @@ async function process(
         };
     }
 
+
     // --------------------------------------------------------
     // MASTER BRAIN
     // --------------------------------------------------------
@@ -963,6 +941,7 @@ async function process(
         return brainResult;
     }
 
+
     // --------------------------------------------------------
     // SKILL ROUTING
     // --------------------------------------------------------
@@ -977,11 +956,12 @@ async function process(
         return routing;
     }
 
+
     // --------------------------------------------------------
     // INTENT ANALYSIS
     // --------------------------------------------------------
 
-    const intentResult =
+    let intentResult =
         intent.analyzeIntent(
             request
         );
@@ -990,6 +970,53 @@ async function process(
 
         return intentResult;
     }
+
+
+    // ========================================================
+    // EXPLICIT CONTEXT INTENT OVERRIDE
+    // ========================================================
+
+    // The /research API sends:
+    //
+    // context.intent = "research"
+    //
+    // Normal /ask requests continue to use automatic
+    // intent detection from core/intent.js.
+
+    if (
+        String(
+            context.intent || ""
+        )
+            .toLowerCase() === "research"
+    ) {
+
+        intentResult = {
+
+            ...intentResult,
+
+            success: true,
+
+            category:
+                "research",
+
+            intent:
+                "web_research",
+
+            parameters: {
+
+                ...(
+                    intentResult.parameters ||
+                    {}
+                ),
+
+                maxSources:
+                    Number(
+                        context.maxResearchSources
+                    ) || 5
+            }
+        };
+    }
+
 
     // --------------------------------------------------------
     // LIVE WEB RESEARCH DECISION
@@ -1006,6 +1033,7 @@ async function process(
 
             context
         );
+
 
     // --------------------------------------------------------
     // LIVE WEB RESEARCH
@@ -1047,11 +1075,6 @@ async function process(
         researchResult.reason =
             researchDecision.reason;
 
-        // ----------------------------------------------------
-        // If research was explicitly requested and failed,
-        // stop instead of pretending that live data exists.
-        // ----------------------------------------------------
-
         if (
             !researchResult.success
         ) {
@@ -1088,6 +1111,7 @@ async function process(
         }
     }
 
+
     // --------------------------------------------------------
     // PERMISSION
     // --------------------------------------------------------
@@ -1098,6 +1122,7 @@ async function process(
             routing
         );
 
+
     // --------------------------------------------------------
     // MEMORY ACTION DECISION
     // --------------------------------------------------------
@@ -1107,6 +1132,7 @@ async function process(
             brainResult,
             context
         );
+
 
     // --------------------------------------------------------
     // EXECUTION CONTEXT
@@ -1127,6 +1153,7 @@ async function process(
     executionContext
         .memoryAction =
             memoryAction;
+
 
     // --------------------------------------------------------
     // RESEARCH CONTEXT INJECTION
@@ -1182,6 +1209,7 @@ async function process(
                 null
         };
 
+
     // --------------------------------------------------------
     // MEMORY WRITE
     // --------------------------------------------------------
@@ -1220,6 +1248,7 @@ async function process(
     executionContext
         .memoryWrite =
             memoryWrite;
+
 
     // --------------------------------------------------------
     // APPROVAL REQUIRED
@@ -1279,6 +1308,7 @@ async function process(
         };
     }
 
+
     // --------------------------------------------------------
     // EXECUTE SKILL
     // --------------------------------------------------------
@@ -1293,13 +1323,15 @@ async function process(
                     executionContext
             });
 
+
     // --------------------------------------------------------
     // FINAL RESULT
     // --------------------------------------------------------
 
     const orchestrationResult = {
 
-        success: true,
+        success:
+            execution.success !== false,
 
         request,
 
@@ -1340,6 +1372,7 @@ async function process(
             new Date().toISOString()
     };
 
+
     // --------------------------------------------------------
     // RESPONSE
     // --------------------------------------------------------
@@ -1352,6 +1385,7 @@ async function process(
 
     return orchestrationResult;
 }
+
 
 // ============================================================
 // ORCHESTRATE
@@ -1367,6 +1401,7 @@ async function orchestrate(
         context
     );
 }
+
 
 // ============================================================
 // ORCHESTRATOR STATUS
@@ -1534,6 +1569,7 @@ function getStatus() {
         }
     };
 }
+
 
 // ============================================================
 // EXPORTS
