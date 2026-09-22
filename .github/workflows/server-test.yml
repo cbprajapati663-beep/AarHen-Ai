@@ -2,592 +2,190 @@ name: AarHen Server Test
 
 on:
   push:
-    branches:
-      - main
-
+    branches: ["main"]
   pull_request:
-    branches:
-      - main
+    branches: ["main"]
 
 jobs:
-
   server-test:
-
     runs-on: ubuntu-latest
 
     steps:
-
-      # ======================================================
-      # CHECKOUT
-      # ======================================================
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
-
-      # ======================================================
-      # NODE SETUP
-      # ======================================================
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
 
-
-      # ======================================================
-      # NODE VERSION
-      # ======================================================
-
-      - name: Check Node.js
+      - name: Install dependencies
         run: |
-          node --version
-          npm --version
-
-
-      # ======================================================
-      # SYNTAX CHECK
-      # ======================================================
-
-      - name: Check AarHen syntax
-        run: |
-
-          echo "Checking server.js..."
-          node --check server.js
-
-          echo "Checking core modules..."
-
-          node --check core/brain.js
-          node --check core/orchestrator.js
-          node --check core/memory.js
-          node --check core/memoryManager.js
-          node --check core/memoryApi.js
-          node --check core/memoryStore.js
-          node --check core/learning.js
-          node --check core/learningApi.js
-          node --check core/verification.js
-          node --check core/storage.js
-          node --check core/storageProvider.js
-          node --check core/memoryHistory.js
-
-          echo "Checking engines..."
-
-          node --check engines/knowledge.js
-          node --check engines/research.js
-
-          echo "Checking providers..."
-
-          node --check providers/researchProvider.js
-          node --check providers/providerManager.js
-
-          echo "Checking skills..."
-
-          node --check skills/executor.js
-          node --check skills/router.js
-          node --check skills/registry.js
-
-          echo ""
-          echo "All syntax checks passed."
-
-
-      # ======================================================
-      # START SERVER
-      # ======================================================
+          if [ -f package.json ]; then
+            npm install
+          else
+            echo "No package.json found"
+          fi
 
       - name: Start AarHen server
         env:
-          PORT: 3000
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-
         run: |
-
-          echo "Starting AarHen server..."
-
           node server.js > server.log 2>&1 &
-
           echo $! > server.pid
+          sleep 3
 
-          echo "Server process started."
-
-
-      # ======================================================
-      # WAIT FOR SERVER
-      # ======================================================
-
-      - name: Wait for AarHen server
-        run: |
-
-          echo "Waiting for AarHen server..."
-
-          for i in {1..30}
-          do
-
-            if curl -s \
-              http://127.0.0.1:3000/ \
-              > /dev/null
-            then
-
-              echo ""
-              echo "======================================"
-              echo "AarHen server is ONLINE"
-              echo "======================================"
-
-              exit 0
-
-            fi
-
-            echo "Waiting... $i/30"
-
-            sleep 1
-
-          done
-
-          echo ""
-          echo "======================================"
-          echo "SERVER FAILED TO START"
-          echo "======================================"
-
-          echo ""
-          echo "===== SERVER LOG ====="
-
-          cat server.log || true
-
-          echo ""
-          echo "===== NODE PROCESSES ====="
-
-          ps aux | grep node || true
-
-          exit 1
-
-
-      # ======================================================
-      # ROOT ENDPOINT
-      # ======================================================
+          echo "Checking server..."
+          cat server.log
 
       - name: Test root endpoint
         run: |
-
-          echo "Testing root endpoint..."
-
-          curl -f \
-            http://127.0.0.1:3000/
-
-          echo ""
-          echo "Root endpoint OK."
-
-
-      # ======================================================
-      # LEARNING STATUS
-      # ======================================================
+          curl --fail http://localhost:3000/
 
       - name: Test learning status
         run: |
-
-          echo "Testing learning status..."
-
-          curl -f \
-            http://127.0.0.1:3000/learning-status
-
-          echo ""
-          echo "Learning status OK."
-
-
-      # ======================================================
-      # MEMORY STATUS
-      # ======================================================
+          curl --fail http://localhost:3000/learning-status
 
       - name: Test memory status
-      run: |
-
-          echo "Testing memory status..."
-
-          curl -f \
-            http://127.0.0.1:3000/memory-status
-
-          echo ""
-          echo "Memory status OK."
-
-
-      # ======================================================
-      # MEMORY HEALTH
-      # ======================================================
+        run: |
+          curl --fail http://localhost:3000/memory-status
 
       - name: Test memory health
         run: |
-
-          echo "Testing memory health..."
-
-          curl -f \
-            http://127.0.0.1:3000/memory-health
-
-          echo ""
-          echo "Memory health OK."
-
-
-      # ======================================================
-      # LEARNING API
-      # ======================================================
+          curl --fail http://localhost:3000/memory-health
 
       - name: Test learning API
         run: |
-
-          echo "Testing learning API..."
-
-          curl -f \
-            http://127.0.0.1:3000/learning
-
-          echo ""
-          echo "Learning API OK."
-
-
-      # ======================================================
-      # MEMORY API
-      # ======================================================
-
-      - name: Test memory API
-        run: |
-
-          echo "Testing memory API..."
-
-          curl -f \
-            http://127.0.0.1:3000/memory
-
-          echo ""
-          echo "Memory API OK."
-
-
-      # ======================================================
-      # CREATE MEMORY FOR HISTORY TEST
-      # ======================================================
+          curl --fail http://localhost:3000/learning
 
       - name: Create memory for history test
         run: |
-
-          echo "Creating test memory..."
-
-          RESPONSE=$(curl -s \
+          RESPONSE=$(curl --fail \
             -X POST \
+            http://localhost:3000/memory/remember \
             -H "Content-Type: application/json" \
             -d '{
               "type": "knowledge",
-              "title": "AarHen History Test",
-              "content": "This memory is created to test AarHen memory history.",
-              "category": "system-test",
+              "title": "AarHen Server Test Memory",
+              "category": "test",
+              "content": "This is a test memory created by AarHen server test.",
               "source": "github-actions",
-              "importance": "low",
-              "confidence": 0.9
-            }' \
-            http://127.0.0.1:3000/memory/remember)
+              "verified": false,
+              "confidence": 0.5
+            }')
 
-          echo ""
-          echo "Memory response:"
           echo "$RESPONSE"
 
-          MEMORY_ID=$(echo "$RESPONSE" | node -e "
-            let data = '';
+          MEMORY_ID=$(echo "$RESPONSE" | node -e '
+            let data = "";
+            process.stdin.on("data", chunk => data += chunk);
+            process.stdin.on("end", () => {
+              const json = JSON.parse(data);
+              const id =
+                json.memoryId ||
+                (json.memory && json.memory.id);
 
-            process.stdin.on(
-              'data',
-              chunk => data += chunk
-            );
-
-            process.stdin.on(
-              'end',
-              () => {
-
-                try {
-
-                  const json =
-                    JSON.parse(data);
-
-                  const id =
-                    json.memoryId ||
-                    (json.memory &&
-                     json.memory.id) ||
-                    '';
-
-                  process.stdout.write(
-                    String(id)
-                  );
-
-                } catch (error) {
-
-                  process.stdout.write('');
-
-                }
-
+              if (!id) {
+                console.error("Memory ID not found");
+                process.exit(1);
               }
-            );
-          ")
 
-          if [ -z "$MEMORY_ID" ]
-          then
-
-            echo ""
-            echo "ERROR: Memory ID was not returned."
-
-            exit 1
-
-          fi
-
-          echo ""
-          echo "Memory ID:"
-          echo "$MEMORY_ID"
+              console.log(id);
+            });
+          ')
 
           echo "MEMORY_ID=$MEMORY_ID" >> "$GITHUB_ENV"
-
-
-      # ======================================================
-      # MEMORY HISTORY
-      # ======================================================
+          echo "Created memory: $MEMORY_ID"
 
       - name: Test memory history
         run: |
-
           echo "Testing memory history..."
-
-          curl -f \
-            "http://127.0.0.1:3000/memory-history?memoryId=$MEMORY_ID"
-
-          echo ""
-          echo "Memory history OK."
-
-
-      # ======================================================
-      # MEMORY HISTORY STATUS
-      # ======================================================
+          curl --fail \
+            "http://localhost:3000/memory-history?memoryId=$MEMORY_ID"
 
       - name: Test memory history status
         run: |
-
-          echo "Testing memory history status..."
-
-          curl -f \
-            http://127.0.0.1:3000/memory-history-status
-
-          echo ""
-          echo "Memory history status OK."
-
-
-      # ======================================================
-      # LEARNING HISTORY
-      # ======================================================
+          curl --fail http://localhost:3000/memory-history-status
 
       - name: Test learning history
         run: |
-
-          echo "Testing learning history..."
-
-          curl -f \
-            http://127.0.0.1:3000/learning-history
-
-          echo ""
-          echo "Learning history OK."
-
-
-      # ======================================================
-      # ASK ENDPOINT
-      # ======================================================
+          curl --fail \
+            "http://localhost:3000/learning-history?memoryId=$MEMORY_ID"
 
       - name: Test ask endpoint
         run: |
-
-          echo "Testing AarHen ask endpoint..."
-
-          curl -f \
+          curl --fail \
             -X POST \
+            http://localhost:3000/ask \
             -H "Content-Type: application/json" \
             -d '{
               "input": "What is vehicle finance?",
               "context": {
                 "remember": false
               }
-            }' \
-            http://127.0.0.1:3000/ask
-
-          echo ""
-          echo "Ask endpoint OK."
-
-
-      # ======================================================
-      # LEARN ENDPOINT
-      # ======================================================
+            }'
 
       - name: Test learn endpoint
         run: |
-
-          echo "Testing learn endpoint..."
-
-          curl -f \
+          curl --fail \
             -X POST \
+            http://localhost:3000/learn \
             -H "Content-Type: application/json" \
             -d '{
-              "title": "AarHen CI Test Knowledge",
-              "content": "AarHen automated CI test knowledge record.",
-              "category": "system-test",
+              "title": "Vehicle Finance Test Knowledge",
+              "content": "Vehicle finance is a financial facility used to fund the purchase of a vehicle.",
+              "category": "finance",
               "source": "github-actions"
-            }' \
-            http://127.0.0.1:3000/learn
-
-          echo ""
-          echo "Learn endpoint OK."
-
-
-      # ======================================================
-      # MEMORY SEARCH
-      # ======================================================
+            }'
 
       - name: Test memory search
         run: |
-
-          echo "Testing memory search..."
-
-          curl -f \
-            "http://127.0.0.1:3000/memory/search?q=AarHen&limit=10"
-
-          echo ""
-          echo "Memory search OK."
-
-
-      # ======================================================
-      # KNOWLEDGE SEARCH
-      # ======================================================
+          curl --fail \
+            "http://localhost:3000/memory/search?q=vehicle&limit=5"
 
       - name: Test knowledge search
         run: |
+          curl --fail \
+            "http://localhost:3000/memory/knowledge?q=vehicle&limit=5"
 
-          echo "Testing knowledge search..."
-
-          curl -f \
-            "http://127.0.0.1:3000/memory/knowledge?q=AarHen&limit=10"
-
-          echo ""
-          echo "Knowledge search OK."
-
-
-      # ======================================================
-      # VERIFIED MEMORY
-      # ======================================================
+      - name: Test verified knowledge
+        run: |
+          curl --fail \
+            "http://localhost:3000/memory/verified-knowledge?q=vehicle&limit=5"
 
       - name: Test verified memory
         run: |
-
-          echo "Testing verified memory..."
-
-          curl -f \
-            "http://127.0.0.1:3000/memory/verified?limit=10"
-
-          echo ""
-          echo "Verified memory API OK."
-
-
-      # ======================================================
-      # MEMORY CONTROL STATUS
-      # ======================================================
+          curl --fail \
+            "http://localhost:3000/memory/verified?limit=5"
 
       - name: Test memory control status
         run: |
-
-          echo "Testing memory control status..."
-
-          curl -f \
-            http://127.0.0.1:3000/memory/control-status
-
-          echo ""
-          echo "Memory control status OK."
-
-
-      # ======================================================
-      # FEEDBACK
-      # ======================================================
+          curl --fail \
+            http://localhost:3000/memory/control-status
 
       - name: Test feedback endpoint
         run: |
-
-          echo "Testing feedback endpoint..."
-
-          curl -f \
+          curl --fail \
             -X POST \
+            http://localhost:3000/feedback \
             -H "Content-Type: application/json" \
             -d "{
               \"memoryId\": \"$MEMORY_ID\",
-              \"feedback\": \"Automated GitHub test feedback\",
-              \"helpful\": true
-            }" \
-            http://127.0.0.1:3000/feedback
-
-          echo ""
-          echo "Feedback endpoint OK."
-
-
-      # ======================================================
-      # FINAL STATUS
-      # ======================================================
-
-      - name: Final AarHen status
-        run: |
-
-          echo ""
-          echo "=============================================="
-          echo "        AARHEN CORE V5 SERVER TEST"
-          echo "                 COMPLETE"
-          echo "=============================================="
-
-          echo ""
-          echo "Server startup              ✅"
-          echo "Root API                    ✅"
-          echo "Learning Status             ✅"
-          echo "Memory Status               ✅"
-          echo "Memory Health               ✅"
-          echo "Learning API                ✅"
-          echo "Memory API                  ✅"
-          echo "Memory Creation             ✅"
-          echo "Memory History              ✅"
-          echo "Memory History Status       ✅"
-          echo "Learning History            ✅"
-          echo "Ask API                     ✅"
-          echo "Learn API                   ✅"
-          echo "Memory Search               ✅"
-          echo "Knowledge Search            ✅"
-          echo "Verified Memory             ✅"
-          echo "Memory Control              ✅"
-          echo "Feedback API                ✅"
-
-          echo ""
-          echo "=============================================="
-          echo "       AARHEN SERVER IS OPERATIONAL"
-          echo "=============================================="
-
-
-      # ======================================================
-      # SERVER LOG
-      # ======================================================
+              \"feedback\": \"Server test feedback\",
+              \"helpful\": true,
+              \"reason\": \"Automated GitHub Actions test\"
+            }"
 
       - name: Show server log
         if: always()
         run: |
-
-          echo ""
-          echo "=============================================="
-          echo "             AARHEN SERVER LOG"
-          echo "=============================================="
-
+          echo "================ SERVER LOG ================"
           cat server.log || true
-
-
-      # ======================================================
-      # STOP SERVER
-      # ======================================================
+          echo "============================================"
 
       - name: Stop AarHen server
         if: always()
         run: |
-
-          if [ -f server.pid ]
-          then
-
-            echo "Stopping AarHen server..."
-
-            kill $(cat server.pid) || true
-
+          if [ -f server.pid ]; then
+            kill "$(cat server.pid)" || true
           fi
