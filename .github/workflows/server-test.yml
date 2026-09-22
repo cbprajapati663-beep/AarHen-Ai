@@ -51,7 +51,11 @@ jobs:
 
       - name: Check AarHen syntax
         run: |
+
+          echo "Checking server.js..."
           node --check server.js
+
+          echo "Checking core modules..."
 
           node --check core/brain.js
           node --check core/orchestrator.js
@@ -66,15 +70,24 @@ jobs:
           node --check core/storageProvider.js
           node --check core/memoryHistory.js
 
+          echo "Checking engines..."
+
           node --check engines/knowledge.js
           node --check engines/research.js
+
+          echo "Checking providers..."
 
           node --check providers/researchProvider.js
           node --check providers/providerManager.js
 
+          echo "Checking skills..."
+
           node --check skills/executor.js
           node --check skills/router.js
           node --check skills/registry.js
+
+          echo ""
+          echo "All syntax checks passed."
 
 
       # ======================================================
@@ -85,11 +98,16 @@ jobs:
         env:
           PORT: 3000
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+
         run: |
+
+          echo "Starting AarHen server..."
+
           node server.js > server.log 2>&1 &
+
           echo $! > server.pid
 
-          echo "AarHen server starting..."
+          echo "Server process started."
 
 
       # ======================================================
@@ -99,14 +117,17 @@ jobs:
       - name: Wait for AarHen server
         run: |
 
-          echo "Waiting for server..."
+          echo "Waiting for AarHen server..."
 
           for i in {1..30}
           do
 
-            if curl -s http://127.0.0.1:3000/ > /dev/null
+            if curl -s \
+              http://127.0.0.1:3000/ \
+              > /dev/null
             then
 
+              echo ""
               echo "======================================"
               echo "AarHen server is ONLINE"
               echo "======================================"
@@ -120,7 +141,6 @@ jobs:
             sleep 1
 
           done
-
 
           echo ""
           echo "======================================"
@@ -177,7 +197,7 @@ jobs:
       # ======================================================
 
       - name: Test memory status
-        run: |
+      run: |
 
           echo "Testing memory status..."
 
@@ -237,6 +257,87 @@ jobs:
 
 
       # ======================================================
+      # CREATE MEMORY FOR HISTORY TEST
+      # ======================================================
+
+      - name: Create memory for history test
+        run: |
+
+          echo "Creating test memory..."
+
+          RESPONSE=$(curl -s \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{
+              "type": "knowledge",
+              "title": "AarHen History Test",
+              "content": "This memory is created to test AarHen memory history.",
+              "category": "system-test",
+              "source": "github-actions",
+              "importance": "low",
+              "confidence": 0.9
+            }' \
+            http://127.0.0.1:3000/memory/remember)
+
+          echo ""
+          echo "Memory response:"
+          echo "$RESPONSE"
+
+          MEMORY_ID=$(echo "$RESPONSE" | node -e "
+            let data = '';
+
+            process.stdin.on(
+              'data',
+              chunk => data += chunk
+            );
+
+            process.stdin.on(
+              'end',
+              () => {
+
+                try {
+
+                  const json =
+                    JSON.parse(data);
+
+                  const id =
+                    json.memoryId ||
+                    (json.memory &&
+                     json.memory.id) ||
+                    '';
+
+                  process.stdout.write(
+                    String(id)
+                  );
+
+                } catch (error) {
+
+                  process.stdout.write('');
+
+                }
+
+              }
+            );
+          ")
+
+          if [ -z "$MEMORY_ID" ]
+          then
+
+            echo ""
+            echo "ERROR: Memory ID was not returned."
+
+            exit 1
+
+          fi
+
+          echo ""
+          echo "Memory ID:"
+          echo "$MEMORY_ID"
+
+          echo "MEMORY_ID=$MEMORY_ID" >> "$GITHUB_ENV"
+
+
+      # ======================================================
       # MEMORY HISTORY
       # ======================================================
 
@@ -246,10 +347,26 @@ jobs:
           echo "Testing memory history..."
 
           curl -f \
-            http://127.0.0.1:3000/memory-history
+            "http://127.0.0.1:3000/memory-history?memoryId=$MEMORY_ID"
 
           echo ""
           echo "Memory history OK."
+
+
+      # ======================================================
+      # MEMORY HISTORY STATUS
+      # ======================================================
+
+      - name: Test memory history status
+        run: |
+
+          echo "Testing memory history status..."
+
+          curl -f \
+            http://127.0.0.1:3000/memory-history-status
+
+          echo ""
+          echo "Memory history status OK."
 
 
       # ======================================================
@@ -282,7 +399,9 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{
               "input": "What is vehicle finance?",
-              "remember": false
+              "context": {
+                "remember": false
+              }
             }' \
             http://127.0.0.1:3000/ask
 
@@ -306,9 +425,7 @@ jobs:
               "title": "AarHen CI Test Knowledge",
               "content": "AarHen automated CI test knowledge record.",
               "category": "system-test",
-              "source": "github-actions",
-              "approved": true,
-              "confidence": 0.9
+              "source": "github-actions"
             }' \
             http://127.0.0.1:3000/learn
 
@@ -317,7 +434,71 @@ jobs:
 
 
       # ======================================================
-      # FEEDBACK ENDPOINT
+      # MEMORY SEARCH
+      # ======================================================
+
+      - name: Test memory search
+        run: |
+
+          echo "Testing memory search..."
+
+          curl -f \
+            "http://127.0.0.1:3000/memory/search?q=AarHen&limit=10"
+
+          echo ""
+          echo "Memory search OK."
+
+
+      # ======================================================
+      # KNOWLEDGE SEARCH
+      # ======================================================
+
+      - name: Test knowledge search
+        run: |
+
+          echo "Testing knowledge search..."
+
+          curl -f \
+            "http://127.0.0.1:3000/memory/knowledge?q=AarHen&limit=10"
+
+          echo ""
+          echo "Knowledge search OK."
+
+
+      # ======================================================
+      # VERIFIED MEMORY
+      # ======================================================
+
+      - name: Test verified memory
+        run: |
+
+          echo "Testing verified memory..."
+
+          curl -f \
+            "http://127.0.0.1:3000/memory/verified?limit=10"
+
+          echo ""
+          echo "Verified memory API OK."
+
+
+      # ======================================================
+      # MEMORY CONTROL STATUS
+      # ======================================================
+
+      - name: Test memory control status
+        run: |
+
+          echo "Testing memory control status..."
+
+          curl -f \
+            http://127.0.0.1:3000/memory/control-status
+
+          echo ""
+          echo "Memory control status OK."
+
+
+      # ======================================================
+      # FEEDBACK
       # ======================================================
 
       - name: Test feedback endpoint
@@ -328,50 +509,58 @@ jobs:
           curl -f \
             -X POST \
             -H "Content-Type: application/json" \
-            -d '{
-              "memoryId": "test-memory",
-              "helpful": true
-            }' \
-            http://127.0.0.1:3000/feedback || true
+            -d "{
+              \"memoryId\": \"$MEMORY_ID\",
+              \"feedback\": \"Automated GitHub test feedback\",
+              \"helpful\": true
+            }" \
+            http://127.0.0.1:3000/feedback
 
           echo ""
-          echo "Feedback endpoint checked."
+          echo "Feedback endpoint OK."
 
 
       # ======================================================
-      # FINAL SERVER STATUS
+      # FINAL STATUS
       # ======================================================
 
-      - name: Final server status
+      - name: Final AarHen status
         run: |
 
           echo ""
-          echo "======================================"
-          echo "AARHEN SERVER TEST COMPLETE"
-          echo "======================================"
+          echo "=============================================="
+          echo "        AARHEN CORE V5 SERVER TEST"
+          echo "                 COMPLETE"
+          echo "=============================================="
 
           echo ""
-          echo "Server is running successfully."
+          echo "Server startup              ✅"
+          echo "Root API                    ✅"
+          echo "Learning Status             ✅"
+          echo "Memory Status               ✅"
+          echo "Memory Health               ✅"
+          echo "Learning API                ✅"
+          echo "Memory API                  ✅"
+          echo "Memory Creation             ✅"
+          echo "Memory History              ✅"
+          echo "Memory History Status       ✅"
+          echo "Learning History            ✅"
+          echo "Ask API                     ✅"
+          echo "Learn API                   ✅"
+          echo "Memory Search               ✅"
+          echo "Knowledge Search            ✅"
+          echo "Verified Memory             ✅"
+          echo "Memory Control              ✅"
+          echo "Feedback API                ✅"
 
           echo ""
-          echo "Checked:"
-          echo "- Server startup"
-          echo "- Root API"
-          echo "- Learning"
-          echo "- Memory"
-          echo "- Memory health"
-          echo "- Memory history"
-          echo "- Learning history"
-          echo "- Ask endpoint"
-          echo "- Learn endpoint"
-          echo "- Feedback endpoint"
-
-          echo ""
-          echo "======================================"
+          echo "=============================================="
+          echo "       AARHEN SERVER IS OPERATIONAL"
+          echo "=============================================="
 
 
       # ======================================================
-      # SHOW SERVER LOG
+      # SERVER LOG
       # ======================================================
 
       - name: Show server log
@@ -379,9 +568,9 @@ jobs:
         run: |
 
           echo ""
-          echo "======================================"
-          echo "AARHEN SERVER LOG"
-          echo "======================================"
+          echo "=============================================="
+          echo "             AARHEN SERVER LOG"
+          echo "=============================================="
 
           cat server.log || true
 
