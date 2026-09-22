@@ -2,7 +2,7 @@
 // AARHEN CORE V5
 // ADVANCED WEB RESEARCH ENGINE
 // ============================================================
-// VERSION: 5.3.0
+// VERSION: 5.4.0
 // FEATURES:
 // - Web Research Result Processing
 // - Source Validation
@@ -19,6 +19,10 @@
 // - Source Freshness Scoring
 // - Authority-Aware Research Confidence
 // - Verified Learning
+// - Claim Provenance
+// - Evidence Traceability
+// - Source-to-Claim Linking
+// - Claim Provenance Summary
 // ============================================================
 
 const verification =
@@ -32,7 +36,7 @@ const learning =
 // CONSTANTS
 // ============================================================
 
-const RESEARCH_VERSION = "5.3.0";
+const RESEARCH_VERSION = "5.4.0";
 
 const MIN_VERIFIED_SOURCES = 2;
 
@@ -248,6 +252,12 @@ function createResearchRequest({
             true,
 
         freshnessScoring:
+            true,
+
+        claimProvenance:
+            true,
+
+        evidenceTraceability:
             true,
 
         verified:
@@ -497,10 +507,6 @@ function classifySourceAuthority(
             .toLowerCase();
 
 
-    // --------------------------------------------------------
-    // Government
-    // --------------------------------------------------------
-
     if (
         domain.endsWith(".gov") ||
         domain.endsWith(".gov.in") ||
@@ -523,10 +529,6 @@ function classifySourceAuthority(
     }
 
 
-    // --------------------------------------------------------
-    // Official organization
-    // --------------------------------------------------------
-
     if (
         /\bofficial\b/.test(combined) ||
         /\bofficial website\b/.test(combined) ||
@@ -546,10 +548,6 @@ function classifySourceAuthority(
         };
     }
 
-
-    // --------------------------------------------------------
-    // Educational
-    // --------------------------------------------------------
 
     if (
         domain.endsWith(".edu") ||
@@ -573,10 +571,6 @@ function classifySourceAuthority(
     }
 
 
-    // --------------------------------------------------------
-    // Research
-    // --------------------------------------------------------
-
     if (
         /\bresearch\b/.test(combined) ||
         /\bjournal\b/.test(combined) ||
@@ -599,34 +593,19 @@ function classifySourceAuthority(
     }
 
 
-    // --------------------------------------------------------
-    // Major news
-    // --------------------------------------------------------
-
     const majorNewsDomains = [
 
         "reuters.com",
-
         "bbc.com",
-
         "bbc.co.uk",
-
         "apnews.com",
-
         "theguardian.com",
-
         "nytimes.com",
-
         "wsj.com",
-
         "ft.com",
-
         "bloomberg.com",
-
         "economist.com",
-
         "aljazeera.com",
-
         "cnn.com"
     ];
 
@@ -655,10 +634,6 @@ function classifySourceAuthority(
     }
 
 
-    // --------------------------------------------------------
-    // Established organization signals
-    // --------------------------------------------------------
-
     if (
         /\bassociation\b/.test(combined) ||
         /\bfoundation\b/.test(combined) ||
@@ -680,10 +655,6 @@ function classifySourceAuthority(
         };
     }
 
-
-    // --------------------------------------------------------
-    // General
-    // --------------------------------------------------------
 
     if (domain) {
 
@@ -896,10 +867,6 @@ function calculateSourceQuality({
 
             : 0.50;
 
-
-    // --------------------------------------------------------
-    // Quality formula
-    // --------------------------------------------------------
 
     const quality =
         (
@@ -1152,39 +1119,22 @@ function calculateSourceSimilarity(
 const CONFLICT_PATTERNS = [
 
     /\bnot\b/i,
-
     /\bno\b/i,
-
     /\bnever\b/i,
-
     /\bfalse\b/i,
-
     /\bincorrect\b/i,
-
     /\bwrong\b/i,
-
     /\bdenied\b/i,
-
     /\bdenies\b/i,
-
     /\brefutes\b/i,
-
     /\brefuted\b/i,
-
     /\bcontrary\b/i,
-
     /\bunlike\b/i,
-
     /\bdifferent\b/i,
-
     /\bdispute\b/i,
-
     /\bdisputed\b/i,
-
     /\bcontroversial\b/i,
-
     /\bconflict\b/i,
-
     /\bconflicting\b/i
 ];
 
@@ -1432,13 +1382,9 @@ function extractClaims({
     const candidates = [];
 
 
-    const summarySentences =
-        splitSentences(
-            cleanSummary
-        );
-
-
-    summarySentences.forEach(
+    splitSentences(
+        cleanSummary
+    ).forEach(
         sentence => {
 
             if (
@@ -1453,7 +1399,10 @@ function extractClaims({
                         sentence,
 
                     origin:
-                        "summary"
+                        "summary",
+
+                    sourceIndex:
+                        null
                 });
             }
         }
@@ -1471,13 +1420,9 @@ function extractClaims({
                     source
                 );
 
-            const sentences =
-                splitSentences(
-                    sourceText
-                );
-
-
-            sentences
+            splitSentences(
+                sourceText
+            )
                 .slice(0, 10)
                 .forEach(
                     sentence => {
@@ -1558,8 +1503,7 @@ function extractClaims({
                     candidate.origin,
 
                 sourceIndex:
-                    candidate.sourceIndex ??
-                    null
+                    candidate.sourceIndex
             });
         }
     );
@@ -1690,10 +1634,6 @@ function mapClaimEvidence(
             }
 
 
-            // ------------------------------------------------
-            // Quality-adjusted evidence
-            // ------------------------------------------------
-
             const evidenceScore =
                 clamp(
                     (
@@ -1727,6 +1667,12 @@ function mapClaimEvidence(
 
             evidence.push({
 
+                evidenceId:
+                    `${claim.id}-${source.sourceId}`,
+
+                claimId:
+                    claim.id,
+
                 sourceId:
                     source.sourceId,
 
@@ -1735,6 +1681,9 @@ function mapClaimEvidence(
 
                 url:
                     source.url,
+
+                publisher:
+                    source.publisher,
 
                 relationship,
 
@@ -1776,6 +1725,383 @@ function mapClaimEvidence(
 
 
     return evidence;
+}
+
+
+// ============================================================
+// BUILD CLAIM PROVENANCE
+// ============================================================
+
+function buildClaimProvenance(
+    claim = {},
+    evidence = []
+) {
+
+    const supporting =
+        evidence.filter(
+            item =>
+                item.relationship ===
+                "supporting"
+        );
+
+
+    const conflicting =
+        evidence.filter(
+            item =>
+                item.relationship ===
+                "conflicting"
+        );
+
+
+    const neutral =
+        evidence.filter(
+            item =>
+                item.relationship ===
+                "neutral"
+        );
+
+
+    const supportingSources =
+        supporting.map(
+            item => ({
+
+                sourceId:
+                    item.sourceId,
+
+                title:
+                    item.title,
+
+                url:
+                    item.url,
+
+                publisher:
+                    item.publisher || "",
+
+                evidenceId:
+                    item.evidenceId,
+
+                evidenceScore:
+                    item.evidenceScore,
+
+                similarity:
+                    item.similarity,
+
+                sourceQuality:
+                    item.sourceQuality,
+
+                sourceQualityLevel:
+                    item.sourceQualityLevel,
+
+                authority:
+                    item.authority,
+
+                freshness:
+                    item.freshness
+            })
+        );
+
+
+    const conflictingSources =
+        conflicting.map(
+            item => ({
+
+                sourceId:
+                    item.sourceId,
+
+                title:
+                    item.title,
+
+                url:
+                    item.url,
+
+                publisher:
+                    item.publisher || "",
+
+                evidenceId:
+                    item.evidenceId,
+
+                evidenceScore:
+                    item.evidenceScore,
+
+                similarity:
+                    item.similarity,
+
+                sourceQuality:
+                    item.sourceQuality,
+
+                authority:
+                    item.authority,
+
+                freshness:
+                    item.freshness
+            })
+        );
+
+
+    const neutralSources =
+        neutral.map(
+            item => ({
+
+                sourceId:
+                    item.sourceId,
+
+                title:
+                    item.title,
+
+                url:
+                    item.url,
+
+                evidenceId:
+                    item.evidenceId
+            })
+        );
+
+
+    const strongestEvidence =
+        supporting.length > 0
+
+            ? [...supporting]
+                .sort(
+                    (
+                        a,
+                        b
+                    ) =>
+                        b.evidenceScore -
+                        a.evidenceScore
+                )[0]
+
+            : null;
+
+
+    return {
+
+        claimId:
+            claim.id,
+
+        claim:
+            claim.claim,
+
+        provenanceStatus:
+
+            conflicting.length > 0
+
+                ? "conflicting"
+
+                : supporting.length > 0
+
+                    ? "supported"
+
+                    : "unproven",
+
+        supportingSources,
+
+        conflictingSources,
+
+        neutralSources,
+
+        supportingSourceCount:
+            supportingSources.length,
+
+        conflictingSourceCount:
+            conflictingSources.length,
+
+        evidenceCount:
+            evidence.length,
+
+        strongestEvidence:
+            strongestEvidence
+                ? {
+
+                    evidenceId:
+                        strongestEvidence.evidenceId,
+
+                    sourceId:
+                        strongestEvidence.sourceId,
+
+                    title:
+                        strongestEvidence.title,
+
+                    url:
+                        strongestEvidence.url,
+
+                    evidenceScore:
+                        strongestEvidence.evidenceScore,
+
+                    sourceQuality:
+                        strongestEvidence.sourceQuality,
+
+                    authority:
+                        strongestEvidence.authority,
+
+                    freshness:
+                        strongestEvidence.freshness
+                }
+                : null
+    };
+}
+
+
+// ============================================================
+// BUILD GLOBAL PROVENANCE INDEX
+// ============================================================
+
+function buildProvenanceIndex(
+    evidenceMapping = {}
+) {
+
+    if (
+        !evidenceMapping ||
+        !Array.isArray(
+            evidenceMapping.claims
+        )
+    ) {
+
+        return {
+
+            success: false,
+
+            claimCount:
+                0,
+
+            sourceCount:
+                0,
+
+            claims: [],
+
+            sourceUsage: []
+        };
+    }
+
+
+    const sourceMap =
+        new Map();
+
+
+    const claims =
+        evidenceMapping.claims.map(
+            claim => {
+
+                const provenance =
+                    claim.provenance ||
+                    buildClaimProvenance(
+                        claim,
+                        claim.evidence || []
+                    );
+
+
+                (
+                    claim.evidence ||
+                    []
+                ).forEach(
+                    evidence => {
+
+                        if (
+                            !sourceMap.has(
+                                evidence.sourceId
+                            )
+                        ) {
+
+                            sourceMap.set(
+                                evidence.sourceId,
+                                {
+
+                                    sourceId:
+                                        evidence.sourceId,
+
+                                    title:
+                                        evidence.title,
+
+                                    url:
+                                        evidence.url,
+
+                                    claimIds:
+                                        [],
+
+                                    evidenceCount:
+                                        0,
+
+                                    supportingClaims:
+                                        0,
+
+                                    conflictingClaims:
+                                        0
+                                }
+                            );
+                        }
+
+
+                        const sourceRecord =
+                            sourceMap.get(
+                                evidence.sourceId
+                            );
+
+
+                        sourceRecord.evidenceCount++;
+
+
+                        if (
+                            !sourceRecord.claimIds.includes(
+                                claim.id
+                            )
+                        ) {
+
+                            sourceRecord.claimIds.push(
+                                claim.id
+                            );
+                        }
+
+
+                        if (
+                            evidence.relationship ===
+                            "supporting"
+                        ) {
+
+                            sourceRecord.supportingClaims++;
+
+                        } else if (
+                            evidence.relationship ===
+                            "conflicting"
+                        ) {
+
+                            sourceRecord.conflictingClaims++;
+                        }
+                    }
+                );
+
+
+                return {
+
+                    ...claim,
+
+                    provenance
+                };
+            }
+        );
+
+
+    const sourceUsage =
+        Array.from(
+            sourceMap.values()
+        );
+
+
+    return {
+
+        success: true,
+
+        claimCount:
+            claims.length,
+
+        sourceCount:
+            sourceUsage.length,
+
+        claims,
+
+        sourceUsage,
+
+        status:
+            "provenance-index-built"
+    };
 }
 
 
@@ -1838,20 +2164,12 @@ function calculateClaimConfidence(
     let score = 0;
 
 
-    // --------------------------------------------------------
-    // Supporting evidence
-    // --------------------------------------------------------
-
     score +=
         Math.min(
             0.40,
             supporting.length * 0.15
         );
 
-
-    // --------------------------------------------------------
-    // High quality sources
-    // --------------------------------------------------------
 
     score +=
         Math.min(
@@ -1860,10 +2178,6 @@ function calculateClaimConfidence(
         );
 
 
-    // --------------------------------------------------------
-    // Evidence strength
-    // --------------------------------------------------------
-
     score +=
         Math.min(
             0.20,
@@ -1871,10 +2185,6 @@ function calculateClaimConfidence(
             mediumEvidence.length * 0.04
         );
 
-
-    // --------------------------------------------------------
-    // Average evidence score
-    // --------------------------------------------------------
 
     const averageEvidenceScore =
         supporting.length > 0
@@ -1897,10 +2207,6 @@ function calculateClaimConfidence(
         averageEvidenceScore *
         0.20;
 
-
-    // --------------------------------------------------------
-    // Conflict penalty
-    // --------------------------------------------------------
 
     score -=
         Math.min(
@@ -1990,7 +2296,7 @@ function buildEvidenceMapping({
                 }
 
 
-                return {
+                const mappedClaim = {
 
                     id:
                         claim.id,
@@ -2022,6 +2328,16 @@ function buildEvidenceMapping({
 
                     status
                 };
+
+
+                mappedClaim.provenance =
+                    buildClaimProvenance(
+                        mappedClaim,
+                        evidence
+                    );
+
+
+                return mappedClaim;
             }
         );
 
@@ -2070,7 +2386,7 @@ function buildEvidenceMapping({
             : 0;
 
 
-    return {
+    const mapping = {
 
         success: true,
 
@@ -2109,6 +2425,20 @@ function buildEvidenceMapping({
                     ? "claims-supported"
 
                     : "claims-require-review"
+    };
+
+
+    const provenanceIndex =
+        buildProvenanceIndex(
+            mapping
+        );
+
+
+    return {
+
+        ...mapping,
+
+        provenanceIndex
     };
 }
 
@@ -2220,7 +2550,6 @@ function compareSourcePair(
             sourceB.url,
 
         similarity:
-
             Number(
                 similarity.toFixed(3)
             ),
@@ -2413,6 +2742,9 @@ function createResearchResult({
 
         evidenceMapping,
 
+        provenanceIndex:
+            evidenceMapping.provenanceIndex,
+
         claimCount:
             evidenceMapping.claimCount,
 
@@ -2545,6 +2877,9 @@ function buildResearchContext(
 
         evidenceMapping,
 
+        provenanceIndex:
+            evidenceMapping.provenanceIndex,
+
         claimCount:
             evidenceMapping.claimCount,
 
@@ -2651,10 +2986,6 @@ function calculateResearchConfidence({
         );
 
 
-    // --------------------------------------------------------
-    // Source conflict penalty
-    // --------------------------------------------------------
-
     if (
         comparisonResult.conflictDetected
     ) {
@@ -2677,10 +3008,6 @@ function calculateResearchConfidence({
             penalty;
     }
 
-
-    // --------------------------------------------------------
-    // Claim conflict penalty
-    // --------------------------------------------------------
 
     if (
         evidenceResult.conflictDetected
@@ -2705,10 +3032,6 @@ function calculateResearchConfidence({
     }
 
 
-    // --------------------------------------------------------
-    // Evidence support bonus
-    // --------------------------------------------------------
-
     if (
         evidenceResult.supportedClaims > 0 &&
         evidenceResult.averageConfidence >= 0.70
@@ -2721,10 +3044,6 @@ function calculateResearchConfidence({
             );
     }
 
-
-    // --------------------------------------------------------
-    // Source quality adjustment
-    // --------------------------------------------------------
 
     if (
         qualityResult &&
@@ -2913,6 +3232,9 @@ function verifyResearch({
 
         evidenceMapping,
 
+        provenanceIndex:
+            evidenceMapping.provenanceIndex,
+
         claimCount:
             evidenceMapping.claimCount,
 
@@ -3096,11 +3418,32 @@ function buildLearningContent({
                                 .join(", ");
 
 
+                        const provenanceStatus =
+                            claim.provenance
+                                ? claim.provenance
+                                    .provenanceStatus
+                                : "unknown";
+
+
+                        const strongestSource =
+                            claim.provenance &&
+                            claim.provenance
+                                .strongestEvidence
+
+                                ? claim.provenance
+                                    .strongestEvidence
+                                    .sourceId
+
+                                : "none";
+
+
                         return (
                             `${claim.id} | ` +
                             `${claim.status} | ` +
+                            `provenance=${provenanceStatus} | ` +
                             `confidence=${claim.confidence} | ` +
                             `sources=${sourceIds || "none"} | ` +
+                            `strongest=${strongestSource} | ` +
                             `${claim.claim}`
                         );
                     }
@@ -3207,29 +3550,17 @@ function learnVerifiedResearch({
     }
 
 
-    // --------------------------------------------------------
-    // SOURCE QUALITY
-    // --------------------------------------------------------
-
     const sourceQuality =
         scoreSources(
             validSources
         );
 
 
-    // --------------------------------------------------------
-    // SOURCE COMPARISON
-    // --------------------------------------------------------
-
     const comparison =
         compareSources(
             validSources
         );
 
-
-    // --------------------------------------------------------
-    // EVIDENCE MAPPING
-    // --------------------------------------------------------
 
     const evidenceMapping =
         buildEvidenceMapping({
@@ -3244,10 +3575,6 @@ function learnVerifiedResearch({
                 validSources
         });
 
-
-    // --------------------------------------------------------
-    // RESEARCH RESULT
-    // --------------------------------------------------------
 
     const researchResult =
         createResearchResult({
@@ -3266,10 +3593,6 @@ function learnVerifiedResearch({
         });
 
 
-    // --------------------------------------------------------
-    // FINAL CONFIDENCE
-    // --------------------------------------------------------
-
     const finalConfidence =
         calculateResearchConfidence({
 
@@ -3285,10 +3608,6 @@ function learnVerifiedResearch({
             sourceQuality
         });
 
-
-    // --------------------------------------------------------
-    // VERIFY
-    // --------------------------------------------------------
 
     const verificationResult =
         verifyResearch({
@@ -3312,10 +3631,6 @@ function learnVerifiedResearch({
         });
 
 
-    // --------------------------------------------------------
-    // DO NOT LEARN UNVERIFIED RESEARCH
-    // --------------------------------------------------------
-
     if (
         !verificationResult.verified
     ) {
@@ -3335,6 +3650,9 @@ function learnVerifiedResearch({
             comparison,
 
             evidenceMapping,
+
+            provenanceIndex:
+                evidenceMapping.provenanceIndex,
 
             status:
                 (
@@ -3359,10 +3677,6 @@ function learnVerifiedResearch({
     }
 
 
-    // --------------------------------------------------------
-    // BUILD KNOWLEDGE
-    // --------------------------------------------------------
-
     const content =
         buildLearningContent({
 
@@ -3379,10 +3693,6 @@ function learnVerifiedResearch({
             sourceQuality
         });
 
-
-    // --------------------------------------------------------
-    // LEARN
-    // --------------------------------------------------------
 
     const learned =
         learning.learnVerified({
@@ -3431,6 +3741,9 @@ function learnVerifiedResearch({
 
             evidenceMapping,
 
+            provenanceIndex:
+                evidenceMapping.provenanceIndex,
+
             learning:
                 learned,
 
@@ -3439,10 +3752,6 @@ function learnVerifiedResearch({
         };
     }
 
-
-    // --------------------------------------------------------
-    // FINAL RESULT
-    // --------------------------------------------------------
 
     return {
 
@@ -3459,6 +3768,9 @@ function learnVerifiedResearch({
         comparison,
 
         evidenceMapping,
+
+        provenanceIndex:
+            evidenceMapping.provenanceIndex,
 
         learning:
             learned,
@@ -3604,6 +3916,18 @@ function getResearchStatus() {
         qualityAwareConfidence:
             true,
 
+        claimProvenance:
+            true,
+
+        evidenceTraceability:
+            true,
+
+        sourceToClaimLinking:
+            true,
+
+        provenanceIndex:
+            true,
+
         minimumVerifiedSources:
             MIN_VERIFIED_SOURCES,
 
@@ -3630,6 +3954,10 @@ function getResearchStatus() {
             "extract-claims",
 
             "map-evidence",
+
+            "build-claim-provenance",
+
+            "build-provenance-index",
 
             "detect-conflicts",
 
@@ -3682,6 +4010,10 @@ module.exports = {
     extractClaims,
 
     mapClaimEvidence,
+
+    buildClaimProvenance,
+
+    buildProvenanceIndex,
 
     calculateClaimConfidence,
 
