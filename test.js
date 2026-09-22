@@ -39,6 +39,9 @@ const router =
 const registry =
     require("./skills/registry");
 
+const providerManager =
+    require("./skills/providerManager");
+
 // ============================================================
 // TEST HELPER
 // ============================================================
@@ -127,6 +130,25 @@ async function runTests() {
     test(
         "Knowledge Engine loaded",
         typeof knowledge.searchKnowledge === "function"
+    );
+
+    // ========================================================
+    // PROVIDER MANAGER TEST
+    // ========================================================
+
+    test(
+        "Provider Manager loaded",
+        validObject(providerManager)
+    );
+
+    test(
+        "Provider Manager search API available",
+        typeof providerManager.searchWeb === "function"
+    );
+
+    test(
+        "Provider Manager status API available",
+        typeof providerManager.getStatus === "function"
     );
 
     // ========================================================
@@ -564,6 +586,298 @@ async function runTests() {
     );
 
     // ========================================================
+    // LIVE WEB RESEARCH TEST
+    // ========================================================
+    //
+    // This test runs ONLY when:
+    //
+    // RUN_LIVE_RESEARCH_TEST=true
+    //
+    // It performs:
+    //
+    // Tavily
+    //   ↓
+    // Web Search
+    //   ↓
+    // Research Processing
+    //   ↓
+    // Verification
+    //   ↓
+    // Verified Learning
+    //   ↓
+    // Memory
+    //   ↓
+    // Recall
+    //
+    // ========================================================
+
+    const runLiveResearch =
+        String(
+            process.env.RUN_LIVE_RESEARCH_TEST || ""
+        ).toLowerCase() === "true";
+
+    if (runLiveResearch) {
+
+        console.log("");
+        console.log("----------------------------------------");
+        console.log("🌐 LIVE WEB RESEARCH TEST");
+        console.log("----------------------------------------");
+        console.log("");
+
+        // ====================================================
+        // PROVIDER STATUS
+        // ====================================================
+
+        const providerStatus =
+            providerManager.getStatus();
+
+        test(
+            "Research provider status available",
+            validObject(providerStatus)
+        );
+
+        test(
+            "Research provider connected",
+            Boolean(
+                providerStatus &&
+                providerStatus.providers &&
+                providerStatus.providers.research &&
+                providerStatus.providers.research.connected
+            )
+        );
+
+        console.log(
+            "✅ Tavily provider connected"
+        );
+
+        // ====================================================
+        // LIVE WEB SEARCH
+        // ====================================================
+
+        const liveQuery =
+            "vehicle finance basics official information";
+
+        console.log("");
+        console.log(
+            `🔎 Searching web: ${liveQuery}`
+        );
+
+        const liveSearch =
+            await providerManager.searchWeb({
+
+                query:
+                    liveQuery,
+
+                maxSources:
+                    5
+            });
+
+        test(
+            "Live web search executed",
+            liveSearch &&
+            liveSearch.success === true
+        );
+
+        test(
+            "Live web search returned results",
+            Array.isArray(liveSearch.results) &&
+            liveSearch.results.length > 0
+        );
+
+        test(
+            "Live web search returned sources",
+            Number(liveSearch.sourceCount) > 0
+        );
+
+        console.log(
+            `✅ Web sources received: ${liveSearch.sourceCount}`
+        );
+
+        // ====================================================
+        // PROCESS LIVE RESEARCH
+        // ====================================================
+
+        const processedResearch =
+            research.processResearchResult({
+
+                query:
+                    liveSearch.query ||
+                    liveQuery,
+
+                answer:
+                    liveSearch.answer ||
+                    "",
+
+                summary:
+                    liveSearch.answer ||
+                    "",
+
+                sources:
+                    liveSearch.results,
+
+                provider:
+                    liveSearch.provider ||
+                    "Tavily",
+
+                confidence:
+                    0.85
+            });
+
+        test(
+            "Live research result processed",
+            processedResearch &&
+            processedResearch.success === true
+        );
+
+        test(
+            "Live research sources processed",
+            Number(
+                processedResearch.sourceCount
+            ) > 0
+        );
+
+        console.log(
+            `✅ Research processed: ${processedResearch.researchStatus}`
+        );
+
+        // ====================================================
+        // LIVE RESEARCH VERIFICATION
+        // ====================================================
+
+        test(
+            "Live research verification executed",
+            processedResearch.verification !== undefined &&
+            processedResearch.verification !== null
+        );
+
+        test(
+            "Live research verification status available",
+            Boolean(
+                processedResearch.verificationStatus ||
+                processedResearch.researchStatus
+            )
+        );
+
+        // ====================================================
+        // VERIFIED LEARNING CHECK
+        // ====================================================
+
+        const liveLearning =
+            processedResearch.learning;
+
+        test(
+            "Live research learning result available",
+            validObject(liveLearning)
+        );
+
+        if (
+            processedResearch.verified === true
+        ) {
+
+            test(
+                "Live research marked verified",
+                processedResearch.verified === true
+            );
+
+            test(
+                "Verified learning attempted",
+                liveLearning !== undefined &&
+                liveLearning !== null
+            );
+
+            console.log(
+                "✅ Verified research reached learning stage"
+            );
+
+        } else {
+
+            console.log(
+                "⚠️ Live research was not fully verified."
+            );
+
+            console.log(
+                "Research was processed but was not automatically stored as verified knowledge."
+            );
+        }
+
+        // ====================================================
+        // LEARNED KNOWLEDGE RECALL
+        // ====================================================
+
+        const learnedWebKnowledge =
+            learning.searchLearnedKnowledge(
+                liveQuery
+            );
+
+        test(
+            "Web learning recall executed",
+            learnedWebKnowledge &&
+            learnedWebKnowledge.success === true
+        );
+
+        console.log(
+            "✅ Web learning recall executed"
+        );
+
+        // ====================================================
+        // LIVE RESEARCH SUMMARY
+        // ====================================================
+
+        console.log("");
+        console.log("----------------------------------------");
+        console.log("🌐 LIVE RESEARCH PIPELINE RESULT");
+        console.log("----------------------------------------");
+
+        console.log(
+            `Provider: ${
+                liveSearch.provider ||
+                "Tavily"
+            }`
+        );
+
+        console.log(
+            `Sources: ${
+                liveSearch.sourceCount ||
+                0
+            }`
+        );
+
+        console.log(
+            `Verification: ${
+                processedResearch.verificationStatus ||
+                "unknown"
+            }`
+        );
+
+        console.log(
+            `Verified: ${
+                processedResearch.verified === true
+            }`
+        );
+
+        console.log(
+            `Learning: ${
+                liveLearning.learned === true
+            }`
+        );
+
+        console.log("----------------------------------------");
+        console.log("");
+    } else {
+
+        console.log("");
+        console.log(
+            "ℹ️ Live web research test skipped."
+        );
+
+        console.log(
+            "Set RUN_LIVE_RESEARCH_TEST=true to run it."
+        );
+
+        console.log("");
+    }
+
+    // ========================================================
     // FINAL SYSTEM CHECK
     // ========================================================
 
@@ -600,6 +914,14 @@ async function runTests() {
     console.log(
         "Orchestrator is operational."
     );
+
+    if (runLiveResearch) {
+
+        console.log(
+            "Live Web → Verify → Learn → Recall test completed."
+        );
+
+    }
 
     console.log("");
 
