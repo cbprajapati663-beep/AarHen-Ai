@@ -24,6 +24,9 @@ const responseEngine =
 const memoryManager =
     require("./memoryManager");
 
+const researchApi =
+    require("./researchApi");
+
 // ============================================================
 // SELECT SKILL
 // ============================================================
@@ -52,6 +55,359 @@ function selectSkill(input) {
         status:
             result.status
     };
+}
+
+// ============================================================
+// DETECT WHETHER LIVE RESEARCH IS REQUIRED
+// ============================================================
+
+function shouldResearch(
+    request,
+    intentResult = {},
+    routing = {},
+    context = {}
+) {
+
+    // --------------------------------------------------------
+    // Explicit research request from caller
+    // --------------------------------------------------------
+
+    if (
+        context.research === true
+    ) {
+
+        return {
+            required: true,
+            reason:
+                "Live research explicitly requested by context."
+        };
+    }
+
+    // --------------------------------------------------------
+    // Explicitly disable research
+    // --------------------------------------------------------
+
+    if (
+        context.research === false
+    ) {
+
+        return {
+            required: false,
+            reason:
+                "Live research explicitly disabled by context."
+        };
+    }
+
+    // --------------------------------------------------------
+    // Intent category
+    // --------------------------------------------------------
+
+    const category =
+        String(
+            intentResult.category || ""
+        )
+            .toLowerCase();
+
+    const intentName =
+        String(
+            intentResult.intent || ""
+        )
+            .toLowerCase();
+
+    if (
+        category === "research"
+    ) {
+
+        return {
+            required: true,
+            reason:
+                "Intent category requires web research."
+        };
+    }
+
+    // --------------------------------------------------------
+    // Selected research skill
+    // --------------------------------------------------------
+
+    const selectedSkill =
+        routing
+            ?.selectedSkill;
+
+    const skillCategory =
+        String(
+            selectedSkill
+                ?.category || ""
+        )
+            .toLowerCase();
+
+    const skillName =
+        String(
+            selectedSkill
+                ?.name ||
+            selectedSkill
+                ?.id ||
+            ""
+        )
+            .toLowerCase();
+
+    if (
+        skillCategory === "research" ||
+        skillName.includes("research") ||
+        skillName.includes("web-search") ||
+        skillName.includes("web_search")
+    ) {
+
+        return {
+            required: true,
+            reason:
+                "Research skill selected by router."
+        };
+    }
+
+    // --------------------------------------------------------
+    // Current/fresh information signals
+    // --------------------------------------------------------
+
+    const cleanRequest =
+        String(
+            request || ""
+        )
+            .toLowerCase();
+
+    const researchSignals = [
+
+        "latest",
+
+        "current",
+
+        "currently",
+
+        "today",
+
+        "tonight",
+
+        "this week",
+
+        "this month",
+
+        "recent",
+
+        "recently",
+
+        "news",
+
+        "update",
+
+        "updates",
+
+        "newest",
+
+        "live",
+
+        "real time",
+
+        "realtime",
+
+        "search web",
+
+        "search the web",
+
+        "search internet",
+
+        "search online",
+
+        "look up",
+
+        "lookup",
+
+        "on internet",
+
+        "from internet",
+
+        "from web",
+
+        "online information",
+
+        "latest information"
+    ];
+
+    const matchedSignal =
+        researchSignals.find(
+            signal =>
+                cleanRequest.includes(
+                    signal
+                )
+        );
+
+    if (matchedSignal) {
+
+        return {
+            required: true,
+            reason:
+                `Fresh-web signal detected: ${matchedSignal}.`
+        };
+    }
+
+    // --------------------------------------------------------
+    // Research intent keywords
+    // --------------------------------------------------------
+
+    const researchKeywords = [
+
+        "research",
+
+        "web research",
+
+        "web search",
+
+        "internet search",
+
+        "online search"
+    ];
+
+    const matchedKeyword =
+        researchKeywords.find(
+            keyword =>
+                cleanRequest.includes(
+                    keyword
+                )
+        );
+
+    if (matchedKeyword) {
+
+        return {
+            required: true,
+            reason:
+                `Research keyword detected: ${matchedKeyword}.`
+        };
+    }
+
+    // --------------------------------------------------------
+    // Default
+    // --------------------------------------------------------
+
+    return {
+
+        required: false,
+
+        reason:
+            "Live web research not required."
+    };
+}
+
+// ============================================================
+// PERFORM LIVE RESEARCH
+// ============================================================
+
+async function performResearch(
+    request,
+    context = {}
+) {
+
+    const maxSources =
+        Number(
+            context.maxResearchSources
+        ) || 5;
+
+    const language =
+        context.researchLanguage ||
+        "auto";
+
+    try {
+
+        const result =
+            await researchApi.searchWeb({
+
+                query:
+                    request,
+
+                maxSources,
+
+                language
+            });
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            return {
+
+                success: false,
+
+                query:
+                    request,
+
+                error:
+                    result?.error ||
+                    "Live web research failed.",
+
+                status:
+                    result?.status ||
+                    "research-failed",
+
+                research:
+                    null,
+
+                context:
+                    null
+            };
+        }
+
+        return {
+
+            success: true,
+
+            query:
+                request,
+
+            research:
+                result.research,
+
+            context:
+                result.context,
+
+            provider:
+                result.provider,
+
+            sourceCount:
+                result.sourceCount,
+
+            confidence:
+                result.confidence,
+
+            verified:
+                result.verified,
+
+            verificationStatus:
+                result.verificationStatus,
+
+            status:
+                result.status
+        };
+
+    } catch (error) {
+
+        return {
+
+            success: false,
+
+            query:
+                request,
+
+            error:
+                error.message,
+
+            status:
+                "research-error",
+
+            research:
+                null,
+
+            context:
+                null
+        };
+    }
 }
 
 // ============================================================
@@ -636,6 +992,103 @@ async function process(
     }
 
     // --------------------------------------------------------
+    // LIVE WEB RESEARCH DECISION
+    // --------------------------------------------------------
+
+    const researchDecision =
+        shouldResearch(
+
+            request,
+
+            intentResult,
+
+            routing,
+
+            context
+        );
+
+    // --------------------------------------------------------
+    // LIVE WEB RESEARCH
+    // --------------------------------------------------------
+
+    let researchResult = {
+
+        success: true,
+
+        required:
+            false,
+
+        status:
+            "research-not-required",
+
+        research:
+            null,
+
+        context:
+            null,
+
+        reason:
+            researchDecision.reason
+    };
+
+    if (
+        researchDecision.required
+    ) {
+
+        researchResult =
+            await performResearch(
+                request,
+                context
+            );
+
+        researchResult.required =
+            true;
+
+        researchResult.reason =
+            researchDecision.reason;
+
+        // ----------------------------------------------------
+        // If research was explicitly requested and failed,
+        // stop instead of pretending that live data exists.
+        // ----------------------------------------------------
+
+        if (
+            !researchResult.success
+        ) {
+
+            return {
+
+                success: false,
+
+                request,
+
+                brain:
+                    brainResult,
+
+                routing,
+
+                intent:
+                    intentResult,
+
+                research:
+                    researchResult,
+
+                status:
+                    "research-failed",
+
+                error:
+                    researchResult.error,
+
+                message:
+                    "AarHen could not complete the required live web research.",
+
+                timestamp:
+                    new Date().toISOString()
+            };
+        }
+    }
+
+    // --------------------------------------------------------
     // PERMISSION
     // --------------------------------------------------------
 
@@ -674,6 +1127,60 @@ async function process(
     executionContext
         .memoryAction =
             memoryAction;
+
+    // --------------------------------------------------------
+    // RESEARCH CONTEXT INJECTION
+    // --------------------------------------------------------
+
+    executionContext
+        .research = {
+
+            required:
+                researchResult.required,
+
+            reason:
+                researchResult.reason,
+
+            success:
+                researchResult.success,
+
+            status:
+                researchResult.status,
+
+            query:
+                researchResult.query ||
+                request,
+
+            provider:
+                researchResult.provider ||
+                null,
+
+            sourceCount:
+                researchResult.sourceCount ||
+                0,
+
+            confidence:
+                researchResult.confidence ||
+                0,
+
+            verified:
+                Boolean(
+                    researchResult.verified
+                ),
+
+            verificationStatus:
+                researchResult
+                    .verificationStatus ||
+                "not-researched",
+
+            result:
+                researchResult.research ||
+                null,
+
+            context:
+                researchResult.context ||
+                null
+        };
 
     // --------------------------------------------------------
     // MEMORY WRITE
@@ -742,6 +1249,9 @@ async function process(
 
             memoryWrite,
 
+            research:
+                researchResult,
+
             executionContext,
 
             execution:
@@ -806,6 +1316,9 @@ async function process(
         memoryAction,
 
         memoryWrite,
+
+        research:
+            researchResult,
 
         executionContext,
 
@@ -906,6 +1419,10 @@ function getStatus() {
 
             "Engine Handlers",
 
+            "Research API",
+
+            "Research Engine",
+
             "Research Provider",
 
             "Tavily Web Search",
@@ -925,7 +1442,13 @@ function getStatus() {
 
             "Memory Decision",
 
-            "Memory Write",
+            "Live Research Decision",
+
+            "Live Web Research",
+
+            "Source Collection",
+
+            "Research Context Injection",
 
             "RAG Retrieval",
 
@@ -937,10 +1460,45 @@ function getStatus() {
 
             "Context Injection",
 
+            "Memory Write",
+
             "Skill Execution",
 
             "Response Generation"
         ],
+
+        researchSystem: {
+
+            enabled:
+                true,
+
+            liveWebSearch:
+                true,
+
+            provider:
+                "Tavily",
+
+            automaticDecision:
+                true,
+
+            explicitResearch:
+                true,
+
+            currentInformationDetection:
+                true,
+
+            sourceCollection:
+                true,
+
+            confidenceTracking:
+                true,
+
+            verificationRequired:
+                true,
+
+            researchFailureProtection:
+                true
+        },
 
         memorySystem: {
 
@@ -988,6 +1546,10 @@ module.exports = {
     orchestrate,
 
     selectSkill,
+
+    shouldResearch,
+
+    performResearch,
 
     determinePermission,
 
