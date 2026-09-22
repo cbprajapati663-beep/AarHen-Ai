@@ -25,6 +25,9 @@ const memoryHistory =
 const memoryApi =
     require("./core/memoryApi");
 
+const researchApi =
+    require("./core/researchApi");
+
 const PORT =
     process.env.PORT || 3000;
 
@@ -253,6 +256,8 @@ const server =
 
                             "web-research",
 
+                            "research-api",
+
                             "knowledge",
 
                             "rag",
@@ -316,6 +321,175 @@ const server =
                             body.input,
                             body.context || {}
                         );
+
+                    sendJSON(
+                        res,
+                        200,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // RESEARCH - LIVE WEB SEARCH
+            // ==================================================
+
+            if (
+                req.method === "POST" &&
+                pathname === "/research"
+            ) {
+
+                try {
+
+                    const body =
+                        await readBody(req);
+
+                    const result =
+                        await researchApi.searchWeb(
+                            body
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // RESEARCH - VERIFY
+            // ==================================================
+
+            if (
+                req.method === "POST" &&
+                pathname === "/research/verify"
+            ) {
+
+                try {
+
+                    const body =
+                        await readBody(req);
+
+                    const result =
+                        researchApi.verify(
+                            body
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // RESEARCH - LEARN VERIFIED
+            // ==================================================
+
+            if (
+                req.method === "POST" &&
+                pathname === "/research/learn"
+            ) {
+
+                try {
+
+                    const body =
+                        await readBody(req);
+
+                    const result =
+                        researchApi.learnVerified(
+                            body
+                        );
+
+                    sendJSON(
+                        res,
+                        result.success
+                            ? 200
+                            : 400,
+                        result
+                    );
+
+                } catch (error) {
+
+                    sendJSON(
+                        res,
+                        500,
+                        {
+                            success: false,
+
+                            error:
+                                error.message
+                        }
+                    );
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // RESEARCH - STATUS
+            // ==================================================
+
+            if (
+                req.method === "GET" &&
+                pathname === "/research/status"
+            ) {
+
+                try {
+
+                    const result =
+                        researchApi.getApiStatus();
 
                     sendJSON(
                         res,
@@ -1394,6 +1568,30 @@ server.listen(
 
         console.log(
             "GET  /learning-status"
+        );
+
+        console.log(
+            "----------------------------------------------"
+        );
+
+        console.log(
+            "RESEARCH ROUTES"
+        );
+
+        console.log(
+            "POST /research"
+        );
+
+        console.log(
+            "POST /research/verify"
+        );
+
+        console.log(
+            "POST /research/learn"
+        );
+
+        console.log(
+            "GET  /research/status"
         );
 
         console.log(
