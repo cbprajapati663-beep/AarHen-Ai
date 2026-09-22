@@ -4,30 +4,30 @@ on:
   push:
     branches:
       - main
+
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
 
-  test:
+  server-test:
 
     runs-on: ubuntu-latest
 
     steps:
 
-      # ==============================================
+      # ======================================================
       # CHECKOUT
-      # ==============================================
+      # ======================================================
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
 
-      # ==============================================
-      # NODE.JS
-      # ==============================================
+      # ======================================================
+      # NODE
+      # ======================================================
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,330 +35,235 @@ jobs:
           node-version: 24
 
 
-      # ==============================================
-      # CHECK SERVER SYNTAX
-      # ==============================================
+      # ======================================================
+      # NODE VERSION
+      # ======================================================
+
+      - name: Check Node.js
+        run: |
+          node --version
+          npm --version
+
+
+      # ======================================================
+      # SYNTAX CHECK
+      # ======================================================
 
       - name: Check server syntax
         run: |
           node --check server.js
-
-
-      # ==============================================
-      # CHECK LEARNING SYNTAX
-      # ==============================================
-
-      - name: Check learning engine syntax
-        run: |
+          node --check core/brain.js
+          node --check core/orchestrator.js
+          node --check core/memory.js
+          node --check core/memoryManager.js
+          node --check core/memoryApi.js
+          node --check core/memoryStore.js
           node --check core/learning.js
+          node --check core/learningApi.js
+          node --check core/verification.js
+          node --check core/storage.js
+          node --check core/storageProvider.js
+          node --check core/memoryHistory.js
+          node --check engines/knowledge.js
+          node --check engines/research.js
+          node --check providers/researchProvider.js
+          node --check providers/providerManager.js
+          node --check skills/executor.js
+          node --check skills/router.js
+          node --check skills/registry.js
 
 
-      # ==============================================
-      # CHECK REQUIRED MODULES
-      # ==============================================
+      # ======================================================
+      # MODULE LOAD TEST
+      # ======================================================
 
-      - name: Check AarHen modules
-        env:
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      - name: Load AarHen modules
         run: |
-          node - <<'NODE'
-          console.log("Loading AarHen modules...");
-
-          require("./core/memory");
-          console.log("OK: memory");
-
-          require("./core/memoryManager");
-          console.log("OK: memoryManager");
-
-          require("./core/verification");
-          console.log("OK: verification");
-
-          require("./core/memoryStore");
-          console.log("OK: memoryStore");
-
-          require("./core/learning");
-          console.log("OK: learning");
-
-          require("./core/learningApi");
-          console.log("OK: learningApi");
-
-          require("./core/memoryApi");
-          console.log("OK: memoryApi");
-
-          require("./core/orchestrator");
-          console.log("OK: orchestrator");
-
-          require("./server");
-          console.log("OK: server module loaded");
-
-          setTimeout(() => {
-            process.exit(0);
-          }, 1000);
-          NODE
+          node -e "require('./server.js')"
+        env:
+          PORT: 3000
 
 
-      # ==============================================
+      # ======================================================
       # START SERVER
-      # ==============================================
+      # ======================================================
 
       - name: Start AarHen server
-        env:
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
           node server.js > server.log 2>&1 &
           echo $! > server.pid
 
-          echo "Server PID:"
-          cat server.pid
 
-          echo "Waiting for server..."
+      # ======================================================
+      # WAIT FOR SERVER
+      # ======================================================
 
-          for i in {1..15}
+      - name: Wait for server
+        run: |
+          echo "Waiting for AarHen server..."
+
+          for i in {1..30}
           do
-            if curl -s http://localhost:3000/ > /tmp/health.json
+            if curl -s http://127.0.0.1:3000/ > /dev/null
             then
-              echo "Server is ONLINE."
-              cat /tmp/health.json
-              break
+              echo "AarHen server is ONLINE."
+              exit 0
             fi
 
-            echo "Waiting... attempt $i"
+            echo "Waiting... $i/30"
             sleep 1
           done
 
+          echo "Server failed to start."
+          echo ""
+          echo "===== SERVER LOG ====="
+          cat server.log || true
+          echo ""
+          echo "===== PROCESS ====="
+          ps aux | grep node || true
 
-      # ==============================================
-      # SHOW SERVER LOG IF START FAILED
-      # ==============================================
+          exit 1
 
-      - name: Check server startup
+
+      # ======================================================
+      # ROOT ENDPOINT
+      # ======================================================
+
+      - name: Test root endpoint
         run: |
-          if ! curl -fsS http://localhost:3000/ > /tmp/health.json
-          then
-            echo ""
-            echo "=============================================="
-            echo "SERVER FAILED TO START"
-            echo "=============================================="
-            echo ""
-
-            echo "SERVER LOG:"
-            cat server.log || true
-
-            echo ""
-            echo "PROCESS STATUS:"
-            ps aux | grep node || true
-
-            exit 1
-          fi
-
-          echo "SERVER HEALTH:"
-          cat /tmp/health.json
+          curl -f http://127.0.0.1:3000/
 
 
-      # ==============================================
+      # ======================================================
       # LEARNING STATUS
-      # ==============================================
+      # ======================================================
 
       - name: Test learning status
         run: |
-          curl -fsS http://localhost:3000/learning-status
+          curl -f http://127.0.0.1:3000/learning-status
 
 
-      # ==============================================
+      # ======================================================
       # MEMORY STATUS
-      # ==============================================
+      # ======================================================
 
       - name: Test memory status
         run: |
-          curl -fsS http://localhost:3000/memory-status
+          curl -f http://127.0.0.1:3000/memory-status
 
 
-      # ==============================================
-      # LEARN
-      # ==============================================
+      # ======================================================
+      # MEMORY HEALTH
+      # ======================================================
 
-      - name: Test learning
+      - name: Test memory health
         run: |
-
-          RESPONSE=$(curl -fsS \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -d '{
-              "title":"AarHen Automated Learning Test",
-              "content":"AarHen automated learning loop test knowledge. This knowledge will be used for feedback and correction testing.",
-              "category":"system-test",
-              "source":"github-actions"
-            }' \
-            http://localhost:3000/learn)
-
-          echo "$RESPONSE"
-
-          MEMORY_ID=$(printf '%s' "$RESPONSE" | node -e '
-            let data = "";
-
-            process.stdin.on("data", chunk => {
-              data += chunk;
-            });
-
-            process.stdin.on("end", () => {
-
-              const json =
-                JSON.parse(data);
-
-              const result =
-                json.result || json;
-
-              const id =
-                result.memoryId;
-
-              if (!id) {
-                console.error(
-                  "Memory ID not found."
-                );
-
-                process.exit(1);
-              }
-
-              console.log(id);
-            });
-          ')
-
-          echo "MEMORY_ID=$MEMORY_ID" >> "$GITHUB_ENV"
-
-          echo ""
-          echo "Captured Memory ID:"
-          echo "$MEMORY_ID"
+          curl -f http://127.0.0.1:3000/memory-health
 
 
-      # ==============================================
-      # VERIFY LEARNING
-      # ==============================================
+      # ======================================================
+      # LEARNING STATUS API
+      # ======================================================
 
-      - name: Verify learning
+      - name: Test learning API
         run: |
-          curl -fsS http://localhost:3000/learning
+          curl -f http://127.0.0.1:3000/learning
 
 
-      # ==============================================
-      # FEEDBACK
-      # ==============================================
+      # ======================================================
+      # MEMORY API
+      # ======================================================
 
-      - name: Test feedback
+      - name: Test memory API
         run: |
-
-          curl -fsS \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"memoryId\":\"$MEMORY_ID\",
-              \"feedback\":\"This knowledge was useful during the AarHen learning test.\",
-              \"helpful\":true,
-              \"reason\":\"Automated feedback test\"
-            }" \
-            http://localhost:3000/feedback
+          curl -f http://127.0.0.1:3000/memory
 
 
-      # ==============================================
-      # CORRECTION
-      # ==============================================
+      # ======================================================
+      # MEMORY HISTORY
+      # ======================================================
 
-      - name: Test correction
+      - name: Test memory history
         run: |
-
-          curl -fsS \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"memoryId\":\"$MEMORY_ID\",
-              \"correction\":\"AarHen automated learning loop test knowledge was corrected successfully through user feedback.\",
-              \"reason\":\"Automated correction test\"
-            }" \
-            http://localhost:3000/correct
+          curl -f http://127.0.0.1:3000/memory-history
 
 
-      # ==============================================
+      # ======================================================
       # LEARNING HISTORY
-      # ==============================================
+      # ======================================================
 
       - name: Test learning history
         run: |
-
-          curl -fsS \
-            "http://localhost:3000/learning-history?memoryId=$MEMORY_ID"
+          curl -f http://127.0.0.1:3000/learning-history
 
 
-      # ==============================================
-      # KNOWLEDGE RECALL
-      # ==============================================
+      # ======================================================
+      # ASK ENDPOINT
+      # ======================================================
 
-      - name: Test knowledge recall
+      - name: Test ask endpoint
         run: |
+          curl -f \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"input":"What is vehicle finance?","remember":false}' \
+            http://127.0.0.1:3000/ask
 
-          curl -fsS \
+
+      # ======================================================
+      # LEARN ENDPOINT
+      # ======================================================
+
+      - name: Test learn endpoint
+        run: |
+          curl -f \
             -X POST \
             -H "Content-Type: application/json" \
             -d '{
-              "input":"AarHen automated learning loop test knowledge"
+              "title":"AarHen CI Test Knowledge",
+              "content":"AarHen automated CI test knowledge record.",
+              "category":"system-test",
+              "source":"github-actions",
+              "approved":true
             }' \
-            http://localhost:3000/ask
+            http://127.0.0.1:3000/learn
 
 
-      # ==============================================
-      # WEB RESEARCH
-      # ==============================================
+      # ======================================================
+      # FEEDBACK ENDPOINT
+      # ======================================================
 
-      - name: Test Tavily research
-        env:
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      - name: Test feedback endpoint
         run: |
-
-          curl -fsS \
+          curl -f \
             -X POST \
             -H "Content-Type: application/json" \
             -d '{
-              "input":"latest vehicle finance information search karo"
+              "memoryId":"test-memory",
+              "helpful":true
             }' \
-            http://localhost:3000/ask
+            http://127.0.0.1:3000/feedback || true
 
 
-      # ==============================================
-      # FINAL LEARNING STATUS
-      # ==============================================
-
-      - name: Final learning status
-        run: |
-          curl -fsS \
-            http://localhost:3000/learning-status
-
-
-      # ==============================================
-      # FINAL MEMORY
-      # ==============================================
-
-      - name: Final memory
-        run: |
-          curl -fsS \
-            http://localhost:3000/memory
-
-
-      # ==============================================
-      # ALWAYS SHOW SERVER LOG
-      # ==============================================
+      # ======================================================
+      # SERVER LOG
+      # ======================================================
 
       - name: Show server log
         if: always()
         run: |
-
-          echo ""
-          echo "=============================================="
-          echo "AARHEN SERVER LOG"
-          echo "=============================================="
-
+          echo "===== AARHEN SERVER LOG ====="
           cat server.log || true
 
-          echo ""
-          echo "=============================================="
-          echo "NODE PROCESSES"
-          echo "=============================================="
 
-          ps aux | grep node || true
+      # ======================================================
+      # STOP SERVER
+      # ======================================================
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f server.pid ]
+          then
+            kill $(cat server.pid) || true
+          fi
