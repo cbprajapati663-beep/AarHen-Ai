@@ -16,22 +16,15 @@ const verification =
 // NORMALIZE
 // ============================================================
 
-function normalize(
-    value = ""
-) {
-    return String(
-        value || ""
-    ).trim();
+function normalize(value = "") {
+    return String(value || "").trim();
 }
 
 // ============================================================
 // SPLIT TEXT INTO CHUNKS
 // ============================================================
 
-function splitIntoChunks(
-    text,
-    size = 1200
-) {
+function splitIntoChunks(text, size = 1200) {
 
     const content =
         normalize(text);
@@ -52,7 +45,6 @@ function splitIntoChunks(
         i < content.length;
         i += chunkSize
     ) {
-
         chunks.push(
             content.slice(
                 i,
@@ -68,9 +60,7 @@ function splitIntoChunks(
 // EXTRACT CONCEPTS
 // ============================================================
 
-function extractConcepts(
-    text
-) {
+function extractConcepts(text) {
 
     const content =
         normalize(text);
@@ -82,10 +72,7 @@ function extractConcepts(
     const words =
         content
             .toLowerCase()
-            .replace(
-                /[^\w\s-]/g,
-                " "
-            )
+            .replace(/[^\w\s-]/g, " ")
             .split(/\s+/)
             .filter(
                 word =>
@@ -94,7 +81,6 @@ function extractConcepts(
 
     const stopWords =
         new Set([
-
             "this",
             "that",
             "with",
@@ -132,21 +118,14 @@ function extractConcepts(
 
     const frequency = {};
 
-    for (
-        const word of words
-    ) {
+    for (const word of words) {
 
-        if (
-            stopWords.has(word)
-        ) {
+        if (stopWords.has(word)) {
             continue;
         }
 
         frequency[word] =
-            (
-                frequency[word] ||
-                0
-            ) + 1;
+            (frequency[word] || 0) + 1;
     }
 
     return Object.entries(
@@ -167,81 +146,43 @@ function extractConcepts(
 // DETECT LEARNING TYPE
 // ============================================================
 
-function detectLearningType(
-    input = {}
-) {
+function detectLearningType(input = {}) {
 
     const content =
         normalize(
             input.content
         ).toLowerCase();
 
-    if (
-        input.type
-    ) {
-
+    if (input.type) {
         return input.type;
     }
 
     if (
-
-        content.includes(
-            "prefer"
-        )
-
-        ||
-
-        content.includes(
-            "preference"
-        )
-
-        ||
-
-        content.includes(
-            "always"
-        )
-
-        ||
-
-        content.includes(
-            "from now on"
-        )
+        content.includes("prefer") ||
+        content.includes("preference") ||
+        content.includes("always") ||
+        content.includes("from now on")
     ) {
-
         return "user-preference";
     }
 
     if (
-
         content.includes(
             "heritage auto finance"
-        )
-
-        ||
-
+        ) ||
         content.includes(
             "vehicle finance"
-        )
-
-        ||
-
+        ) ||
         content.includes(
             "vehicle loan"
-        )
-
-        ||
-
+        ) ||
         content.includes(
             "customer"
-        )
-
-        ||
-
+        ) ||
         content.includes(
             "business"
         )
     ) {
-
         return "business";
     }
 
@@ -252,9 +193,7 @@ function detectLearningType(
 // LEARNING DECISION
 // ============================================================
 
-function analyzeLearningDecision(
-    input = {}
-) {
+function analyzeLearningDecision(input = {}) {
 
     const content =
         normalize(
@@ -264,52 +203,36 @@ function analyzeLearningDecision(
     if (!content) {
 
         return {
-
             success: true,
-
             learn: false,
-
             reason:
                 "Learning content is empty."
         };
     }
 
-    if (
-        content.length < 10
-    ) {
+    if (content.length < 10) {
 
         return {
-
             success: true,
-
             learn: false,
-
             reason:
                 "Learning content is too short."
         };
     }
 
-    if (
-        input.learn === false
-    ) {
+    if (input.learn === false) {
 
         return {
-
             success: true,
-
             learn: false,
-
             reason:
                 "Learning explicitly disabled."
         };
     }
 
     return {
-
         success: true,
-
         learn: true,
-
         reason:
             "Content is suitable for learning."
     };
@@ -319,9 +242,7 @@ function analyzeLearningDecision(
 // BUILD LEARNING RECORD
 // ============================================================
 
-function buildLearningRecord(
-    input = {}
-) {
+function buildLearningRecord(input = {}) {
 
     const title =
         normalize(
@@ -338,9 +259,7 @@ function buildLearningRecord(
         normalize(
             input.category
         ) ||
-        detectLearningType(
-            input
-        );
+        detectLearningType(input);
 
     const source =
         normalize(
@@ -393,68 +312,58 @@ function saveLearningToMemory(
     input = {}
 ) {
 
-    const memoryResult =
-        memoryManager.remember({
+    return memoryManager.remember({
 
-            type:
-                input.memoryType ||
-                "knowledge",
+        type:
+            input.memoryType ||
+            "knowledge",
 
-            title:
-                record.title,
+        title:
+            record.title,
 
-            category:
-                record.category,
+        category:
+            record.category,
 
-            content:
-                record.content,
+        content:
+            record.content,
 
-            source:
-                record.source,
+        source:
+            record.source,
 
-            importance:
-                input.importance ||
-                "normal",
+        importance:
+            input.importance ||
+            "normal",
 
-            confidence:
-                typeof input.confidence ===
-                "number"
+        confidence:
+            typeof input.confidence ===
+            "number"
+                ? input.confidence
+                : 0.60,
 
-                    ? input.confidence
+        verified:
+            Boolean(
+                input.verified
+            ),
 
-                    : 0.60,
+        tags:
+            record.concepts,
 
-            verified:
-                Boolean(
-                    input.verified
-                ),
-
-            tags:
-                record.concepts,
-
-            remember:
-                true
-        });
-
-    return memoryResult;
+        remember: true
+    });
 }
 
 // ============================================================
 // LEARN
 // ============================================================
 
-function learn(
-    input = {}
-) {
+function learn(input = {}) {
 
     const decision =
         analyzeLearningDecision(
             input
         );
 
-    if (
-        !decision.learn
-    ) {
+    if (!decision.learn) {
 
         return {
 
@@ -476,10 +385,6 @@ function learn(
             buildLearningRecord(
                 input
             );
-
-        // ----------------------------------------------------
-        // SAVE TO EXISTING KNOWLEDGE STORE
-        // ----------------------------------------------------
 
         const saved =
             memoryStore.saveKnowledge({
@@ -511,10 +416,6 @@ function learn(
                 learningVersion:
                     record.learningVersion
             });
-
-        // ----------------------------------------------------
-        // SAVE THROUGH MEMORY MANAGER
-        // ----------------------------------------------------
 
         const memoryResult =
             saveLearningToMemory(
@@ -583,9 +484,7 @@ function learnFromUser(
 ) {
 
     const text =
-        normalize(
-            content
-        );
+        normalize(content);
 
     if (!text) {
 
@@ -610,8 +509,7 @@ function learnFromUser(
         category:
             options.category ||
             detectLearningType({
-                content:
-                    text
+                content: text
             }),
 
         source:
@@ -629,9 +527,7 @@ function learnFromUser(
         confidence:
             typeof options.confidence ===
             "number"
-
                 ? options.confidence
-
                 : 0.60,
 
         verified:
@@ -645,6 +541,257 @@ function learnFromUser(
 }
 
 // ============================================================
+// SEARCH LEARNED KNOWLEDGE
+// ============================================================
+
+function searchLearnedKnowledge(
+    query = "",
+    limit = 10
+) {
+
+    const cleanQuery =
+        normalize(query);
+
+    if (!cleanQuery) {
+
+        return {
+
+            success: false,
+
+            error:
+                "Knowledge search query is required.",
+
+            results: []
+        };
+    }
+
+    try {
+
+        // Primary search through existing memory store
+        const results =
+            memoryStore.findKnowledge(
+                cleanQuery
+            );
+
+        const list =
+            Array.isArray(results)
+                ? results
+                : [];
+
+        const finalLimit =
+            Number(limit) || 10;
+
+        return {
+
+            success: true,
+
+            query:
+                cleanQuery,
+
+            count:
+                Math.min(
+                    list.length,
+                    finalLimit
+                ),
+
+            results:
+                list.slice(
+                    0,
+                    finalLimit
+                ),
+
+            status:
+                "knowledge-search-complete"
+        };
+
+    } catch (error) {
+
+        // Fallback to Memory Manager
+        try {
+
+            const fallback =
+                memoryManager.recall(
+                    cleanQuery,
+                    {
+                        limit:
+                            Number(limit) ||
+                            10
+                    }
+                );
+
+            return {
+
+                success:
+                    Boolean(
+                        fallback.success
+                    ),
+
+                query:
+                    cleanQuery,
+
+                count:
+                    fallback.results
+                        ?.length || 0,
+
+                results:
+                    fallback.results || [],
+
+                status:
+                    "knowledge-search-fallback"
+            };
+
+        } catch (fallbackError) {
+
+            return {
+
+                success: false,
+
+                error:
+                    error.message,
+
+                results: []
+            };
+        }
+    }
+}
+
+// ============================================================
+// GET LEARNED KNOWLEDGE
+// ============================================================
+
+function getLearnedKnowledge(
+    limit = 100
+) {
+
+    try {
+
+        const results =
+            memoryStore.findKnowledge(
+                ""
+            );
+
+        const list =
+            Array.isArray(results)
+                ? results
+                : [];
+
+        const finalLimit =
+            Number(limit) || 100;
+
+        return {
+
+            success: true,
+
+            count:
+                Math.min(
+                    list.length,
+                    finalLimit
+                ),
+
+            results:
+                list.slice(
+                    0,
+                    finalLimit
+                ),
+
+            status:
+                "learned-knowledge-loaded"
+        };
+
+    } catch (error) {
+
+        try {
+
+            const stats =
+                memoryStore.getMemoryStats();
+
+            return {
+
+                success: true,
+
+                count: 0,
+
+                results: [],
+
+                stats,
+
+                status:
+                    "learned-knowledge-empty"
+            };
+
+        } catch (fallbackError) {
+
+            return {
+
+                success: false,
+
+                error:
+                    error.message,
+
+                results: []
+            };
+        }
+    }
+}
+
+// ============================================================
+// GET KNOWLEDGE BY ID
+// ============================================================
+
+function getKnowledgeById(
+    memoryId
+) {
+
+    if (!memoryId) {
+
+        return {
+
+            success: false,
+
+            error:
+                "Knowledge ID is required."
+        };
+    }
+
+    try {
+
+        const result =
+            memoryStore.getMemory(
+                memoryId
+            );
+
+        if (!result) {
+
+            return {
+
+                success: false,
+
+                error:
+                    "Knowledge not found."
+            };
+        }
+
+        return {
+
+            success: true,
+
+            memory:
+                result
+        };
+
+    } catch (error) {
+
+        return {
+
+            success: false,
+
+            error:
+                error.message
+        };
+    }
+}
+
+// ============================================================
 // VERIFY LEARNED MEMORY
 // ============================================================
 
@@ -652,9 +799,7 @@ function verifyLearnedMemory(
     input = {}
 ) {
 
-    if (
-        !input.memoryId
-    ) {
+    if (!input.memoryId) {
 
         return {
 
@@ -694,6 +839,51 @@ function verifyLearnedMemory(
 }
 
 // ============================================================
+// VERIFY KNOWLEDGE
+// ============================================================
+
+function verifyKnowledge(
+    memoryId,
+    options = {}
+) {
+
+    if (
+        typeof memoryId ===
+        "object"
+    ) {
+
+        options =
+            memoryId;
+
+        memoryId =
+            options.memoryId;
+    }
+
+    return verifyLearnedMemory({
+
+        memoryId,
+
+        verifiedBy:
+            options.verifiedBy,
+
+        sourceCount:
+            options.sourceCount,
+
+        confidence:
+            options.confidence,
+
+        notes:
+            options.notes,
+
+        evidence:
+            options.evidence,
+
+        conflictDetected:
+            options.conflictDetected
+    });
+}
+
+// ============================================================
 // CORRECT LEARNED MEMORY
 // ============================================================
 
@@ -701,9 +891,7 @@ function learnCorrection(
     input = {}
 ) {
 
-    if (
-        !input.memoryId
-    ) {
+    if (!input.memoryId) {
 
         return {
 
@@ -795,16 +983,58 @@ function learnCorrection(
 }
 
 // ============================================================
-// FEEDBACK
+// CORRECT KNOWLEDGE
+// ============================================================
+
+function correctKnowledge(
+    memoryId,
+    correction,
+    reason = "Knowledge correction"
+) {
+
+    if (
+        typeof memoryId ===
+        "object"
+    ) {
+
+        const input =
+            memoryId;
+
+        return learnCorrection({
+
+            memoryId:
+                input.memoryId,
+
+            correction:
+                input.correction,
+
+            reason:
+                input.reason,
+
+            confidence:
+                input.confidence
+        });
+    }
+
+    return learnCorrection({
+
+        memoryId,
+
+        correction,
+
+        reason
+    });
+}
+
+// ============================================================
+// ADD FEEDBACK
 // ============================================================
 
 function addFeedback(
     input = {}
 ) {
 
-    if (
-        !input.memoryId
-    ) {
+    if (!input.memoryId) {
 
         return {
 
@@ -833,12 +1063,12 @@ function addFeedback(
 
     try {
 
-        const memory =
+        const storedMemory =
             memoryStore.getMemory(
                 input.memoryId
             );
 
-        if (!memory) {
+        if (!storedMemory) {
 
             return {
 
@@ -851,10 +1081,12 @@ function addFeedback(
 
         const history =
             Array.isArray(
-                memory.feedbackHistory
+                storedMemory
+                    .feedbackHistory
             )
 
-                ? memory.feedbackHistory
+                ? storedMemory
+                    .feedbackHistory
 
                 : [];
 
@@ -928,6 +1160,53 @@ function addFeedback(
 }
 
 // ============================================================
+// KNOWLEDGE FEEDBACK
+// ============================================================
+
+function addKnowledgeFeedback(
+    memoryId,
+    feedback,
+    helpful = true,
+    reason = ""
+) {
+
+    if (
+        typeof memoryId ===
+        "object"
+    ) {
+
+        const input =
+            memoryId;
+
+        return addFeedback({
+
+            memoryId:
+                input.memoryId,
+
+            feedback:
+                input.feedback,
+
+            helpful:
+                input.helpful,
+
+            reason:
+                input.reason
+        });
+    }
+
+    return addFeedback({
+
+        memoryId,
+
+        feedback,
+
+        helpful,
+
+        reason
+    });
+}
+
+// ============================================================
 // MARK HELPFUL
 // ============================================================
 
@@ -966,6 +1245,36 @@ function markNotHelpful(
 }
 
 // ============================================================
+// KNOWLEDGE HELPFUL
+// ============================================================
+
+function markKnowledgeHelpful(
+    memoryId,
+    feedback = "Knowledge was helpful"
+) {
+
+    return markHelpful(
+        memoryId,
+        feedback
+    );
+}
+
+// ============================================================
+// KNOWLEDGE NOT HELPFUL
+// ============================================================
+
+function markKnowledgeNotHelpful(
+    memoryId,
+    feedback = "Knowledge was not helpful"
+) {
+
+    return markNotHelpful(
+        memoryId,
+        feedback
+    );
+}
+
+// ============================================================
 // LEARNING HISTORY
 // ============================================================
 
@@ -984,12 +1293,12 @@ function getLearningHistory(
         };
     }
 
-    const memory =
+    const storedMemory =
         memoryStore.getMemory(
             memoryId
         );
 
-    if (!memory) {
+    if (!storedMemory) {
 
         return {
 
@@ -1009,32 +1318,40 @@ function getLearningHistory(
         history: {
 
             createdAt:
-                memory.createdAt,
+                storedMemory
+                    .createdAt,
 
             updatedAt:
-                memory.updatedAt,
+                storedMemory
+                    .updatedAt,
 
             learnedAt:
-                memory.learnedAt,
+                storedMemory
+                    .learnedAt,
 
             correctedAt:
-                memory.correctedAt ||
+                storedMemory
+                    .correctedAt ||
                 null,
 
             corrected:
                 Boolean(
-                    memory.corrected
+                    storedMemory
+                        .corrected
                 ),
 
             correctionReason:
-                memory.correctionReason ||
+                storedMemory
+                    .correctionReason ||
                 null,
 
             feedback:
                 Array.isArray(
-                    memory.feedbackHistory
+                    storedMemory
+                        .feedbackHistory
                 )
-                    ? memory.feedbackHistory
+                    ? storedMemory
+                        .feedbackHistory
                     : []
         }
     };
@@ -1080,6 +1397,28 @@ function getLearningStats() {
 }
 
 // ============================================================
+// MEMORY STATUS
+// ============================================================
+
+function getMemoryStatus() {
+
+    try {
+
+        return memoryManager.getSummary();
+
+    } catch (error) {
+
+        return {
+
+            success: false,
+
+            error:
+                error.message
+        };
+    }
+}
+
+// ============================================================
 // LEARNING STATUS
 // ============================================================
 
@@ -1107,6 +1446,10 @@ function getLearningStatus() {
             "text-chunking",
 
             "knowledge-storage",
+
+            "knowledge-search",
+
+            "knowledge-retrieval",
 
             "memory-manager-integration",
 
@@ -1189,19 +1532,37 @@ module.exports = {
 
     learnFromUser,
 
+    searchLearnedKnowledge,
+
+    getLearnedKnowledge,
+
+    getKnowledgeById,
+
     verifyLearnedMemory,
+
+    verifyKnowledge,
 
     learnCorrection,
 
+    correctKnowledge,
+
     addFeedback,
+
+    addKnowledgeFeedback,
 
     markHelpful,
 
     markNotHelpful,
 
+    markKnowledgeHelpful,
+
+    markKnowledgeNotHelpful,
+
     getLearningHistory,
 
     getLearningStats,
+
+    getMemoryStatus,
 
     getLearningStatus
 };
