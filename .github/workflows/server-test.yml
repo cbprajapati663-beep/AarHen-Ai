@@ -199,7 +199,7 @@ jobs:
             }"
 
       # ========================================================
-      # LIVE WEB RESEARCH
+      # RESEARCH STATUS
       # ========================================================
 
       - name: Test research status
@@ -209,13 +209,26 @@ jobs:
           curl --fail \
             http://localhost:3000/research/status
 
+      # ========================================================
+      # LIVE WEB RESEARCH
+      # ========================================================
+
       - name: Test live web research
         env:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
           echo "Testing live AarHen web research..."
 
-          RESPONSE=$(curl --fail \
+          if [ -z "$TAVILY_API_KEY" ]; then
+            echo "ERROR: TAVILY_API_KEY secret is empty or unavailable."
+            exit 1
+          fi
+
+          echo "TAVILY_API_KEY is available."
+
+          echo "Calling AarHen /research..."
+
+          RESPONSE=$(curl -sS \
             -X POST \
             http://localhost:3000/research \
             -H "Content-Type: application/json" \
@@ -225,14 +238,25 @@ jobs:
               "language": "en"
             }')
 
+          CURL_EXIT=$?
+
           echo "=========================================="
-          echo "LIVE RESEARCH RESPONSE"
+          echo "AARHEN RESEARCH RESPONSE"
           echo "=========================================="
 
           echo "$RESPONSE"
 
           echo "=========================================="
-          echo "VALIDATING RESEARCH RESPONSE"
+          echo "CURL EXIT CODE: $CURL_EXIT"
+          echo "=========================================="
+
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "ERROR: Request to AarHen /research failed."
+            exit "$CURL_EXIT"
+          fi
+
+          echo "=========================================="
+          echo "VALIDATING RESPONSE"
           echo "=========================================="
 
           echo "$RESPONSE" | node -e '
@@ -247,15 +271,83 @@ jobs:
               "end",
               () => {
 
-                const json =
-                  JSON.parse(data);
+                let json;
+
+                try {
+
+                  json =
+                    JSON.parse(data);
+
+                } catch (error) {
+
+                  console.error(
+                    "ERROR: Response is not valid JSON."
+                  );
+
+                  process.exit(1);
+                }
+
+                console.log(
+                  "success:",
+                  json.success
+                );
+
+                console.log(
+                  "status:",
+                  json.status
+                );
+
+                console.log(
+                  "error:",
+                  json.error || "none"
+                );
+
+                if (json.research) {
+
+                  console.log(
+                    "research.success:",
+                    json.research.success
+                  );
+
+                  console.log(
+                    "sourceCount:",
+                    json.research.sourceCount
+                  );
+
+                  console.log(
+                    "confidence:",
+                    json.research.confidence
+                  );
+
+                  console.log(
+                    "verificationStatus:",
+                    json.research.verificationStatus
+                  );
+
+                  console.log(
+                    "sources returned:",
+                    Array.isArray(
+                      json.research.sources
+                    )
+                      ? json.research.sources.length
+                      : 0
+                  );
+                }
+
+                if (json.context) {
+
+                  console.log(
+                    "context.success:",
+                    json.context.success
+                  );
+                }
 
                 if (
                   json.success !== true
                 ) {
 
                   console.error(
-                    "Research request failed."
+                    "ERROR: AarHen research request failed."
                   );
 
                   process.exit(1);
@@ -266,7 +358,7 @@ jobs:
                 ) {
 
                   console.error(
-                    "Research result missing."
+                    "ERROR: Research result missing."
                   );
 
                   process.exit(1);
@@ -279,7 +371,7 @@ jobs:
                 ) {
 
                   console.error(
-                    "Research sources missing."
+                    "ERROR: Research sources missing."
                   );
 
                   process.exit(1);
@@ -290,29 +382,14 @@ jobs:
                 ) {
 
                   console.error(
-                    "No web sources returned."
+                    "ERROR: No web sources returned."
                   );
 
                   process.exit(1);
                 }
 
                 console.log(
-                  "Research success."
-                );
-
-                console.log(
-                  "Sources:",
-                  json.research.sources.length
-                );
-
-                console.log(
-                  "Confidence:",
-                  json.confidence
-                );
-
-                console.log(
-                  "Status:",
-                  json.status
+                  "LIVE WEB RESEARCH TEST PASSED."
                 );
               }
             );
