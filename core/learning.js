@@ -12,7 +12,6 @@ const memoryManager =
 const verification =
     require("./verification");
 
-
 // ============================================================
 // CONFIGURATION
 // ============================================================
@@ -22,7 +21,6 @@ const DEFAULT_CHUNK_SIZE = 1200;
 const DEFAULT_CONFIDENCE = 0.60;
 
 const LEARNING_VERSION = "5.0.0";
-
 
 // ============================================================
 // NORMALIZE
@@ -34,7 +32,6 @@ function normalize(value = "") {
         value || ""
     ).trim();
 }
-
 
 // ============================================================
 // CLAMP
@@ -52,6 +49,7 @@ function clamp(
     if (
         Number.isNaN(number)
     ) {
+
         return min;
     }
 
@@ -63,7 +61,6 @@ function clamp(
         )
     );
 }
-
 
 // ============================================================
 // SPLIT TEXT INTO CHUNKS
@@ -78,6 +75,7 @@ function splitIntoChunks(
         normalize(text);
 
     if (!content) {
+
         return [];
     }
 
@@ -104,7 +102,6 @@ function splitIntoChunks(
     return chunks;
 }
 
-
 // ============================================================
 // EXTRACT SIMPLE CONCEPTS
 // ============================================================
@@ -117,6 +114,7 @@ function extractConcepts(
         normalize(text);
 
     if (!content) {
+
         return [];
     }
 
@@ -142,7 +140,6 @@ function extractConcepts(
     );
 }
 
-
 // ============================================================
 // DETECT LEARNING TYPE
 // ============================================================
@@ -163,9 +160,13 @@ function detectLearningType(
         ).toLowerCase();
 
     if (
+
         categoryText.includes(
             "business"
-        ) ||
+        )
+
+        ||
+
         contentText.includes(
             "heritage auto finance"
         )
@@ -204,7 +205,6 @@ function detectLearningType(
     return "knowledge";
 }
 
-
 // ============================================================
 // DETECT IMPORTANCE
 // ============================================================
@@ -223,13 +223,16 @@ function detectLearningImportance(
     const text =
         normalize(
             input.content
-        )
-        .toLowerCase();
+        ).toLowerCase();
 
     if (
+
         text.includes(
             "critical"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "never forget"
         )
@@ -239,12 +242,19 @@ function detectLearningImportance(
     }
 
     if (
+
         text.includes(
             "important"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "always"
-        ) ||
+        )
+
+        ||
+
         text.includes(
             "must"
         )
@@ -256,9 +266,8 @@ function detectLearningImportance(
     return "normal";
 }
 
-
 // ============================================================
-// DETECT LEARNING CONFIDENCE
+// DETECT CONFIDENCE
 // ============================================================
 
 function detectLearningConfidence(
@@ -290,7 +299,9 @@ function detectLearningConfidence(
     }
 
     if (
+
         input.source &&
+
         String(
             input.source
         ).toLowerCase() !==
@@ -302,7 +313,6 @@ function detectLearningConfidence(
 
     return DEFAULT_CONFIDENCE;
 }
-
 
 // ============================================================
 // BUILD LEARNING RECORD
@@ -403,7 +413,6 @@ function buildLearningRecord(
     };
 }
 
-
 // ============================================================
 // LEARN
 // ============================================================
@@ -447,7 +456,8 @@ function learn(
                 record
             );
 
-        let memoryResult = null;
+        let memoryResult =
+            null;
 
         // ----------------------------------------------------
         // CONNECT LEARNING TO MEMORY MANAGER
@@ -547,7 +557,6 @@ function learn(
     }
 }
 
-
 // ============================================================
 // LEARN FROM USER
 // ============================================================
@@ -568,7 +577,6 @@ function learnFromUser(
             input.approved !== false
     });
 }
-
 
 // ============================================================
 // LEARN VERIFIED KNOWLEDGE
@@ -596,7 +604,6 @@ function learnVerified(
     });
 }
 
-
 // ============================================================
 // VERIFY LEARNED MEMORY
 // ============================================================
@@ -620,45 +627,43 @@ function verifyLearnedMemory(
 
     try {
 
-        const result =
-            verification.verifyMemory({
+        return verification.verifyMemory({
 
-                memoryId:
-                    input.memoryId,
+            memoryId:
+                input.memoryId,
 
-                verifiedBy:
-                    input.verifiedBy ||
-                    "AarHen Learning Engine",
+            verifiedBy:
+                input.verifiedBy ||
+                "AarHen Learning Engine",
 
-                sourceCount:
-                    Number(
-                        input.sourceCount
-                    ) || 1,
+            sourceCount:
+                Number(
+                    input.sourceCount
+                ) || 1,
 
-                confidence:
-                    clamp(
-                        typeof input.confidence ===
-                        "number"
+            confidence:
+                clamp(
 
-                            ? input.confidence
+                    typeof input.confidence ===
+                    "number"
 
-                            : 0.80
-                    ),
+                        ? input.confidence
 
-                notes:
-                    input.notes ||
-                    "Verified through learning engine.",
+                        : 0.80
+                ),
 
-                evidence:
-                    input.evidence || [],
+            notes:
+                input.notes ||
+                "Verified through learning engine.",
 
-                conflictDetected:
-                    Boolean(
-                        input.conflictDetected
-                    )
-            });
+            evidence:
+                input.evidence || [],
 
-        return result;
+            conflictDetected:
+                Boolean(
+                    input.conflictDetected
+                )
+        };
 
     } catch (error) {
 
@@ -671,7 +676,6 @@ function verifyLearnedMemory(
         };
     }
 }
-
 
 // ============================================================
 // CORRECT LEARNED MEMORY
@@ -738,6 +742,7 @@ function learnCorrection(
                             .toISOString(),
 
                     confidence:
+
                         typeof input.confidence ===
                         "number"
 
@@ -780,7 +785,6 @@ function learnCorrection(
     }
 }
 
-
 // ============================================================
 // ADD FEEDBACK
 // ============================================================
@@ -820,12 +824,19 @@ function addFeedback(
 
     try {
 
-        const existing =
+        const existingResult =
             memoryStore.getMemory(
                 input.memoryId
             );
 
-        if (!existing) {
+        if (
+
+            !existingResult ||
+
+            existingResult.success === false ||
+
+            !existingResult.memory
+        ) {
 
             return {
 
@@ -835,6 +846,9 @@ function addFeedback(
                     "Memory not found."
             };
         }
+
+        const existing =
+            existingResult.memory;
 
         const history =
             Array.isArray(
@@ -919,14 +933,14 @@ function addFeedback(
     }
 }
 
-
 // ============================================================
 // MARK HELPFUL
 // ============================================================
 
 function markHelpful(
     memoryId,
-    feedback = "User marked memory helpful."
+    feedback =
+        "User marked memory helpful."
 ) {
 
     return addFeedback({
@@ -942,14 +956,14 @@ function markHelpful(
     });
 }
 
-
 // ============================================================
 // MARK NOT HELPFUL
 // ============================================================
 
 function markNotHelpful(
     memoryId,
-    feedback = "User marked memory not helpful."
+    feedback =
+        "User marked memory not helpful."
 ) {
 
     return addFeedback({
@@ -964,7 +978,6 @@ function markNotHelpful(
             "user"
     });
 }
-
 
 // ============================================================
 // SEARCH LEARNED KNOWLEDGE
@@ -995,14 +1008,15 @@ function searchLearnedKnowledge(
 
     try {
 
-        const results =
+        const result =
             memoryManager.recall(
 
                 cleanQuery,
 
                 {
 
-                    limit,
+                    limit:
+                        Number(limit) || 10,
 
                     type:
                         "knowledge"
@@ -1012,16 +1026,16 @@ function searchLearnedKnowledge(
         return {
 
             success:
-                results.success,
+                result.success,
 
             query:
                 cleanQuery,
 
             count:
-                results.count,
+                result.count,
 
             results:
-                results.results
+                result.results || []
         };
 
     } catch (error) {
@@ -1038,7 +1052,6 @@ function searchLearnedKnowledge(
     }
 }
 
-
 // ============================================================
 // GET LEARNED KNOWLEDGE
 // ============================================================
@@ -1049,24 +1062,40 @@ function getLearnedKnowledge(
 
     try {
 
+        const result =
+            memoryStore.findKnowledge(
+                "",
+                Number(limit) || 50
+            );
+
         const results =
-            memoryStore
-                .findKnowledge();
+            result &&
+            Array.isArray(
+                result.results
+            )
+
+                ? result.results
+
+                : [];
+
+        const finalLimit =
+            Number(limit) || 50;
 
         return {
 
-            success: true,
+            success:
+                result?.success !== false,
 
             count:
                 Math.min(
                     results.length,
-                    Number(limit) || 50
+                    finalLimit
                 ),
 
             results:
                 results.slice(
                     0,
-                    Number(limit) || 50
+                    finalLimit
                 )
         };
 
@@ -1084,7 +1113,6 @@ function getLearnedKnowledge(
     }
 }
 
-
 // ============================================================
 // GET KNOWLEDGE BY ID
 // ============================================================
@@ -1093,7 +1121,9 @@ function getKnowledgeById(
     memoryId
 ) {
 
-    if (!memoryId) {
+    if (
+        !memoryId
+    ) {
 
         return {
 
@@ -1111,7 +1141,14 @@ function getKnowledgeById(
                 memoryId
             );
 
-        if (!result) {
+        if (
+
+            !result ||
+
+            result.success === false ||
+
+            !result.memory
+        ) {
 
             return {
 
@@ -1127,7 +1164,7 @@ function getKnowledgeById(
             success: true,
 
             knowledge:
-                result
+                result.memory
         };
 
     } catch (error) {
@@ -1141,7 +1178,6 @@ function getKnowledgeById(
         };
     }
 }
-
 
 // ============================================================
 // GET LEARNING HISTORY
@@ -1166,15 +1202,18 @@ function getLearningHistory(
 
     try {
 
-        const memory =
+        const result =
             memoryManager.get(
                 memoryId
             );
 
-        if (!memory.success) {
+        if (!result.success) {
 
-            return memory;
+            return result;
         }
+
+        const item =
+            result.memory;
 
         return {
 
@@ -1183,14 +1222,23 @@ function getLearningHistory(
             memoryId,
 
             history:
-                memory.memory
-                    ?.feedbackHistory ||
-                [],
+                Array.isArray(
+                    item.feedbackHistory
+                )
+                    ? item.feedbackHistory
+                    : [],
 
             correction:
+                item.correctionReason ||
+                null,
 
-                memory.memory
-                    ?.correctionReason ||
+            corrected:
+                Boolean(
+                    item.corrected
+                ),
+
+            updatedAt:
+                item.updatedAt ||
                 null
         };
 
@@ -1206,7 +1254,6 @@ function getLearningHistory(
     }
 }
 
-
 // ============================================================
 // LEARNING STATS
 // ============================================================
@@ -1215,9 +1262,21 @@ function getLearningStats() {
 
     try {
 
+        const result =
+            memoryStore.findKnowledge(
+                "",
+                100000
+            );
+
         const all =
-            memoryStore
-                .findKnowledge();
+            result &&
+            Array.isArray(
+                result.results
+            )
+
+                ? result.results
+
+                : [];
 
         const stats = {
 
@@ -1242,7 +1301,9 @@ function getLearningStats() {
         ) {
 
             if (
+
                 item.verified === true ||
+
                 item.verificationStatus ===
                     "verified"
             ) {
@@ -1265,9 +1326,11 @@ function getLearningStats() {
             }
 
             if (
+
                 Array.isArray(
                     item.feedbackHistory
                 ) &&
+
                 item.feedbackHistory.length > 0
             ) {
 
@@ -1322,7 +1385,6 @@ function getLearningStats() {
         };
     }
 }
-
 
 // ============================================================
 // LEARNING STATUS
@@ -1380,7 +1442,6 @@ function getLearningStatus() {
         ]
     };
 }
-
 
 // ============================================================
 // EXPORTS
