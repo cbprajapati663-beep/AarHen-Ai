@@ -42,14 +42,19 @@ async function searchWeb(data = {}) {
 
     try {
 
+        // ----------------------------------------------------
+        // IMPORTANT:
+        // providerManager.searchWeb() expects ONE OBJECT
+        // ----------------------------------------------------
+
         const providerResult =
-            await providerManager.searchWeb(
-                request.query,
-                {
-                    maxResults:
-                        request.maxSources
-                }
-            );
+            await providerManager.searchWeb({
+                query:
+                    request.query,
+
+                maxSources:
+                    request.maxSources
+            });
 
         if (
             !providerResult ||
@@ -93,6 +98,7 @@ async function searchWeb(data = {}) {
         const confidence =
             research.calculateResearchConfidence({
                 sources,
+
                 confidence:
                     providerResult.confidence || 0
             });
