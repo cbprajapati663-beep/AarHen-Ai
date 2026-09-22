@@ -3,12 +3,6 @@
 // COMPLETE SYSTEM TEST
 // ============================================================
 
-const assert = require("assert");
-
-// ============================================================
-// LOAD CORE MODULES
-// ============================================================
-
 const orchestrator =
     require("./core/orchestrator");
 
@@ -63,25 +57,6 @@ function test(name, condition) {
 }
 
 // ============================================================
-// CHECK EXPORTED FUNCTION
-// ============================================================
-
-function hasFunction(object, names = []) {
-
-    if (
-        !object ||
-        typeof object !== "object"
-    ) {
-        return false;
-    }
-
-    return names.some(
-        name =>
-            typeof object[name] === "function"
-    );
-}
-
-// ============================================================
 // MAIN TEST
 // ============================================================
 
@@ -89,12 +64,12 @@ async function runTests() {
 
     console.log("");
     console.log("========================================");
-    console.log("   AARHEN CORE V5 SYSTEM TEST");
+    console.log("       AARHEN CORE V5 SYSTEM TEST");
     console.log("========================================");
     console.log("");
 
     // ========================================================
-    // MODULE LOAD TEST
+    // CORE MODULE TESTS
     // ========================================================
 
     test(
@@ -143,31 +118,28 @@ async function runTests() {
     );
 
     // ========================================================
-    // EXECUTOR MODULE TEST
+    // EXECUTOR TEST
     // ========================================================
 
     test(
         "Executor module loaded",
         executor &&
-        (
-            typeof executor === "object" ||
-            typeof executor === "function"
-        )
+        typeof executor === "object"
     );
 
     test(
-        "Executor API available",
-        hasFunction(
-            executor,
-            [
-                "execute",
-                "executeSkill",
-                "run",
-                "process",
-                "handle",
-                "executeTask"
-            ]
-        )
+        "Executor executeIntent API available",
+        typeof executor.executeIntent === "function"
+    );
+
+    test(
+        "Executor context API available",
+        typeof executor.prepareContext === "function"
+    );
+
+    test(
+        "Executor engine functions API available",
+        typeof executor.getEngineFunctions === "function"
     );
 
     // ========================================================
@@ -182,15 +154,7 @@ async function runTests() {
 
     test(
         "Router API available",
-        hasFunction(
-            router,
-            [
-                "route",
-                "selectSkill",
-                "resolve",
-                "match"
-            ]
-        )
+        typeof router.route === "function"
     );
 
     // ========================================================
@@ -200,18 +164,16 @@ async function runTests() {
     test(
         "Skill Registry loaded",
         registry &&
-        (
-            typeof registry === "object" ||
-            typeof registry === "function"
-        )
+        typeof registry === "object"
     );
 
     // ========================================================
-    // RESEARCH ENGINE TEST
+    // RESEARCH REQUEST TEST
     // ========================================================
 
     const researchRequest =
         research.createResearchRequest({
+
             query:
                 "vehicle finance basics",
 
@@ -322,19 +284,38 @@ async function runTests() {
     // RESEARCH CONTEXT TEST
     // ========================================================
 
-    const context =
+    const researchContext =
         research.buildResearchContext(
             researchResult
         );
 
     test(
         "Research context created",
-        context.success === true
+        researchContext.success === true
     );
 
     test(
         "Research context contains sources",
-        context.sourceCount === 2
+        researchContext.sourceCount === 2
+    );
+
+    // ========================================================
+    // RESEARCH CONFIDENCE TEST
+    // ========================================================
+
+    const calculatedConfidence =
+        research.calculateResearchConfidence({
+
+            sources:
+                researchResult.sources,
+
+            confidence:
+                0.85
+        });
+
+    test(
+        "Research confidence calculated",
+        calculatedConfidence >= 0.80
     );
 
     // ========================================================
@@ -388,6 +369,19 @@ async function runTests() {
     );
 
     // ========================================================
+    // MEMORY STATUS TEST
+    // ========================================================
+
+    const memoryStatus =
+        memoryManager.getStatus();
+
+    test(
+        "Memory Manager status available",
+        memoryStatus &&
+        memoryStatus.success === true
+    );
+
+    // ========================================================
     // LEARNING TEST
     // ========================================================
 
@@ -420,7 +414,7 @@ async function runTests() {
     );
 
     // ========================================================
-    // LEARNED KNOWLEDGE SEARCH TEST
+    // LEARNING SEARCH TEST
     // ========================================================
 
     const learnedSearch =
@@ -432,6 +426,19 @@ async function runTests() {
         "Learned knowledge search executed",
         learnedSearch &&
         learnedSearch.success === true
+    );
+
+    // ========================================================
+    // LEARNING STATUS TEST
+    // ========================================================
+
+    const learningStatus =
+        learning.getLearningStatus();
+
+    test(
+        "Learning status available",
+        learningStatus &&
+        learningStatus.success === true
     );
 
     // ========================================================
@@ -449,6 +456,49 @@ async function runTests() {
         "Brain thinking executed",
         brainResult &&
         brainResult.success === true
+    );
+
+    // ========================================================
+    // BRAIN STATUS TEST
+    // ========================================================
+
+    const brainStatus =
+        brain.getStatus();
+
+    test(
+        "Brain status available",
+        brainStatus &&
+        brainStatus.success === true
+    );
+
+    // ========================================================
+    // EXECUTOR CONTEXT TEST
+    // ========================================================
+
+    const executorContext =
+        executor.prepareContext({
+
+            input:
+                "What is vehicle finance?"
+        });
+
+    test(
+        "Executor context created",
+        executorContext !== undefined &&
+        executorContext !== null
+    );
+
+    // ========================================================
+    // EXECUTOR ENGINE TEST
+    // ========================================================
+
+    const engineFunctions =
+        executor.getEngineFunctions();
+
+    test(
+        "Executor engine functions available",
+        engineFunctions !== undefined &&
+        engineFunctions !== null
     );
 
     // ========================================================
@@ -472,17 +522,8 @@ async function runTests() {
     );
 
     // ========================================================
-    // STATUS TESTS
+    // RESEARCH STATUS TEST
     // ========================================================
-
-    const brainStatus =
-        brain.getStatus();
-
-    test(
-        "Brain status available",
-        brainStatus &&
-        brainStatus.success === true
-    );
 
     const researchStatus =
         research.getResearchStatus();
@@ -493,31 +534,30 @@ async function runTests() {
         researchStatus.success === true
     );
 
-    const learningStatus =
-        learning.getLearningStatus();
-
     test(
-        "Learning status available",
-        learningStatus &&
-        learningStatus.success === true
-    );
-
-    const memoryStatus =
-        memoryManager.getStatus();
-
-    test(
-        "Memory Manager status available",
-        memoryStatus &&
-        memoryStatus.success === true
+        "Research engine version available",
+        Boolean(researchStatus.version)
     );
 
     // ========================================================
-    // FINAL RESULT
+    // FINAL SYSTEM CHECK
     // ========================================================
 
     console.log("");
     console.log("========================================");
-    console.log("   🎉 ALL AARHEN TESTS PASSED");
+    console.log("      🎉 ALL TESTS PASSED");
+    console.log("========================================");
+    console.log("");
+    console.log("AarHen Core V5 modules are connected.");
+    console.log("Research pipeline is operational.");
+    console.log("Memory system is operational.");
+    console.log("Learning system is operational.");
+    console.log("Brain is operational.");
+    console.log("Executor is operational.");
+    console.log("Orchestrator is operational.");
+    console.log("");
+    console.log("========================================");
+    console.log("      AARHEN CORE V5 TEST COMPLETE");
     console.log("========================================");
     console.log("");
 
@@ -525,7 +565,7 @@ async function runTests() {
 }
 
 // ============================================================
-// RUN TEST
+// RUN TESTS
 // ============================================================
 
 runTests()
