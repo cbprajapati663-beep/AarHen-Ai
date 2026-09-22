@@ -2,18 +2,13 @@ const learning = require("./learning");
 
 /**
  * AARHEN LEARNING API
- * Controlled API layer for the Learning Engine
+ * Compatible + Extended API Layer
  */
 
 /**
- * Learn from user input
+ * Learn from user
  */
-async function learn(data = {}) {
-    const input =
-        typeof data === "string"
-            ? data
-            : data.input || data.content || data.text || "";
-
+async function learnFromUser(input, context = {}) {
     if (!input || !String(input).trim()) {
         return {
             success: false,
@@ -24,14 +19,13 @@ async function learn(data = {}) {
     try {
         const result = await Promise.resolve(
             learning.learnFromUser(
-                input,
-                data.context || {}
+                String(input),
+                context
             )
         );
 
         return {
             success: true,
-            action: "learn",
             result
         };
     } catch (error) {
@@ -41,6 +35,28 @@ async function learn(data = {}) {
         };
     }
 }
+
+
+/**
+ * Generic learning alias
+ */
+async function learn(data = {}) {
+    const input =
+        typeof data === "string"
+            ? data
+            : data.input ||
+              data.content ||
+              data.text ||
+              "";
+
+    const context =
+        typeof data === "object"
+            ? data.context || {}
+            : {};
+
+    return learnFromUser(input, context);
+}
+
 
 /**
  * Search learned knowledge
@@ -57,7 +73,9 @@ async function searchLearnedKnowledge(query, limit = 10) {
         return {
             success: true,
             query: query || "",
-            count: Array.isArray(result) ? result.length : 0,
+            count: Array.isArray(result)
+                ? result.length
+                : 0,
             results: result
         };
     } catch (error) {
@@ -67,6 +85,7 @@ async function searchLearnedKnowledge(query, limit = 10) {
         };
     }
 }
+
 
 /**
  * Get learned knowledge
@@ -81,7 +100,9 @@ async function getLearnedKnowledge(limit = 50) {
 
         return {
             success: true,
-            count: Array.isArray(result) ? result.length : 0,
+            count: Array.isArray(result)
+                ? result.length
+                : 0,
             knowledge: result
         };
     } catch (error) {
@@ -92,8 +113,9 @@ async function getLearnedKnowledge(limit = 50) {
     }
 }
 
+
 /**
- * Get one knowledge/memory record
+ * Get knowledge by ID
  */
 async function getKnowledgeById(memoryId) {
     if (!memoryId) {
@@ -120,10 +142,15 @@ async function getKnowledgeById(memoryId) {
     }
 }
 
+
 /**
- * Correct learned knowledge
+ * Correct knowledge
  */
-async function correctKnowledge(memoryId, correction, options = {}) {
+async function correctKnowledge(
+    memoryId,
+    correction,
+    options = {}
+) {
     if (!memoryId) {
         return {
             success: false,
@@ -149,7 +176,6 @@ async function correctKnowledge(memoryId, correction, options = {}) {
 
         return {
             success: true,
-            action: "correct",
             result
         };
     } catch (error) {
@@ -160,8 +186,9 @@ async function correctKnowledge(memoryId, correction, options = {}) {
     }
 }
 
+
 /**
- * Add feedback to knowledge
+ * Add feedback
  */
 async function addKnowledgeFeedback(
     memoryId,
@@ -186,7 +213,6 @@ async function addKnowledgeFeedback(
 
         return {
             success: true,
-            action: "feedback",
             result
         };
     } catch (error) {
@@ -197,8 +223,9 @@ async function addKnowledgeFeedback(
     }
 }
 
+
 /**
- * Mark knowledge helpful
+ * Mark helpful
  */
 async function markKnowledgeHelpful(memoryId) {
     if (!memoryId) {
@@ -215,7 +242,6 @@ async function markKnowledgeHelpful(memoryId) {
 
         return {
             success: true,
-            action: "helpful",
             result
         };
     } catch (error) {
@@ -226,8 +252,9 @@ async function markKnowledgeHelpful(memoryId) {
     }
 }
 
+
 /**
- * Mark knowledge not helpful
+ * Mark not helpful
  */
 async function markKnowledgeNotHelpful(memoryId) {
     if (!memoryId) {
@@ -244,7 +271,6 @@ async function markKnowledgeNotHelpful(memoryId) {
 
         return {
             success: true,
-            action: "not-helpful",
             result
         };
     } catch (error) {
@@ -255,8 +281,9 @@ async function markKnowledgeNotHelpful(memoryId) {
     }
 }
 
+
 /**
- * Get learning history
+ * Learning history
  */
 async function getLearningHistory(limit = 50) {
     try {
@@ -268,7 +295,9 @@ async function getLearningHistory(limit = 50) {
 
         return {
             success: true,
-            count: Array.isArray(result) ? result.length : 0,
+            count: Array.isArray(result)
+                ? result.length
+                : 0,
             history: result
         };
     } catch (error) {
@@ -279,10 +308,14 @@ async function getLearningHistory(limit = 50) {
     }
 }
 
+
 /**
- * Verify learned knowledge
+ * Verify knowledge
  */
-async function verifyKnowledge(memoryId, options = {}) {
+async function verifyKnowledge(
+    memoryId,
+    options = {}
+) {
     if (!memoryId) {
         return {
             success: false,
@@ -300,7 +333,6 @@ async function verifyKnowledge(memoryId, options = {}) {
 
         return {
             success: true,
-            action: "verify",
             result
         };
     } catch (error) {
@@ -311,8 +343,9 @@ async function verifyKnowledge(memoryId, options = {}) {
     }
 }
 
+
 /**
- * Learning system status
+ * Learning status
  */
 async function getLearningStatus() {
     try {
@@ -332,8 +365,9 @@ async function getLearningStatus() {
     }
 }
 
+
 /**
- * Memory status used by Learning Engine
+ * Memory status
  */
 async function getMemoryStatus() {
     try {
@@ -355,55 +389,61 @@ async function getMemoryStatus() {
 
 
 /**
- * Learning API health
+ * API health
  */
 async function health() {
-    try {
-        const learningStatus =
-            await getLearningStatus();
+    const learningStatus =
+        await getLearningStatus();
 
-        const memoryStatus =
-            await getMemoryStatus();
+    const memoryStatus =
+        await getMemoryStatus();
 
-        return {
-            success:
-                learningStatus.success &&
-                memoryStatus.success,
+    return {
+        success:
+            learningStatus.success &&
+            memoryStatus.success,
 
-            service: "AarHen Learning API",
+        service: "AarHen Learning API",
 
-            learning: learningStatus,
+        learning: learningStatus,
 
-            memory: memoryStatus,
+        memory: memoryStatus,
 
-            timestamp: new Date().toISOString()
-        };
-    } catch (error) {
-        return {
-            success: false,
-            service: "AarHen Learning API",
-            error: error.message,
-            timestamp: new Date().toISOString()
-        };
-    }
+        timestamp: new Date().toISOString()
+    };
 }
 
 
 /**
- * Public API
+ * Export everything
+ *
+ * IMPORTANT:
+ * Old function names are preserved
+ * for test.js and server compatibility.
  */
 module.exports = {
+    // New API
     learn,
+
+    // Compatibility API
+    learnFromUser,
+
     searchLearnedKnowledge,
     getLearnedKnowledge,
     getKnowledgeById,
+
     correctKnowledge,
     addKnowledgeFeedback,
+
     markKnowledgeHelpful,
     markKnowledgeNotHelpful,
+
     getLearningHistory,
+
     verifyKnowledge,
+
     getLearningStatus,
     getMemoryStatus,
+
     health
 };
