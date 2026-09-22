@@ -26,7 +26,7 @@ jobs:
 
 
       # ======================================================
-      # NODE
+      # NODE SETUP
       # ======================================================
 
       - name: Setup Node.js
@@ -49,9 +49,10 @@ jobs:
       # SYNTAX CHECK
       # ======================================================
 
-      - name: Check server syntax
+      - name: Check AarHen syntax
         run: |
           node --check server.js
+
           node --check core/brain.js
           node --check core/orchestrator.js
           node --check core/memory.js
@@ -64,24 +65,16 @@ jobs:
           node --check core/storage.js
           node --check core/storageProvider.js
           node --check core/memoryHistory.js
+
           node --check engines/knowledge.js
           node --check engines/research.js
+
           node --check providers/researchProvider.js
           node --check providers/providerManager.js
+
           node --check skills/executor.js
           node --check skills/router.js
           node --check skills/registry.js
-
-
-      # ======================================================
-      # MODULE LOAD TEST
-      # ======================================================
-
-      - name: Load AarHen modules
-        run: |
-          node -e "require('./server.js')"
-        env:
-          PORT: 3000
 
 
       # ======================================================
@@ -89,37 +82,59 @@ jobs:
       # ======================================================
 
       - name: Start AarHen server
+        env:
+          PORT: 3000
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
           node server.js > server.log 2>&1 &
           echo $! > server.pid
+
+          echo "AarHen server starting..."
 
 
       # ======================================================
       # WAIT FOR SERVER
       # ======================================================
 
-      - name: Wait for server
+      - name: Wait for AarHen server
         run: |
-          echo "Waiting for AarHen server..."
+
+          echo "Waiting for server..."
 
           for i in {1..30}
           do
+
             if curl -s http://127.0.0.1:3000/ > /dev/null
             then
-              echo "AarHen server is ONLINE."
+
+              echo "======================================"
+              echo "AarHen server is ONLINE"
+              echo "======================================"
+
               exit 0
+
             fi
 
             echo "Waiting... $i/30"
+
             sleep 1
+
           done
 
-          echo "Server failed to start."
+
+          echo ""
+          echo "======================================"
+          echo "SERVER FAILED TO START"
+          echo "======================================"
+
           echo ""
           echo "===== SERVER LOG ====="
+
           cat server.log || true
+
           echo ""
-          echo "===== PROCESS ====="
+          echo "===== NODE PROCESSES ====="
+
           ps aux | grep node || true
 
           exit 1
@@ -131,7 +146,14 @@ jobs:
 
       - name: Test root endpoint
         run: |
-          curl -f http://127.0.0.1:3000/
+
+          echo "Testing root endpoint..."
+
+          curl -f \
+            http://127.0.0.1:3000/
+
+          echo ""
+          echo "Root endpoint OK."
 
 
       # ======================================================
@@ -140,7 +162,14 @@ jobs:
 
       - name: Test learning status
         run: |
-          curl -f http://127.0.0.1:3000/learning-status
+
+          echo "Testing learning status..."
+
+          curl -f \
+            http://127.0.0.1:3000/learning-status
+
+          echo ""
+          echo "Learning status OK."
 
 
       # ======================================================
@@ -149,7 +178,14 @@ jobs:
 
       - name: Test memory status
         run: |
-          curl -f http://127.0.0.1:3000/memory-status
+
+          echo "Testing memory status..."
+
+          curl -f \
+            http://127.0.0.1:3000/memory-status
+
+          echo ""
+          echo "Memory status OK."
 
 
       # ======================================================
@@ -158,16 +194,30 @@ jobs:
 
       - name: Test memory health
         run: |
-          curl -f http://127.0.0.1:3000/memory-health
+
+          echo "Testing memory health..."
+
+          curl -f \
+            http://127.0.0.1:3000/memory-health
+
+          echo ""
+          echo "Memory health OK."
 
 
       # ======================================================
-      # LEARNING STATUS API
+      # LEARNING API
       # ======================================================
 
       - name: Test learning API
         run: |
-          curl -f http://127.0.0.1:3000/learning
+
+          echo "Testing learning API..."
+
+          curl -f \
+            http://127.0.0.1:3000/learning
+
+          echo ""
+          echo "Learning API OK."
 
 
       # ======================================================
@@ -176,7 +226,14 @@ jobs:
 
       - name: Test memory API
         run: |
-          curl -f http://127.0.0.1:3000/memory
+
+          echo "Testing memory API..."
+
+          curl -f \
+            http://127.0.0.1:3000/memory
+
+          echo ""
+          echo "Memory API OK."
 
 
       # ======================================================
@@ -185,7 +242,14 @@ jobs:
 
       - name: Test memory history
         run: |
-          curl -f http://127.0.0.1:3000/memory-history
+
+          echo "Testing memory history..."
+
+          curl -f \
+            http://127.0.0.1:3000/memory-history
+
+          echo ""
+          echo "Memory history OK."
 
 
       # ======================================================
@@ -194,7 +258,14 @@ jobs:
 
       - name: Test learning history
         run: |
-          curl -f http://127.0.0.1:3000/learning-history
+
+          echo "Testing learning history..."
+
+          curl -f \
+            http://127.0.0.1:3000/learning-history
+
+          echo ""
+          echo "Learning history OK."
 
 
       # ======================================================
@@ -203,11 +274,20 @@ jobs:
 
       - name: Test ask endpoint
         run: |
+
+          echo "Testing AarHen ask endpoint..."
+
           curl -f \
             -X POST \
             -H "Content-Type: application/json" \
-            -d '{"input":"What is vehicle finance?","remember":false}' \
+            -d '{
+              "input": "What is vehicle finance?",
+              "remember": false
+            }' \
             http://127.0.0.1:3000/ask
+
+          echo ""
+          echo "Ask endpoint OK."
 
 
       # ======================================================
@@ -216,17 +296,24 @@ jobs:
 
       - name: Test learn endpoint
         run: |
+
+          echo "Testing learn endpoint..."
+
           curl -f \
             -X POST \
             -H "Content-Type: application/json" \
             -d '{
-              "title":"AarHen CI Test Knowledge",
-              "content":"AarHen automated CI test knowledge record.",
-              "category":"system-test",
-              "source":"github-actions",
-              "approved":true
+              "title": "AarHen CI Test Knowledge",
+              "content": "AarHen automated CI test knowledge record.",
+              "category": "system-test",
+              "source": "github-actions",
+              "approved": true,
+              "confidence": 0.9
             }' \
             http://127.0.0.1:3000/learn
+
+          echo ""
+          echo "Learn endpoint OK."
 
 
       # ======================================================
@@ -235,24 +322,67 @@ jobs:
 
       - name: Test feedback endpoint
         run: |
+
+          echo "Testing feedback endpoint..."
+
           curl -f \
             -X POST \
             -H "Content-Type: application/json" \
             -d '{
-              "memoryId":"test-memory",
-              "helpful":true
+              "memoryId": "test-memory",
+              "helpful": true
             }' \
             http://127.0.0.1:3000/feedback || true
 
+          echo ""
+          echo "Feedback endpoint checked."
+
 
       # ======================================================
-      # SERVER LOG
+      # FINAL SERVER STATUS
+      # ======================================================
+
+      - name: Final server status
+        run: |
+
+          echo ""
+          echo "======================================"
+          echo "AARHEN SERVER TEST COMPLETE"
+          echo "======================================"
+
+          echo ""
+          echo "Server is running successfully."
+
+          echo ""
+          echo "Checked:"
+          echo "- Server startup"
+          echo "- Root API"
+          echo "- Learning"
+          echo "- Memory"
+          echo "- Memory health"
+          echo "- Memory history"
+          echo "- Learning history"
+          echo "- Ask endpoint"
+          echo "- Learn endpoint"
+          echo "- Feedback endpoint"
+
+          echo ""
+          echo "======================================"
+
+
+      # ======================================================
+      # SHOW SERVER LOG
       # ======================================================
 
       - name: Show server log
         if: always()
         run: |
-          echo "===== AARHEN SERVER LOG ====="
+
+          echo ""
+          echo "======================================"
+          echo "AARHEN SERVER LOG"
+          echo "======================================"
+
           cat server.log || true
 
 
@@ -260,10 +390,15 @@ jobs:
       # STOP SERVER
       # ======================================================
 
-      - name: Stop server
+      - name: Stop AarHen server
         if: always()
         run: |
+
           if [ -f server.pid ]
           then
+
+            echo "Stopping AarHen server..."
+
             kill $(cat server.pid) || true
+
           fi
