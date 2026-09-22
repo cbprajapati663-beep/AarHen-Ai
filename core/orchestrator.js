@@ -70,13 +70,9 @@ function shouldResearch(
     context = {}
 ) {
 
-    // --------------------------------------------------------
-    // Explicit research request from caller
-    // --------------------------------------------------------
-
     if (
         context.research === true ||
-        context.intent === "research"
+        String(context.intent || "").toLowerCase() === "research"
     ) {
 
         return {
@@ -88,10 +84,6 @@ function shouldResearch(
         };
     }
 
-
-    // --------------------------------------------------------
-    // Explicitly disable research
-    // --------------------------------------------------------
 
     if (
         context.research === false
@@ -106,10 +98,6 @@ function shouldResearch(
         };
     }
 
-
-    // --------------------------------------------------------
-    // Intent category
-    // --------------------------------------------------------
 
     const category =
         String(
@@ -130,10 +118,6 @@ function shouldResearch(
         };
     }
 
-
-    // --------------------------------------------------------
-    // Selected research skill
-    // --------------------------------------------------------
 
     const selectedSkill =
         routing
@@ -173,10 +157,6 @@ function shouldResearch(
     }
 
 
-    // --------------------------------------------------------
-    // Current/fresh information signals
-    // --------------------------------------------------------
-
     const cleanRequest =
         String(
             request || ""
@@ -186,57 +166,31 @@ function shouldResearch(
     const researchSignals = [
 
         "latest",
-
         "current",
-
         "currently",
-
         "today",
-
         "tonight",
-
         "this week",
-
         "this month",
-
         "recent",
-
         "recently",
-
         "news",
-
         "update",
-
         "updates",
-
         "newest",
-
         "live",
-
         "real time",
-
         "realtime",
-
         "search web",
-
         "search the web",
-
         "search internet",
-
         "search online",
-
         "look up",
-
         "lookup",
-
         "on internet",
-
         "from internet",
-
         "from web",
-
         "online information",
-
         "latest information"
     ];
 
@@ -260,20 +214,12 @@ function shouldResearch(
     }
 
 
-    // --------------------------------------------------------
-    // Research intent keywords
-    // --------------------------------------------------------
-
     const researchKeywords = [
 
         "research",
-
         "web research",
-
         "web search",
-
         "internet search",
-
         "online search"
     ];
 
@@ -297,16 +243,305 @@ function shouldResearch(
     }
 
 
-    // --------------------------------------------------------
-    // Default
-    // --------------------------------------------------------
-
     return {
 
         required: false,
 
         reason:
             "Live web research not required."
+    };
+}
+
+
+// ============================================================
+// NORMALIZE RESEARCH RESULT
+// ============================================================
+
+function normalizeResearchResult(
+    result,
+    request
+) {
+
+    const rawResearch =
+        result?.research ||
+        result?.result ||
+        result ||
+        {};
+
+    // --------------------------------------------------------
+    // SOURCE COLLECTION
+    // --------------------------------------------------------
+
+    let sources = [];
+
+    if (
+        Array.isArray(
+            rawResearch.sources
+        )
+    ) {
+
+        sources =
+            rawResearch.sources;
+
+    } else if (
+        Array.isArray(
+            rawResearch.results
+        )
+    ) {
+
+        sources =
+            rawResearch.results;
+
+    } else if (
+        Array.isArray(
+            result?.sources
+        )
+    ) {
+
+        sources =
+            result.sources;
+    }
+
+
+    // --------------------------------------------------------
+    // NORMALIZE SOURCES
+    // --------------------------------------------------------
+
+    sources =
+        sources
+            .filter(Boolean)
+            .map(
+                (source, index) => {
+
+                    return {
+
+                        id:
+                            source.id ||
+                            `research-source-${index + 1}`,
+
+                        title:
+                            source.title ||
+                            source.name ||
+                            `Research Source ${index + 1}`,
+
+                        url:
+                            source.url ||
+                            source.link ||
+                            "",
+
+                        content:
+                            source.content ||
+                            source.text ||
+                            source.snippet ||
+                            "",
+
+                        snippet:
+                            source.snippet ||
+                            source.content ||
+                            source.text ||
+                            "",
+
+                        score:
+                            typeof source.score === "number"
+                                ? source.score
+                                : null,
+
+                        publishedDate:
+                            source.publishedDate ||
+                            source.published_at ||
+                            source.date ||
+                            null
+                    };
+                }
+            );
+
+
+    // --------------------------------------------------------
+    // VERIFICATION
+    // --------------------------------------------------------
+
+    const verification =
+        rawResearch.verification ||
+        result?.verification ||
+        null;
+
+
+    let verificationStatus =
+        rawResearch.verificationStatus ||
+        result?.verificationStatus ||
+        verification?.verificationStatus ||
+        verification?.status ||
+        null;
+
+
+    const verified =
+        rawResearch.verified === true ||
+        result?.verified === true ||
+        verification?.verified === true ||
+        verificationStatus === "verified";
+
+
+    if (verified) {
+
+        verificationStatus =
+            "verified";
+
+    } else if (
+        !verificationStatus
+    ) {
+
+        verificationStatus =
+            "review";
+    }
+
+
+    // --------------------------------------------------------
+    // CONFIDENCE
+    // --------------------------------------------------------
+
+    let confidence =
+        typeof rawResearch.confidence === "number"
+            ? rawResearch.confidence
+            : typeof result?.confidence === "number"
+                ? result.confidence
+                : 0;
+
+
+    if (
+        confidence > 1
+    ) {
+
+        confidence =
+            confidence / 100;
+    }
+
+
+    confidence =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                confidence
+            )
+        );
+
+
+    // --------------------------------------------------------
+    // SOURCE COUNT
+    // --------------------------------------------------------
+
+    const sourceCount =
+        sources.length ||
+        Number(
+            rawResearch.sourceCount ||
+            result?.sourceCount ||
+            0
+        );
+
+
+    // --------------------------------------------------------
+    // ANSWER
+    // --------------------------------------------------------
+
+    const answer =
+        rawResearch.answer ||
+        rawResearch.summary ||
+        result?.answer ||
+        result?.summary ||
+        "";
+
+
+    // --------------------------------------------------------
+    // PROVIDER
+    // --------------------------------------------------------
+
+    const provider =
+        rawResearch.provider ||
+        result?.provider ||
+        "tavily";
+
+
+    // --------------------------------------------------------
+    // LEARNING
+    // --------------------------------------------------------
+
+    const learning =
+        rawResearch.learning ||
+        result?.learning ||
+        null;
+
+
+    // --------------------------------------------------------
+    // RESEARCH STATUS
+    // --------------------------------------------------------
+
+    const researchStatus =
+        rawResearch.researchStatus ||
+        rawResearch.status ||
+        result?.researchStatus ||
+        result?.status ||
+        (
+            verified
+                ? "verified"
+                : "review"
+        );
+
+
+    // --------------------------------------------------------
+    // FINAL STANDARDIZED OBJECT
+    // --------------------------------------------------------
+
+    return {
+
+        success:
+            rawResearch.success !== false &&
+            result?.success !== false,
+
+        query:
+            rawResearch.query ||
+            result?.query ||
+            request,
+
+        answer,
+
+        sources,
+
+        sourceCount,
+
+        confidence,
+
+        verificationStatus,
+
+        verified,
+
+        provider,
+
+        verification,
+
+        learning,
+
+        researchStatus,
+
+        previousKnowledgeAvailable:
+            Boolean(
+                rawResearch.previousKnowledgeAvailable ||
+                result?.previousKnowledgeAvailable
+            ),
+
+        previousVerifiedKnowledgeAvailable:
+            Boolean(
+                rawResearch.previousVerifiedKnowledgeAvailable ||
+                result?.previousVerifiedKnowledgeAvailable
+            ),
+
+        memoryId:
+            rawResearch.memoryId ||
+            result?.memoryId ||
+            learning?.memoryId ||
+            null,
+
+        raw:
+            rawResearch
     };
 }
 
@@ -342,6 +577,7 @@ async function performResearch(
                 language
             });
 
+
         if (
             !result ||
             result.success !== true
@@ -366,9 +602,38 @@ async function performResearch(
                     null,
 
                 context:
-                    null
+                    null,
+
+                sources:
+                    [],
+
+                sourceCount:
+                    0,
+
+                confidence:
+                    0,
+
+                verified:
+                    false,
+
+                verificationStatus:
+                    "failed"
             };
         }
+
+
+        // ----------------------------------------------------
+        // IMPORTANT:
+        // Convert whatever Research API returns into one
+        // stable research object.
+        // ----------------------------------------------------
+
+        const standardizedResearch =
+            normalizeResearchResult(
+                result,
+                request
+            );
+
 
         return {
 
@@ -378,28 +643,39 @@ async function performResearch(
                 request,
 
             research:
-                result.research,
+                standardizedResearch,
 
             context:
-                result.context,
+                result.context ||
+                standardizedResearch.raw?.context ||
+                null,
 
             provider:
-                result.provider,
+                standardizedResearch.provider,
+
+            sources:
+                standardizedResearch.sources,
 
             sourceCount:
-                result.sourceCount,
+                standardizedResearch.sourceCount,
 
             confidence:
-                result.confidence,
+                standardizedResearch.confidence,
 
             verified:
-                result.verified,
+                standardizedResearch.verified,
 
             verificationStatus:
-                result.verificationStatus,
+                standardizedResearch.verificationStatus,
+
+            verification:
+                standardizedResearch.verification,
+
+            learning:
+                standardizedResearch.learning,
 
             status:
-                result.status
+                standardizedResearch.researchStatus
         };
 
     } catch (error) {
@@ -421,7 +697,22 @@ async function performResearch(
                 null,
 
             context:
-                null
+                null,
+
+            sources:
+                [],
+
+            sourceCount:
+                0,
+
+            confidence:
+                0,
+
+            verified:
+                false,
+
+            verificationStatus:
+                "error"
         };
     }
 }
@@ -772,6 +1063,7 @@ function storeMemory(
         };
     }
 
+
     if (
         context.remember === true
     ) {
@@ -838,6 +1130,7 @@ function storeMemory(
                 true
         });
     }
+
 
     return memoryManager.autoRemember({
 
@@ -911,8 +1204,10 @@ async function process(
         };
     }
 
+
     const request =
         input.trim();
+
 
     if (!request) {
 
@@ -936,6 +1231,7 @@ async function process(
             context
         );
 
+
     if (!brainResult.success) {
 
         return brainResult;
@@ -950,6 +1246,7 @@ async function process(
         selectSkill(
             request
         );
+
 
     if (!routing.success) {
 
@@ -966,22 +1263,16 @@ async function process(
             request
         );
 
+
     if (!intentResult.success) {
 
         return intentResult;
     }
 
 
-    // ========================================================
+    // --------------------------------------------------------
     // EXPLICIT CONTEXT INTENT OVERRIDE
-    // ========================================================
-
-    // The /research API sends:
-    //
-    // context.intent = "research"
-    //
-    // Normal /ask requests continue to use automatic
-    // intent detection from core/intent.js.
+    // --------------------------------------------------------
 
     if (
         String(
@@ -994,7 +1285,8 @@ async function process(
 
             ...intentResult,
 
-            success: true,
+            success:
+                true,
 
             category:
                 "research",
@@ -1036,7 +1328,7 @@ async function process(
 
 
     // --------------------------------------------------------
-    // LIVE WEB RESEARCH
+    // DEFAULT RESEARCH RESULT
     // --------------------------------------------------------
 
     let researchResult = {
@@ -1055,9 +1347,29 @@ async function process(
         context:
             null,
 
+        sources:
+            [],
+
+        sourceCount:
+            0,
+
+        confidence:
+            0,
+
+        verified:
+            false,
+
+        verificationStatus:
+            "not-researched",
+
         reason:
             researchDecision.reason
     };
+
+
+    // --------------------------------------------------------
+    // LIVE WEB RESEARCH
+    // --------------------------------------------------------
 
     if (
         researchDecision.required
@@ -1069,11 +1381,14 @@ async function process(
                 context
             );
 
+
         researchResult.required =
             true;
 
+
         researchResult.reason =
             researchDecision.reason;
+
 
         if (
             !researchResult.success
@@ -1150,6 +1465,7 @@ async function process(
             context
         );
 
+
     executionContext
         .memoryAction =
             memoryAction;
@@ -1182,6 +1498,10 @@ async function process(
                 researchResult.provider ||
                 null,
 
+            sources:
+                researchResult.sources ||
+                [],
+
             sourceCount:
                 researchResult.sourceCount ||
                 0,
@@ -1199,6 +1519,14 @@ async function process(
                 researchResult
                     .verificationStatus ||
                 "not-researched",
+
+            verification:
+                researchResult.verification ||
+                null,
+
+            learning:
+                researchResult.learning ||
+                null,
 
             result:
                 researchResult.research ||
@@ -1228,6 +1556,7 @@ async function process(
             "Memory storage not requested."
     };
 
+
     if (
         memoryAction.shouldStore === true
     ) {
@@ -1244,6 +1573,7 @@ async function process(
                 context
             );
     }
+
 
     executionContext
         .memoryWrite =
@@ -1295,6 +1625,7 @@ async function process(
             timestamp:
                 new Date().toISOString()
         };
+
 
         return {
 
@@ -1382,6 +1713,7 @@ async function process(
             .createResponse(
                 orchestrationResult
             );
+
 
     return orchestrationResult;
 }
@@ -1483,6 +1815,8 @@ function getStatus() {
 
             "Source Collection",
 
+            "Source Normalization",
+
             "Research Context Injection",
 
             "RAG Retrieval",
@@ -1523,6 +1857,9 @@ function getStatus() {
                 true,
 
             sourceCollection:
+                true,
+
+            sourceNormalization:
                 true,
 
             confidenceTracking:
