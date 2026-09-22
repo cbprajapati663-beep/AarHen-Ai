@@ -9,11 +9,12 @@ const verification =
 const learning =
     require("../core/learning");
 
+
 // ============================================================
 // CONSTANTS
 // ============================================================
 
-const RESEARCH_VERSION = "5.0.0";
+const RESEARCH_VERSION = "5.1.0";
 
 const MIN_VERIFIED_SOURCES = 2;
 
@@ -23,13 +24,17 @@ const MIN_PARTIAL_SOURCES = 1;
 
 const MIN_PARTIAL_CONFIDENCE = 0.60;
 
+
 // ============================================================
 // NORMALIZE
 // ============================================================
 
 function normalize(value = "") {
-    return String(value || "").trim();
+
+    return String(value || "")
+        .trim();
 }
+
 
 // ============================================================
 // CLAMP
@@ -40,17 +45,76 @@ function clamp(
     min = 0,
     max = 1
 ) {
-    const number = Number(value);
 
-    if (Number.isNaN(number)) {
+    const number =
+        Number(value);
+
+    if (
+        Number.isNaN(number)
+    ) {
+
         return min;
     }
 
     return Math.max(
         min,
-        Math.min(max, number)
+        Math.min(
+            max,
+            number
+        )
     );
 }
+
+
+// ============================================================
+// TEXT NORMALIZATION
+// ============================================================
+
+function normalizeText(
+    value = ""
+) {
+
+    return normalize(value)
+        .toLowerCase()
+        .replace(
+            /https?:\/\/\S+/g,
+            " "
+        )
+        .replace(
+            /[^a-z0-9\s]/g,
+            " "
+        )
+        .replace(
+            /\s+/g,
+            " "
+        )
+        .trim();
+}
+
+
+// ============================================================
+// TOKENIZE
+// ============================================================
+
+function tokenize(
+    value = ""
+) {
+
+    const text =
+        normalizeText(value);
+
+    if (!text) {
+        return [];
+    }
+
+    return text
+        .split(" ")
+        .filter(
+            token =>
+                token.length >= 4
+        );
+}
+
 
 // ============================================================
 // CREATE RESEARCH REQUEST
@@ -66,8 +130,11 @@ function createResearchRequest({
         normalize(query);
 
     if (!cleanQuery) {
+
         return {
+
             success: false,
+
             error:
                 "Research query is required."
         };
@@ -83,6 +150,7 @@ function createResearchRequest({
         );
 
     return {
+
         success: true,
 
         query:
@@ -94,18 +162,23 @@ function createResearchRequest({
         language:
             language || "auto",
 
-        providerRequired: true,
+        providerRequired:
+            true,
 
-        verificationRequired: true,
+        verificationRequired:
+            true,
 
-        learningEnabled: true,
+        learningEnabled:
+            true,
 
-        verified: false,
+        verified:
+            false,
 
         status:
             "research-request-created"
     };
 }
+
 
 // ============================================================
 // VALIDATE SINGLE SOURCE
@@ -119,37 +192,52 @@ function validateSource(
         !source ||
         typeof source !== "object"
     ) {
+
         return {
+
             valid: false,
+
             reason:
                 "Invalid source object."
         };
     }
 
     const title =
-        normalize(source.title);
+        normalize(
+            source.title
+        );
 
     const url =
-        normalize(source.url);
+        normalize(
+            source.url
+        );
 
     if (!title) {
+
         return {
+
             valid: false,
+
             reason:
                 "Source title is missing."
         };
     }
 
     if (!url) {
+
         return {
+
             valid: false,
+
             reason:
                 "Source URL is missing.",
+
             title
         };
     }
 
     return {
+
         valid: true,
 
         title,
@@ -163,6 +251,7 @@ function validateSource(
 
         publishedAt:
             source.publishedAt ||
+            source.published_at ||
             null,
 
         retrievedAt:
@@ -174,13 +263,21 @@ function validateSource(
                 source.snippet
             ),
 
+        content:
+            normalize(
+                source.content
+            ),
+
         score:
             typeof source.score ===
             "number"
+
                 ? source.score
+
                 : null
     };
 }
+
 
 // ============================================================
 // VALIDATE SOURCES
@@ -190,35 +287,43 @@ function validateSources(
     sources = []
 ) {
 
-    if (!Array.isArray(sources)) {
+    if (
+        !Array.isArray(sources)
+    ) {
+
         return [];
     }
 
     const validated =
         sources
-            .map(validateSource)
+            .map(
+                validateSource
+            )
             .filter(
                 source =>
                     source.valid
             );
 
-    // --------------------------------------------------------
-    // Remove duplicate URLs
-    // --------------------------------------------------------
 
     const seen =
         new Set();
+
 
     return validated.filter(
         source => {
 
             const key =
                 source.url
-                    .toLowerCase();
+                    .toLowerCase()
+                    .replace(
+                        /\/$/,
+                        ""
+                    );
 
             if (
                 seen.has(key)
             ) {
+
                 return false;
             }
 
@@ -228,6 +333,391 @@ function validateSources(
         }
     );
 }
+
+
+// ============================================================
+// SOURCE TEXT
+// ============================================================
+
+function getSourceText(
+    source = {}
+) {
+
+    return normalize(
+        [
+            source.title,
+            source.snippet,
+            source.content
+        ]
+            .filter(Boolean)
+            .join(" ")
+    );
+}
+
+
+// ============================================================
+// SOURCE SIMILARITY
+// ============================================================
+
+function calculateSourceSimilarity(
+    sourceA = {},
+    sourceB = {}
+) {
+
+    const tokensA =
+        new Set(
+            tokenize(
+                getSourceText(
+                    sourceA
+                )
+            )
+        );
+
+    const tokensB =
+        new Set(
+            tokenize(
+                getSourceText(
+                    sourceB
+                )
+            )
+        );
+
+    if (
+        tokensA.size === 0 ||
+        tokensB.size === 0
+    ) {
+
+        return 0;
+    }
+
+    let intersection = 0;
+
+    for (
+        const token of tokensA
+    ) {
+
+        if (
+            tokensB.has(token)
+        ) {
+
+            intersection++;
+        }
+    }
+
+    const union =
+        new Set([
+            ...tokensA,
+            ...tokensB
+        ]).size;
+
+    if (!union) {
+        return 0;
+    }
+
+    return clamp(
+        intersection / union
+    );
+}
+
+
+// ============================================================
+// CONFLICT SIGNALS
+// ============================================================
+
+const CONFLICT_PATTERNS = [
+
+    /\bnot\b/i,
+
+    /\bno\b/i,
+
+    /\bnever\b/i,
+
+    /\bfalse\b/i,
+
+    /\bincorrect\b/i,
+
+    /\bwrong\b/i,
+
+    /\bdenied\b/i,
+
+    /\bdenies\b/i,
+
+    /\brefutes\b/i,
+
+    /\brefuted\b/i,
+
+    /\bcontrary\b/i,
+
+    /\bunlike\b/i,
+
+    /\bdifferent\b/i,
+
+    /\bdispute\b/i,
+
+    /\bdisputed\b/i,
+
+    /\bcontroversial\b/i,
+
+    /\bconflict\b/i,
+
+    /\bconflicting\b/i
+];
+
+
+// ============================================================
+// DETECT NUMERIC DIFFERENCES
+// ============================================================
+
+function extractNumbers(
+    text = ""
+) {
+
+    return (
+        normalize(text)
+            .match(
+                /\b\d+(?:\.\d+)?\b/g
+            ) ||
+        []
+    ).map(
+        Number
+    );
+}
+
+
+// ============================================================
+// COMPARE SOURCE PAIR
+// ============================================================
+
+function compareSourcePair(
+    sourceA = {},
+    sourceB = {}
+) {
+
+    const textA =
+        getSourceText(
+            sourceA
+        );
+
+    const textB =
+        getSourceText(
+            sourceB
+        );
+
+
+    const similarity =
+        calculateSourceSimilarity(
+            sourceA,
+            sourceB
+        );
+
+
+    const numbersA =
+        extractNumbers(
+            textA
+        );
+
+    const numbersB =
+        extractNumbers(
+            textB
+        );
+
+
+    const numericDifference =
+        numbersA.length > 0 &&
+        numbersB.length > 0 &&
+        numbersA.some(
+            number =>
+                !numbersB.includes(
+                    number
+                )
+        ) &&
+        numbersB.some(
+            number =>
+                !numbersA.includes(
+                    number
+                )
+        );
+
+
+    const conflictSignalA =
+        CONFLICT_PATTERNS.some(
+            pattern =>
+                pattern.test(
+                    textA
+                )
+        );
+
+
+    const conflictSignalB =
+        CONFLICT_PATTERNS.some(
+            pattern =>
+                pattern.test(
+                    textB
+                )
+        );
+
+
+    let relationship =
+        "different";
+
+
+    if (
+        similarity >= 0.55
+    ) {
+
+        relationship =
+            "supporting";
+
+    } else if (
+        similarity >= 0.25
+    ) {
+
+        relationship =
+            "related";
+    }
+
+
+    // --------------------------------------------------------
+    // Conservative conflict detection
+    // --------------------------------------------------------
+
+    const possibleConflict =
+        numericDifference &&
+        similarity >= 0.20;
+
+
+    return {
+
+        sourceA:
+            sourceA.url,
+
+        sourceB:
+            sourceB.url,
+
+        similarity:
+
+            Number(
+                similarity.toFixed(3)
+            ),
+
+        relationship,
+
+        numericDifference,
+
+        conflictSignals: {
+
+            sourceA:
+                conflictSignalA,
+
+            sourceB:
+                conflictSignalB
+        },
+
+        possibleConflict
+    };
+}
+
+
+// ============================================================
+// COMPARE ALL SOURCES
+// ============================================================
+
+function compareSources(
+    sources = []
+) {
+
+    const validSources =
+        validateSources(
+            sources
+        );
+
+
+    const comparisons = [];
+
+    let supportingPairs = 0;
+
+    let relatedPairs = 0;
+
+    let conflictPairs = 0;
+
+
+    for (
+        let i = 0;
+        i < validSources.length;
+        i++
+    ) {
+
+        for (
+            let j = i + 1;
+            j < validSources.length;
+            j++
+        ) {
+
+            const comparison =
+                compareSourcePair(
+                    validSources[i],
+                    validSources[j]
+                );
+
+
+            comparisons.push(
+                comparison
+            );
+
+
+            if (
+                comparison.relationship ===
+                "supporting"
+            ) {
+
+                supportingPairs++;
+            }
+
+
+            if (
+                comparison.relationship ===
+                "related"
+            ) {
+
+                relatedPairs++;
+            }
+
+
+            if (
+                comparison.possibleConflict
+            ) {
+
+                conflictPairs++;
+            }
+        }
+    }
+
+
+    return {
+
+        success: true,
+
+        sourceCount:
+            validSources.length,
+
+        comparisons,
+
+        supportingPairs,
+
+        relatedPairs,
+
+        conflictPairs,
+
+        conflictDetected:
+            conflictPairs > 0,
+
+        status:
+            conflictPairs > 0
+                ? "conflict-detected"
+                : "sources-consistent"
+    };
+}
+
 
 // ============================================================
 // CREATE RESEARCH RESULT
@@ -245,7 +735,15 @@ function createResearchResult({
             sources
         );
 
+
+    const comparison =
+        compareSources(
+            validSources
+        );
+
+
     return {
+
         success: true,
 
         query:
@@ -263,7 +761,13 @@ function createResearchResult({
         confidence:
             clamp(confidence),
 
-        verified: false,
+        comparison,
+
+        conflictDetected:
+            comparison.conflictDetected,
+
+        verified:
+            false,
 
         verificationStatus:
             "review",
@@ -272,6 +776,7 @@ function createResearchResult({
             "research-result-created"
     };
 }
+
 
 // ============================================================
 // BUILD RESEARCH CONTEXT
@@ -285,17 +790,22 @@ function buildResearchContext(
         !result ||
         !result.success
     ) {
+
         return {
+
             success: false,
+
             error:
                 "Valid research result is required."
         };
     }
 
+
     const sources =
         validateSources(
             result.sources
         );
+
 
     const sourceText =
         sources
@@ -305,7 +815,16 @@ function buildResearchContext(
             )
             .join("\n");
 
+
+    const comparison =
+        result.comparison ||
+        compareSources(
+            sources
+        );
+
+
     return {
+
         success: true,
 
         query:
@@ -335,9 +854,18 @@ function buildResearchContext(
 
         verificationStatus:
             result.verificationStatus ||
-            "review"
+            "review",
+
+        comparison,
+
+        conflictDetected:
+            Boolean(
+                result.conflictDetected ||
+                comparison.conflictDetected
+            )
     };
 }
+
 
 // ============================================================
 // CALCULATE RESEARCH CONFIDENCE
@@ -345,7 +873,8 @@ function buildResearchContext(
 
 function calculateResearchConfidence({
     sources = [],
-    confidence = 0
+    confidence = 0,
+    comparison = null
 } = {}) {
 
     const validSources =
@@ -353,52 +882,98 @@ function calculateResearchConfidence({
             sources
         );
 
-    const suppliedConfidence =
-        clamp(confidence);
 
     if (
         validSources.length === 0
     ) {
+
         return 0;
     }
 
-    // --------------------------------------------------------
-    // If provider already supplied confidence,
-    // keep it within safe limits.
-    // --------------------------------------------------------
+
+    const suppliedConfidence =
+        clamp(
+            confidence
+        );
+
+
+    let baseConfidence;
+
 
     if (
         suppliedConfidence > 0
     ) {
-        return suppliedConfidence;
-    }
 
-    // --------------------------------------------------------
-    // Basic source-count confidence.
-    // This is NOT verification.
-    // Verification still requires the thresholds below.
-    // --------------------------------------------------------
+        baseConfidence =
+            suppliedConfidence;
 
-    if (
+    } else if (
         validSources.length >= 5
     ) {
-        return 0.90;
-    }
 
-    if (
+        baseConfidence =
+            0.90;
+
+    } else if (
         validSources.length >= 3
     ) {
-        return 0.82;
-    }
 
-    if (
+        baseConfidence =
+            0.82;
+
+    } else if (
         validSources.length >= 2
     ) {
-        return 0.75;
+
+        baseConfidence =
+            0.75;
+
+    } else {
+
+        baseConfidence =
+            0.60;
     }
 
-    return 0.60;
+
+    const comparisonResult =
+        comparison ||
+        compareSources(
+            validSources
+        );
+
+
+    // --------------------------------------------------------
+    // Conflict penalty
+    // --------------------------------------------------------
+
+    if (
+        comparisonResult.conflictDetected
+    ) {
+
+        const conflictCount =
+            Number(
+                comparisonResult.conflictPairs
+            ) || 1;
+
+
+        const penalty =
+            Math.min(
+                0.25,
+                conflictCount * 0.10
+            );
+
+
+        baseConfidence =
+            baseConfidence -
+            penalty;
+    }
+
+
+    return clamp(
+        baseConfidence
+    );
 }
+
 
 // ============================================================
 // VERIFY RESEARCH
@@ -415,17 +990,22 @@ function verifyResearch({
         !result ||
         !result.success
     ) {
+
         return {
+
             success: false,
+
             error:
                 "Research result is required."
         };
     }
 
+
     const actualSources =
         validateSources(
             result.sources || []
         );
+
 
     const count =
         Number(sourceCount) ||
@@ -433,21 +1013,48 @@ function verifyResearch({
         result.sourceCount ||
         0;
 
+
+    const comparison =
+        result.comparison ||
+        compareSources(
+            actualSources
+        );
+
+
     const score =
         typeof confidence ===
         "number"
+
             ? clamp(confidence)
+
             : calculateResearchConfidence({
+
                 sources:
                     actualSources,
+
                 confidence:
-                    result.confidence
+                    result.confidence,
+
+                comparison
             });
+
 
     let status =
         "review";
 
+
+    // --------------------------------------------------------
+    // Conflicting evidence
+    // --------------------------------------------------------
+
     if (
+        comparison.conflictDetected
+    ) {
+
+        status =
+            "review";
+
+    } else if (
         count >= MIN_VERIFIED_SOURCES &&
         score >= MIN_VERIFIED_CONFIDENCE
     ) {
@@ -464,11 +1071,15 @@ function verifyResearch({
             "partially-verified";
     }
 
+
     return {
+
         success: true,
 
         query:
-            normalize(result.query),
+            normalize(
+                result.query
+            ),
 
         sourceCount:
             count,
@@ -485,10 +1096,18 @@ function verifyResearch({
         verified:
             status === "verified",
 
+        conflictDetected:
+            Boolean(
+                comparison.conflictDetected
+            ),
+
+        comparison,
+
         verifiedAt:
             new Date().toISOString()
     };
 }
+
 
 // ============================================================
 // VERIFY WITH VERIFICATION ENGINE
@@ -504,12 +1123,16 @@ function verifyWithEngine({
 } = {}) {
 
     if (!memoryId) {
+
         return {
+
             success: false,
+
             error:
                 "Memory ID is required."
         };
     }
+
 
     try {
 
@@ -544,12 +1167,15 @@ function verifyWithEngine({
     } catch (error) {
 
         return {
+
             success: false,
+
             error:
                 error.message
         };
     }
 }
+
 
 // ============================================================
 // BUILD LEARNING CONTENT
@@ -557,22 +1183,27 @@ function verifyWithEngine({
 
 function buildLearningContent({
     summary = "",
-    sources = []
+    sources = [],
+    comparison = null
 } = {}) {
 
     const cleanSummary =
         normalize(summary);
+
 
     const validSources =
         validateSources(
             sources
         );
 
+
     if (
         !cleanSummary
     ) {
+
         return "";
     }
+
 
     const sourceText =
         validSources
@@ -582,16 +1213,53 @@ function buildLearningContent({
             )
             .join("\n");
 
-    if (!sourceText) {
-        return cleanSummary;
+
+    const comparisonResult =
+        comparison ||
+        compareSources(
+            validSources
+        );
+
+
+    let comparisonText =
+        "";
+
+
+    if (
+        comparisonResult.conflictDetected
+    ) {
+
+        comparisonText =
+            "\n\nResearch comparison: Conflicting evidence detected. Further verification is required.";
+
+    } else {
+
+        comparisonText =
+            "\n\nResearch comparison: Sources were cross-checked and no basic conflict signal was detected.";
     }
 
+
+    if (!sourceText) {
+
+        return (
+            cleanSummary +
+            comparisonText
+        );
+    }
+
+
     return (
+
         `${cleanSummary}\n\n` +
+
         `Sources:\n` +
-        sourceText
+
+        sourceText +
+
+        comparisonText
     );
 }
+
 
 // ============================================================
 // LEARN VERIFIED RESEARCH
@@ -610,44 +1278,70 @@ function learnVerifiedResearch({
     const cleanQuery =
         normalize(query);
 
+
     const cleanSummary =
         normalize(summary);
+
 
     const validSources =
         validateSources(
             sources
         );
 
+
     if (!cleanQuery) {
 
         return {
+
             success: false,
+
             error:
                 "Research query is required."
         };
     }
+
 
     if (
         cleanSummary.length < 10
     ) {
 
         return {
+
             success: false,
+
             error:
                 "Research summary is too short."
         };
     }
+
 
     if (
         validSources.length === 0
     ) {
 
         return {
+
             success: false,
+
             error:
                 "At least one valid research source is required."
         };
     }
+
+
+    // --------------------------------------------------------
+    // SOURCE COMPARISON
+    // --------------------------------------------------------
+
+    const comparison =
+        compareSources(
+            validSources
+        );
+
+
+    // --------------------------------------------------------
+    // RESEARCH RESULT
+    // --------------------------------------------------------
 
     const researchResult =
         createResearchResult({
@@ -665,6 +1359,7 @@ function learnVerifiedResearch({
                 clamp(confidence)
         });
 
+
     // --------------------------------------------------------
     // VERIFY
     // --------------------------------------------------------
@@ -680,15 +1375,19 @@ function learnVerifiedResearch({
 
             confidence:
                 calculateResearchConfidence({
+
                     sources:
                         validSources,
 
                     confidence:
-                        confidence
+                        confidence,
+
+                    comparison
                 }),
 
             notes
         });
+
 
     // --------------------------------------------------------
     // DO NOT LEARN UNVERIFIED RESEARCH
@@ -699,6 +1398,7 @@ function learnVerifiedResearch({
     ) {
 
         return {
+
             success: false,
 
             query:
@@ -707,13 +1407,22 @@ function learnVerifiedResearch({
             verification:
                 verificationResult,
 
+            comparison,
+
             status:
-                "verification-required",
+                comparison.conflictDetected
+                    ? "conflicting-research"
+                    : "verification-required",
 
             message:
-                "Research cannot be stored as verified knowledge until verification requirements are met."
+                comparison.conflictDetected
+
+                    ? "Conflicting research evidence detected. AarHen will not store this as verified knowledge until the information is resolved."
+
+                    : "Research cannot be stored as verified knowledge until verification requirements are met."
         };
     }
+
 
     // --------------------------------------------------------
     // BUILD KNOWLEDGE
@@ -726,8 +1435,11 @@ function learnVerifiedResearch({
                 cleanSummary,
 
             sources:
-                validSources
+                validSources,
+
+            comparison
         });
+
 
     // --------------------------------------------------------
     // LEARN
@@ -758,12 +1470,14 @@ function learnVerifiedResearch({
                 true
         });
 
+
     if (
         !learned ||
         !learned.success
     ) {
 
         return {
+
             success: false,
 
             query:
@@ -772,6 +1486,8 @@ function learnVerifiedResearch({
             verification:
                 verificationResult,
 
+            comparison,
+
             learning:
                 learned,
 
@@ -779,6 +1495,7 @@ function learnVerifiedResearch({
                 "learning-failed"
         };
     }
+
 
     // --------------------------------------------------------
     // FINAL RESULT
@@ -794,6 +1511,8 @@ function learnVerifiedResearch({
         verification:
             verificationResult,
 
+        comparison,
+
         learning:
             learned,
 
@@ -807,10 +1526,14 @@ function learnVerifiedResearch({
         confidence:
             verificationResult.confidence,
 
+        conflictDetected:
+            comparison.conflictDetected,
+
         status:
             "verified-research-learned"
     };
 }
+
 
 // ============================================================
 // RESEARCH → VERIFY → LEARN PIPELINE
@@ -829,11 +1552,14 @@ function processResearchResult({
     ) {
 
         return {
+
             success: false,
+
             error:
                 "Valid research result is required."
         };
     }
+
 
     return learnVerifiedResearch({
 
@@ -856,6 +1582,7 @@ function processResearchResult({
         notes
     });
 }
+
 
 // ============================================================
 // RESEARCH STATUS
@@ -891,6 +1618,15 @@ function getResearchStatus() {
         learningRequiresVerification:
             true,
 
+        sourceComparison:
+            true,
+
+        contradictionDetection:
+            true,
+
+        conflictAwareConfidence:
+            true,
+
         minimumVerifiedSources:
             MIN_VERIFIED_SOURCES,
 
@@ -898,16 +1634,28 @@ function getResearchStatus() {
             MIN_VERIFIED_CONFIDENCE,
 
         pipeline: [
+
             "research",
+
             "validate-sources",
+
             "compare",
+
+            "detect-conflicts",
+
+            "calculate-confidence",
+
             "verify",
+
             "learn",
+
             "memory-storage",
+
             "future-recall"
         ]
     };
 }
+
 
 // ============================================================
 // EXPORTS
@@ -926,6 +1674,10 @@ module.exports = {
     buildResearchContext,
 
     calculateResearchConfidence,
+
+    compareSourcePair,
+
+    compareSources,
 
     verifyResearch,
 
