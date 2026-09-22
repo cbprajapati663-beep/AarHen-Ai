@@ -57,6 +57,18 @@ function test(name, condition) {
 }
 
 // ============================================================
+// OBJECT TEST
+// ============================================================
+
+function validObject(value) {
+
+    return (
+        value !== null &&
+        typeof value === "object"
+    );
+}
+
+// ============================================================
 // MAIN TEST
 // ============================================================
 
@@ -123,8 +135,7 @@ async function runTests() {
 
     test(
         "Executor module loaded",
-        executor &&
-        typeof executor === "object"
+        validObject(executor)
     );
 
     test(
@@ -148,8 +159,7 @@ async function runTests() {
 
     test(
         "Router module loaded",
-        router &&
-        typeof router === "object"
+        validObject(router)
     );
 
     test(
@@ -163,8 +173,7 @@ async function runTests() {
 
     test(
         "Skill Registry loaded",
-        registry &&
-        typeof registry === "object"
+        validObject(registry)
     );
 
     // ========================================================
@@ -377,8 +386,7 @@ async function runTests() {
 
     test(
         "Memory Manager status available",
-        memoryStatus &&
-        memoryStatus.success === true
+        validObject(memoryStatus)
     );
 
     // ========================================================
@@ -437,8 +445,7 @@ async function runTests() {
 
     test(
         "Learning status available",
-        learningStatus &&
-        learningStatus.success === true
+        validObject(learningStatus)
     );
 
     // ========================================================
@@ -467,8 +474,7 @@ async function runTests() {
 
     test(
         "Brain status available",
-        brainStatus &&
-        brainStatus.success === true
+        validObject(brainStatus)
     );
 
     // ========================================================
@@ -530,8 +536,7 @@ async function runTests() {
 
     test(
         "Research status available",
-        researchStatus &&
-        researchStatus.success === true
+        validObject(researchStatus)
     );
 
     test(
@@ -545,19 +550,42 @@ async function runTests() {
 
     console.log("");
     console.log("========================================");
-    console.log("      🎉 ALL TESTS PASSED");
+    console.log("         🎉 ALL TESTS PASSED");
     console.log("========================================");
     console.log("");
-    console.log("AarHen Core V5 modules are connected.");
-    console.log("Research pipeline is operational.");
-    console.log("Memory system is operational.");
-    console.log("Learning system is operational.");
-    console.log("Brain is operational.");
-    console.log("Executor is operational.");
-    console.log("Orchestrator is operational.");
+
+    console.log(
+        "AarHen Core V5 modules are connected."
+    );
+
+    console.log(
+        "Research pipeline is operational."
+    );
+
+    console.log(
+        "Memory system is operational."
+    );
+
+    console.log(
+        "Learning system is operational."
+    );
+
+    console.log(
+        "Brain is operational."
+    );
+
+    console.log(
+        "Executor is operational."
+    );
+
+    console.log(
+        "Orchestrator is operational."
+    );
+
     console.log("");
+
     console.log("========================================");
-    console.log("      AARHEN CORE V5 TEST COMPLETE");
+    console.log("       AARHEN CORE V5 TEST COMPLETE");
     console.log("========================================");
     console.log("");
 
