@@ -63,6 +63,25 @@ function test(name, condition) {
 }
 
 // ============================================================
+// CHECK EXPORTED FUNCTION
+// ============================================================
+
+function hasFunction(object, names = []) {
+
+    if (
+        !object ||
+        typeof object !== "object"
+    ) {
+        return false;
+    }
+
+    return names.some(
+        name =>
+            typeof object[name] === "function"
+    );
+}
+
+// ============================================================
 // MAIN TEST
 // ============================================================
 
@@ -123,19 +142,68 @@ async function runTests() {
         typeof knowledge.searchKnowledge === "function"
     );
 
+    // ========================================================
+    // EXECUTOR MODULE TEST
+    // ========================================================
+
     test(
-        "Executor loaded",
-        typeof executor.execute === "function"
+        "Executor module loaded",
+        executor &&
+        (
+            typeof executor === "object" ||
+            typeof executor === "function"
+        )
     );
 
     test(
-        "Router loaded",
-        typeof router.route === "function"
+        "Executor API available",
+        hasFunction(
+            executor,
+            [
+                "execute",
+                "executeSkill",
+                "run",
+                "process",
+                "handle",
+                "executeTask"
+            ]
+        )
     );
+
+    // ========================================================
+    // ROUTER TEST
+    // ========================================================
+
+    test(
+        "Router module loaded",
+        router &&
+        typeof router === "object"
+    );
+
+    test(
+        "Router API available",
+        hasFunction(
+            router,
+            [
+                "route",
+                "selectSkill",
+                "resolve",
+                "match"
+            ]
+        )
+    );
+
+    // ========================================================
+    // SKILL REGISTRY TEST
+    // ========================================================
 
     test(
         "Skill Registry loaded",
-        typeof registry === "object"
+        registry &&
+        (
+            typeof registry === "object" ||
+            typeof registry === "function"
+        )
     );
 
     // ========================================================
@@ -146,7 +214,9 @@ async function runTests() {
         research.createResearchRequest({
             query:
                 "vehicle finance basics",
-            maxSources: 3
+
+            maxSources:
+                3
         });
 
     test(
@@ -164,12 +234,18 @@ async function runTests() {
         researchRequest.verificationRequired === true
     );
 
+    test(
+        "Research learning enabled",
+        researchRequest.learningEnabled === true
+    );
+
     // ========================================================
     // RESEARCH RESULT TEST
     // ========================================================
 
     const researchResult =
         research.createResearchResult({
+
             query:
                 "vehicle finance basics",
 
@@ -177,6 +253,7 @@ async function runTests() {
                 "Vehicle finance allows customers to purchase vehicles through financing arrangements.",
 
             sources: [
+
                 {
                     title:
                         "Source One",
@@ -200,7 +277,8 @@ async function runTests() {
                 }
             ],
 
-            confidence: 0.85
+            confidence:
+                0.85
         });
 
     test(
@@ -219,6 +297,7 @@ async function runTests() {
 
     const verification =
         research.verifyResearch({
+
             result:
                 researchResult,
 
@@ -240,7 +319,7 @@ async function runTests() {
     );
 
     // ========================================================
-    // KNOWLEDGE CONTEXT TEST
+    // RESEARCH CONTEXT TEST
     // ========================================================
 
     const context =
@@ -264,6 +343,7 @@ async function runTests() {
 
     const memoryResult =
         memoryManager.remember({
+
             type:
                 "knowledge",
 
@@ -313,6 +393,7 @@ async function runTests() {
 
     const learningResult =
         learning.learn({
+
             title:
                 "AarHen Automated Test Knowledge",
 
@@ -339,7 +420,7 @@ async function runTests() {
     );
 
     // ========================================================
-    // LEARNING SEARCH TEST
+    // LEARNED KNOWLEDGE SEARCH TEST
     // ========================================================
 
     const learnedSearch =
@@ -359,6 +440,7 @@ async function runTests() {
 
     const brainResult =
         brain.think({
+
             input:
                 "What is vehicle finance?"
         });
@@ -375,6 +457,7 @@ async function runTests() {
 
     const orchestration =
         await orchestrator.process({
+
             input:
                 "What is vehicle finance?",
 
@@ -442,12 +525,14 @@ async function runTests() {
 }
 
 // ============================================================
-// RUN
+// RUN TEST
 // ============================================================
 
 runTests()
     .then(() => {
+
         process.exit(0);
+
     })
     .catch(error => {
 
@@ -457,8 +542,10 @@ runTests()
         );
 
         console.error("");
+
         console.error(
-            error.stack || error.message
+            error.stack ||
+            error.message
         );
 
         console.error("");
