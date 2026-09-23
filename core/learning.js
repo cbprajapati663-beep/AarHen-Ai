@@ -3,14 +3,9 @@
 // CONTINUOUS LEARNING ENGINE
 // ============================================================
 
-const memoryStore =
-    require("./memoryStore");
-
-const memoryManager =
-    require("./memoryManager");
-
-const verification =
-    require("./verification");
+const memoryStore = require("./memoryStore");
+const memoryManager = require("./memoryManager");
+const verification = require("./verification");
 
 // ============================================================
 // NORMALIZE
@@ -26,8 +21,7 @@ function normalize(value = "") {
 
 function splitIntoChunks(text, size = 1200) {
 
-    const content =
-        normalize(text);
+    const content = normalize(text);
 
     if (!content) {
         return [];
@@ -46,10 +40,7 @@ function splitIntoChunks(text, size = 1200) {
         i += chunkSize
     ) {
         chunks.push(
-            content.slice(
-                i,
-                i + chunkSize
-            )
+            content.slice(i, i + chunkSize)
         );
     }
 
@@ -62,8 +53,7 @@ function splitIntoChunks(text, size = 1200) {
 
 function extractConcepts(text) {
 
-    const content =
-        normalize(text);
+    const content = normalize(text);
 
     if (!content) {
         return [];
@@ -75,46 +65,44 @@ function extractConcepts(text) {
             .replace(/[^\w\s-]/g, " ")
             .split(/\s+/)
             .filter(
-                word =>
-                    word.length >= 4
+                word => word.length >= 4
             );
 
-    const stopWords =
-        new Set([
-            "this",
-            "that",
-            "with",
-            "from",
-            "have",
-            "will",
-            "your",
-            "about",
-            "there",
-            "their",
-            "which",
-            "where",
-            "when",
-            "what",
-            "into",
-            "also",
-            "than",
-            "then",
-            "they",
-            "them",
-            "were",
-            "been",
-            "being",
-            "such",
-            "more",
-            "some",
-            "very",
-            "only",
-            "just",
-            "like",
-            "using",
-            "used",
-            "user"
-        ]);
+    const stopWords = new Set([
+        "this",
+        "that",
+        "with",
+        "from",
+        "have",
+        "will",
+        "your",
+        "about",
+        "there",
+        "their",
+        "which",
+        "where",
+        "when",
+        "what",
+        "into",
+        "also",
+        "than",
+        "then",
+        "they",
+        "them",
+        "were",
+        "been",
+        "being",
+        "such",
+        "more",
+        "some",
+        "very",
+        "only",
+        "just",
+        "like",
+        "using",
+        "used",
+        "user"
+    ]);
 
     const frequency = {};
 
@@ -128,17 +116,14 @@ function extractConcepts(text) {
             (frequency[word] || 0) + 1;
     }
 
-    return Object.entries(
-        frequency
-    )
+    return Object.entries(frequency)
         .sort(
             (a, b) =>
                 b[1] - a[1]
         )
         .slice(0, 20)
         .map(
-            item =>
-                item[0]
+            item => item[0]
         );
 }
 
@@ -149,9 +134,8 @@ function extractConcepts(text) {
 function detectLearningType(input = {}) {
 
     const content =
-        normalize(
-            input.content
-        ).toLowerCase();
+        normalize(input.content)
+            .toLowerCase();
 
     if (input.type) {
         return input.type;
@@ -167,21 +151,11 @@ function detectLearningType(input = {}) {
     }
 
     if (
-        content.includes(
-            "heritage auto finance"
-        ) ||
-        content.includes(
-            "vehicle finance"
-        ) ||
-        content.includes(
-            "vehicle loan"
-        ) ||
-        content.includes(
-            "customer"
-        ) ||
-        content.includes(
-            "business"
-        )
+        content.includes("heritage auto finance") ||
+        content.includes("vehicle finance") ||
+        content.includes("vehicle loan") ||
+        content.includes("customer") ||
+        content.includes("business")
     ) {
         return "business";
     }
@@ -196,9 +170,7 @@ function detectLearningType(input = {}) {
 function analyzeLearningDecision(input = {}) {
 
     const content =
-        normalize(
-            input.content
-        );
+        normalize(input.content);
 
     if (!content) {
 
@@ -245,37 +217,25 @@ function analyzeLearningDecision(input = {}) {
 function buildLearningRecord(input = {}) {
 
     const title =
-        normalize(
-            input.title
-        ) ||
+        normalize(input.title) ||
         "AarHen Learned Knowledge";
 
     const content =
-        normalize(
-            input.content
-        );
+        normalize(input.content);
 
     const category =
-        normalize(
-            input.category
-        ) ||
+        normalize(input.category) ||
         detectLearningType(input);
 
     const source =
-        normalize(
-            input.source
-        ) ||
+        normalize(input.source) ||
         "user";
 
     const concepts =
-        extractConcepts(
-            content
-        );
+        extractConcepts(content);
 
     const chunks =
-        splitIntoChunks(
-            content
-        );
+        splitIntoChunks(content);
 
     return {
 
@@ -292,8 +252,7 @@ function buildLearningRecord(input = {}) {
         chunks,
 
         learnedAt:
-            new Date()
-                .toISOString(),
+            new Date().toISOString(),
 
         learningEngine:
             "AarHen Continuous Learning Engine",
@@ -335,15 +294,12 @@ function saveLearningToMemory(
             "normal",
 
         confidence:
-            typeof input.confidence ===
-            "number"
+            typeof input.confidence === "number"
                 ? input.confidence
                 : 0.60,
 
         verified:
-            Boolean(
-                input.verified
-            ),
+            Boolean(input.verified),
 
         tags:
             record.concepts,
@@ -359,9 +315,7 @@ function saveLearningToMemory(
 function learn(input = {}) {
 
     const decision =
-        analyzeLearningDecision(
-            input
-        );
+        analyzeLearningDecision(input);
 
     if (!decision.learn) {
 
@@ -370,6 +324,10 @@ function learn(input = {}) {
             success: true,
 
             learned: false,
+
+            newlyLearned: false,
+
+            duplicate: false,
 
             status:
                 "learning-skipped",
@@ -382,9 +340,11 @@ function learn(input = {}) {
     try {
 
         const record =
-            buildLearningRecord(
-                input
-            );
+            buildLearningRecord(input);
+
+        // --------------------------------------------------------
+        // PRIMARY KNOWLEDGE STORAGE
+        // --------------------------------------------------------
 
         const saved =
             memoryStore.saveKnowledge({
@@ -417,16 +377,27 @@ function learn(input = {}) {
                     record.learningVersion,
 
                 verified:
-                    Boolean(
-                        input.verified
-                    ),
+                    Boolean(input.verified),
 
                 confidence:
-                    typeof input.confidence ===
-                    "number"
+                    typeof input.confidence === "number"
                         ? input.confidence
                         : 0.60
             });
+
+        // --------------------------------------------------------
+        // DUPLICATE DETECTION
+        // --------------------------------------------------------
+
+        const alreadyLearned =
+            Boolean(
+                saved &&
+                saved.duplicate === true
+            );
+
+        // --------------------------------------------------------
+        // MEMORY MANAGER SYNC
+        // --------------------------------------------------------
 
         const memoryResult =
             saveLearningToMemory(
@@ -434,14 +405,52 @@ function learn(input = {}) {
                 input
             );
 
+        // --------------------------------------------------------
+        // FINAL STATUS
+        // --------------------------------------------------------
+
+        const learningStatus =
+            alreadyLearned
+                ? "already-learned"
+                : "learned-and-stored";
+
+        const memoryId =
+            saved &&
+            (
+                saved.memoryId ||
+                saved.id
+            )
+                ? (
+                    saved.memoryId ||
+                    saved.id
+                )
+                : (
+                    memoryResult &&
+                    (
+                        memoryResult.memoryId ||
+                        memoryResult.id
+                    )
+                )
+                    ? (
+                        memoryResult.memoryId ||
+                        memoryResult.id
+                    )
+                    : null;
+
         return {
 
             success: true,
 
             learned: true,
 
+            newlyLearned:
+                !alreadyLearned,
+
+            duplicate:
+                alreadyLearned,
+
             status:
-                "learned-and-stored",
+                learningStatus,
 
             title:
                 record.title,
@@ -461,29 +470,31 @@ function learn(input = {}) {
             knowledge:
                 saved,
 
+            knowledgeStatus:
+                saved && saved.status
+                    ? saved.status
+                    : (
+                        alreadyLearned
+                            ? "already-exists"
+                            : "stored"
+                    ),
+
             memory:
                 memoryResult,
 
-            memoryId:
+            memoryStatus:
                 memoryResult &&
-                (
-                    memoryResult.memoryId ||
-                    memoryResult.id
-                )
-                    ? (
-                        memoryResult.memoryId ||
-                        memoryResult.id
-                    )
-                    : null,
+                memoryResult.status
+                    ? memoryResult.status
+                    : "unknown",
+
+            memoryId,
 
             verified:
-                Boolean(
-                    input.verified
-                ),
+                Boolean(input.verified),
 
             confidence:
-                typeof input.confidence ===
-                "number"
+                typeof input.confidence === "number"
                     ? input.confidence
                     : 0.60,
 
@@ -499,6 +510,10 @@ function learn(input = {}) {
 
             learned: false,
 
+            newlyLearned: false,
+
+            duplicate: false,
+
             status:
                 "learning-error",
 
@@ -511,25 +526,21 @@ function learn(input = {}) {
 // ============================================================
 // LEARN VERIFIED
 // ============================================================
+//
 // Used by the Advanced Web Research Engine.
 //
-// IMPORTANT:
-// This function does not bypass verification.
-// The caller must provide:
-//   verified: true
-//   approved: true
-//   confidence >= required level
+// Verified learning requires:
 //
-// Research engine already performs source verification
-// before calling this function.
+// verified: true
+// approved: true
+// confidence >= 0.80
+//
 // ============================================================
 
 function learnVerified(input = {}) {
 
     const content =
-        normalize(
-            input.content
-        );
+        normalize(input.content);
 
     if (!content) {
 
@@ -550,8 +561,7 @@ function learnVerified(input = {}) {
     }
 
     const confidence =
-        typeof input.confidence ===
-        "number"
+        typeof input.confidence === "number"
             ? Math.max(
                 0,
                 Math.min(
@@ -562,12 +572,10 @@ function learnVerified(input = {}) {
             : 0;
 
     // --------------------------------------------------------
-    // Verified learning must explicitly be verified.
+    // VERIFIED FLAG
     // --------------------------------------------------------
 
-    if (
-        input.verified !== true
-    ) {
+    if (input.verified !== true) {
 
         return {
 
@@ -586,12 +594,10 @@ function learnVerified(input = {}) {
     }
 
     // --------------------------------------------------------
-    // Approved flag is also required for automatic learning.
+    // APPROVAL FLAG
     // --------------------------------------------------------
 
-    if (
-        input.approved !== true
-    ) {
+    if (input.approved !== true) {
 
         return {
 
@@ -610,13 +616,10 @@ function learnVerified(input = {}) {
     }
 
     // --------------------------------------------------------
-    // Safe minimum confidence.
-    // The research engine normally sends >= 0.80.
+    // CONFIDENCE CHECK
     // --------------------------------------------------------
 
-    if (
-        confidence < 0.80
-    ) {
+    if (confidence < 0.80) {
 
         return {
 
@@ -703,12 +706,20 @@ function learnVerified(input = {}) {
 
             learned: true,
 
+            newlyLearned:
+                result.newlyLearned !== false,
+
+            duplicate:
+                Boolean(result.duplicate),
+
             verified: true,
 
             approved: true,
 
             status:
-                "verified-knowledge-learned",
+                result.duplicate
+                    ? "verified-knowledge-already-exists"
+                    : "verified-knowledge-learned",
 
             title:
                 result.title,
@@ -722,24 +733,19 @@ function learnVerified(input = {}) {
             confidence,
 
             memoryId:
-                result.memoryId ||
-                null,
+                result.memoryId || null,
 
             knowledge:
-                result.knowledge ||
-                null,
+                result.knowledge || null,
 
             memory:
-                result.memory ||
-                null,
+                result.memory || null,
 
             concepts:
-                result.concepts ||
-                [],
+                result.concepts || [],
 
             chunkCount:
-                result.chunkCount ||
-                0,
+                result.chunkCount || 0,
 
             learning:
                 result,
@@ -819,15 +825,12 @@ function learnFromUser(
             "normal",
 
         confidence:
-            typeof options.confidence ===
-            "number"
+            typeof options.confidence === "number"
                 ? options.confidence
                 : 0.60,
 
         verified:
-            Boolean(
-                options.verified
-            ),
+            Boolean(options.verified),
 
         learn:
             options.learn !== false
@@ -861,14 +864,17 @@ function searchLearnedKnowledge(
 
     try {
 
-        const results =
+        const result =
             memoryStore.findKnowledge(
-                cleanQuery
+                cleanQuery,
+                limit
             );
 
+        // memoryStore returns an object.
         const list =
-            Array.isArray(results)
-                ? results
+            result &&
+            Array.isArray(result.results)
+                ? result.results
                 : [];
 
         const finalLimit =
@@ -906,8 +912,7 @@ function searchLearnedKnowledge(
                     cleanQuery,
                     {
                         limit:
-                            Number(limit) ||
-                            10
+                            Number(limit) || 10
                     }
                 );
 
@@ -915,6 +920,7 @@ function searchLearnedKnowledge(
 
                 success:
                     Boolean(
+                        fallback &&
                         fallback.success
                     ),
 
@@ -922,11 +928,16 @@ function searchLearnedKnowledge(
                     cleanQuery,
 
                 count:
-                    fallback.results
-                        ?.length || 0,
+                    fallback &&
+                    Array.isArray(fallback.results)
+                        ? fallback.results.length
+                        : 0,
 
                 results:
-                    fallback.results || [],
+                    fallback &&
+                    Array.isArray(fallback.results)
+                        ? fallback.results
+                        : [],
 
                 status:
                     "knowledge-search-fallback"
@@ -957,14 +968,16 @@ function getLearnedKnowledge(
 
     try {
 
-        const results =
-            memoryStore.findKnowledge(
-                ""
-            );
+        const result =
+            memoryStore.findKnowledge("");
+
+        // memoryStore returns:
+        // { success, query, count, results }
 
         const list =
-            Array.isArray(results)
-                ? results
+            result &&
+            Array.isArray(result.results)
+                ? result.results
                 : [];
 
         const finalLimit =
@@ -1195,9 +1208,7 @@ function learnCorrection(
     }
 
     const correction =
-        normalize(
-            input.correction
-        );
+        normalize(input.correction);
 
     if (!correction) {
 
@@ -1230,15 +1241,11 @@ function learnCorrection(
                         "User correction",
 
                     correctedAt:
-                        new Date()
-                            .toISOString(),
+                        new Date().toISOString(),
 
                     confidence:
-                        typeof input.confidence ===
-                        "number"
-
+                        typeof input.confidence === "number"
                             ? input.confidence
-
                             : 0.80
                 }
             );
@@ -1338,9 +1345,7 @@ function addFeedback(
     }
 
     const feedback =
-        normalize(
-            input.feedback
-        );
+        normalize(input.feedback);
 
     if (!feedback) {
 
@@ -1373,11 +1378,9 @@ function addFeedback(
 
         const history =
             Array.isArray(
-                storedMemory
-                    .feedbackHistory
+                storedMemory.feedbackHistory
             )
-                ? storedMemory
-                    .feedbackHistory
+                ? storedMemory.feedbackHistory
                 : [];
 
         history.push({
@@ -1388,12 +1391,10 @@ function addFeedback(
                 input.helpful !== false,
 
             reason:
-                input.reason ||
-                "",
+                input.reason || "",
 
             createdAt:
-                new Date()
-                    .toISOString()
+                new Date().toISOString()
         });
 
         const updated =
@@ -1413,8 +1414,7 @@ function addFeedback(
                         input.helpful !== false,
 
                     updatedAt:
-                        new Date()
-                            .toISOString()
+                        new Date().toISOString()
                 }
             );
 
@@ -1608,40 +1608,32 @@ function getLearningHistory(
         history: {
 
             createdAt:
-                storedMemory
-                    .createdAt,
+                storedMemory.createdAt,
 
             updatedAt:
-                storedMemory
-                    .updatedAt,
+                storedMemory.updatedAt,
 
             learnedAt:
-                storedMemory
-                    .learnedAt,
+                storedMemory.learnedAt,
 
             correctedAt:
-                storedMemory
-                    .correctedAt ||
+                storedMemory.correctedAt ||
                 null,
 
             corrected:
                 Boolean(
-                    storedMemory
-                        .corrected
+                    storedMemory.corrected
                 ),
 
             correctionReason:
-                storedMemory
-                    .correctionReason ||
+                storedMemory.correctionReason ||
                 null,
 
             feedback:
                 Array.isArray(
-                    storedMemory
-                        .feedbackHistory
+                    storedMemory.feedbackHistory
                 )
-                    ? storedMemory
-                        .feedbackHistory
+                    ? storedMemory.feedbackHistory
                     : []
         }
     };
@@ -1751,6 +1743,8 @@ function getLearningStatus() {
 
             "confidence-tracking",
 
+            "duplicate-safe-learning",
+
             "learning-verification",
 
             "learning-correction",
@@ -1774,6 +1768,8 @@ function getLearningStatus() {
 
             "Classify",
 
+            "Duplicate Check",
+
             "Store Knowledge",
 
             "Store Memory",
@@ -1796,6 +1792,20 @@ function getLearningStatus() {
 
             status:
                 "connected"
+        },
+
+        duplicateProtection: {
+
+            enabled: true,
+
+            knowledgeLayer:
+                "Memory Store",
+
+            memoryLayer:
+                "Memory Manager",
+
+            status:
+                "active"
         }
     };
 }
