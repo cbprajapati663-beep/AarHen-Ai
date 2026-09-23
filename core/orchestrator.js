@@ -1655,6 +1655,28 @@ async function process(
             });
 
 
+    // ========================================================
+    // FINAL RESEARCH RESULT
+    // ========================================================
+    //
+    // For research requests, prefer the research result
+    // produced by the Skill Executor because it contains
+    // the complete source + verification + learning pipeline.
+    //
+    // For non-research requests, preserve the original
+    // researchResult.
+    // ========================================================
+
+    const finalResearchResult =
+        intentResult.category === "research" &&
+        execution?.research
+            ? {
+                ...researchResult,
+                ...execution.research
+            }
+            : researchResult;
+
+
     // --------------------------------------------------------
     // FINAL RESULT
     // --------------------------------------------------------
@@ -1681,7 +1703,7 @@ async function process(
         memoryWrite,
 
         research:
-            researchResult,
+            finalResearchResult,
 
         executionContext,
 
