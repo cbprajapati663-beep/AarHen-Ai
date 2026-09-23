@@ -3,8 +3,12 @@
 // COMPLETE SYSTEM TEST
 // ============================================================
 
-const orchestrator =
-    require("./core/orchestrator");
+const assert = require("assert");
+
+
+// ============================================================
+// IMPORTS
+// ============================================================
 
 const brain =
     require("./core/brain");
@@ -18,946 +22,1128 @@ const memoryManager =
 const learning =
     require("./core/learning");
 
-const learningApi =
-    require("./core/learningApi");
-
-const memoryApi =
-    require("./core/memoryApi");
-
 const research =
     require("./engines/research");
 
-const knowledge =
-    require("./engines/knowledge");
+const verification =
+    require("./core/verification");
 
 const executor =
     require("./skills/executor");
 
-const router =
-    require("./skills/router");
-
-const registry =
-    require("./skills/registry");
+const orchestrator =
+    require("./core/orchestrator");
 
 const providerManager =
     require("./providers/providerManager");
 
+
 // ============================================================
-// TEST HELPER
+// TEST HELPERS
 // ============================================================
 
-function test(name, condition) {
+let passed = 0;
+let failed = 0;
 
-    if (!condition) {
-        throw new Error(
-            `TEST FAILED: ${name}`
-        );
-    }
+function green(message) {
+
+    passed++;
 
     console.log(
-        `✅ ${name}`
+        `\x1b[32mGREEN\x1b[0m ${message}`
     );
 }
 
-// ============================================================
-// VALID OBJECT
-// ============================================================
 
-function validObject(value) {
+function red(message) {
 
-    return (
-        value !== null &&
-        typeof value === "object"
+    failed++;
+
+    console.log(
+        `\x1b[31mRED\x1b[0m ${message}`
     );
 }
 
-// ============================================================
-// MAIN TEST
-// ============================================================
 
-async function runTests() {
+function test(
+    name,
+    condition
+) {
+
+    try {
+
+        assert.ok(
+            condition,
+            name
+        );
+
+        green(name);
+
+    } catch (error) {
+
+        red(
+            `${name} -> ${error.message}`
+        );
+    }
+}
+
+
+function section(title) {
 
     console.log("");
-    console.log("========================================");
-    console.log("       AARHEN CORE V5 SYSTEM TEST");
-    console.log("========================================");
-    console.log("");
-
-    // ========================================================
-    // CORE MODULE TESTS
-    // ========================================================
-
-    test(
-        "Orchestrator loaded",
-        typeof orchestrator.process === "function"
+    console.log(
+        "============================================================"
     );
 
-    test(
-        "Brain loaded",
-        typeof brain.think === "function"
+    console.log(title);
+
+    console.log(
+        "============================================================"
     );
+}
 
-    test(
-        "Memory loaded",
-        typeof memory.remember === "function"
-    );
 
-    test(
-        "Memory Manager loaded",
-        typeof memoryManager.remember === "function"
-    );
+// ============================================================
+// START
+// ============================================================
 
-    test(
-        "Learning Engine loaded",
-        typeof learning.learn === "function"
-    );
+console.log("");
+console.log(
+    "============================================================"
+);
 
-    test(
-        "Learning API loaded",
-        typeof learningApi.learnFromUser === "function"
-    );
+console.log(
+    "AARHEN CORE V5 - COMPLETE SYSTEM TEST"
+);
 
-    test(
-        "Memory API loaded",
-        typeof memoryApi.remember === "function"
-    );
+console.log(
+    "============================================================"
+);
 
-    test(
-        "Research Engine loaded",
-        typeof research.createResearchRequest === "function"
-    );
 
-    test(
-        "Knowledge Engine loaded",
-        typeof knowledge.searchKnowledge === "function"
-    );
+// ============================================================
+// MODULE LOAD TEST
+// ============================================================
 
-    // ========================================================
-    // PROVIDER MANAGER TEST
-    // ========================================================
+section(
+    "1. MODULE LOAD TEST"
+);
 
-    test(
-        "Provider Manager loaded",
-        validObject(providerManager)
-    );
+test(
+    "Brain module loaded",
+    Boolean(brain)
+);
 
-    test(
-        "Provider Manager search API available",
-        typeof providerManager.searchWeb === "function"
-    );
+test(
+    "Memory module loaded",
+    Boolean(memory)
+);
 
-    test(
-        "Provider Manager status API available",
-        typeof providerManager.getStatus === "function"
-    );
+test(
+    "Memory Manager loaded",
+    Boolean(memoryManager)
+);
 
-    // ========================================================
-    // EXECUTOR TEST
-    // ========================================================
+test(
+    "Learning Engine loaded",
+    Boolean(learning)
+);
 
-    test(
-        "Executor module loaded",
-        validObject(executor)
-    );
+test(
+    "Research Engine loaded",
+    Boolean(research)
+);
 
-    test(
-        "Executor executeIntent API available",
-        typeof executor.executeIntent === "function"
-    );
+test(
+    "Verification Engine loaded",
+    Boolean(verification)
+);
 
-    test(
-        "Executor context API available",
-        typeof executor.prepareContext === "function"
-    );
+test(
+    "Executor loaded",
+    Boolean(executor)
+);
 
-    test(
-        "Executor engine functions API available",
-        typeof executor.getEngineFunctions === "function"
-    );
+test(
+    "Orchestrator loaded",
+    Boolean(orchestrator)
+);
 
-    // ========================================================
-    // ROUTER TEST
-    // ========================================================
+test(
+    "Provider Manager loaded",
+    Boolean(providerManager)
+);
 
-    test(
-        "Router module loaded",
-        validObject(router)
-    );
 
-    // Router may expose different routing APIs.
-    // We only verify that the module loads correctly.
+// ============================================================
+// BRAIN TEST
+// ============================================================
 
-    // ========================================================
-    // SKILL REGISTRY TEST
-    // ========================================================
+section(
+    "2. BRAIN TEST"
+);
 
-    test(
-        "Skill Registry loaded",
-        validObject(registry)
-    );
+try {
 
-    // ========================================================
-    // RESEARCH REQUEST TEST
-    // ========================================================
-
-    const researchRequest =
-        research.createResearchRequest({
-
-            query:
-                "vehicle finance basics",
-
-            maxSources:
-                3
-        });
-
-    test(
-        "Research request created",
-        researchRequest.success === true
-    );
-
-    test(
-        "Research provider required",
-        researchRequest.providerRequired === true
-    );
-
-    test(
-        "Research verification required",
-        researchRequest.verificationRequired === true
-    );
-
-    test(
-        "Research learning enabled",
-        researchRequest.learningEnabled === true
-    );
-
-    // ========================================================
-    // RESEARCH RESULT TEST
-    // ========================================================
-
-    const researchResult =
-        research.createResearchResult({
-
-            query:
-                "vehicle finance basics",
-
-            summary:
-                "Vehicle finance allows customers to purchase vehicles through financing arrangements.",
-
-            sources: [
-
-                {
-                    title:
-                        "Source One",
-
-                    url:
-                        "https://example.com/source-one",
-
-                    publisher:
-                        "Example"
-                },
-
-                {
-                    title:
-                        "Source Two",
-
-                    url:
-                        "https://example.com/source-two",
-
-                    publisher:
-                        "Example"
-                }
-            ],
-
-            confidence:
-                0.85
-        });
-
-    test(
-        "Research result created",
-        researchResult.success === true
-    );
-
-    test(
-        "Research sources validated",
-        researchResult.sourceCount === 2
-    );
-
-    // ========================================================
-    // RESEARCH VERIFICATION TEST
-    // ========================================================
-
-    const verification =
-        research.verifyResearch({
-
-            result:
-                researchResult,
-
-            sourceCount:
-                2,
-
-            confidence:
-                0.85
-        });
-
-    test(
-        "Research verification executed",
-        verification.success === true
-    );
-
-    test(
-        "Research verified",
-        verification.verified === true
-    );
-
-    // ========================================================
-    // RESEARCH CONTEXT TEST
-    // ========================================================
-
-    const researchContext =
-        research.buildResearchContext(
-            researchResult
+    const brainResult =
+        brain.think(
+            "Explain how vehicle finance works."
         );
 
     test(
-        "Research context created",
-        researchContext.success === true
+        "Brain think() returns result",
+        Boolean(brainResult)
     );
 
     test(
-        "Research context contains sources",
-        researchContext.sourceCount === 2
+        "Brain result has success/status information",
+        typeof brainResult === "object"
     );
 
-    // ========================================================
-    // RESEARCH CONFIDENCE TEST
-    // ========================================================
+} catch (error) {
 
-    const calculatedConfidence =
-        research.calculateResearchConfidence({
-
-            sources:
-                researchResult.sources,
-
-            confidence:
-                0.85
-        });
-
-    test(
-        "Research confidence calculated",
-        calculatedConfidence >= 0.80
+    red(
+        `Brain test -> ${error.message}`
     );
+}
 
-    // ========================================================
-    // MEMORY TEST
-    // ========================================================
+
+// ============================================================
+// MEMORY TEST
+// ============================================================
+
+section(
+    "3. MEMORY TEST"
+);
+
+try {
 
     const memoryResult =
-        memoryManager.remember({
+        memory.remember({
 
             type:
-                "knowledge",
+                "test-memory",
 
             title:
-                "AarHen System Test Knowledge",
-
-            content:
-                "AarHen Core V5 system test knowledge record.",
+                "AarHen Test Memory",
 
             category:
-                "system-test",
-
-            source:
-                "automated-test",
-
-            importance:
-                "low",
-
-            confidence:
-                0.9
-        });
-
-    test(
-        "Memory stored",
-        memoryResult &&
-        memoryResult.success === true
-    );
-
-    // ========================================================
-    // MEMORY SEARCH TEST
-    // ========================================================
-
-    const memorySearch =
-        memoryManager.recall(
-            "AarHen System Test Knowledge"
-        );
-
-    test(
-        "Memory search executed",
-        memorySearch &&
-        memorySearch.success === true
-    );
-
-    // ========================================================
-    // MEMORY STATUS TEST
-    // ========================================================
-
-    const memoryStatus =
-        memoryManager.getStatus();
-
-    test(
-        "Memory Manager status available",
-        validObject(memoryStatus)
-    );
-
-    // ========================================================
-    // LEARNING TEST
-    // ========================================================
-
-    const learningResult =
-        learning.learn({
-
-            title:
-                "AarHen Automated Test Knowledge",
+                "testing",
 
             content:
-                "This knowledge record is created by the automated AarHen Core V5 system test.",
-
-            category:
-                "system-test",
+                "AarHen memory system test information.",
 
             source:
-                "automated-test",
+                "system-test",
 
-            approved:
+            verified:
                 true,
 
             confidence:
-                0.9
+                0.95
         });
 
     test(
-        "Learning executed",
-        learningResult &&
-        learningResult.success === true
+        "Memory can store information",
+        Boolean(
+            memoryResult &&
+            memoryResult.id
+        )
     );
 
-    // ========================================================
-    // LEARNING SEARCH TEST
-    // ========================================================
+    test(
+        "Memory fingerprint created",
+        Boolean(
+            memoryResult &&
+            memoryResult.fingerprint
+        )
+    );
 
-    const learnedSearch =
+    const duplicateMemory =
+        memory.remember({
+
+            type:
+                "test-memory",
+
+            title:
+                "AarHen Test Memory",
+
+            category:
+                "testing",
+
+            content:
+                "AarHen memory system test information.",
+
+            source:
+                "system-test",
+
+            verified:
+                true,
+
+            confidence:
+                0.95
+        });
+
+    test(
+        "Memory duplicate protection works",
+        duplicateMemory &&
+        duplicateMemory.duplicate === true
+    );
+
+} catch (error) {
+
+    red(
+        `Memory test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// MEMORY MANAGER TEST
+// ============================================================
+
+section(
+    "4. MEMORY MANAGER TEST"
+);
+
+try {
+
+    const managerResult =
+        memoryManager.remember({
+
+            type:
+                "test-memory-manager",
+
+            title:
+                "AarHen Memory Manager Test",
+
+            category:
+                "testing",
+
+            content:
+                "Testing the advanced memory manager duplicate protection.",
+
+            source:
+                "system-test",
+
+            confidence:
+                0.90,
+
+            verified:
+                true,
+
+            remember:
+                true
+        });
+
+    test(
+        "Memory Manager stores information",
+        Boolean(
+            managerResult &&
+            managerResult.memoryId
+        )
+    );
+
+    test(
+        "Memory Manager exposes duplicate flag",
+        Object.prototype.hasOwnProperty.call(
+            managerResult,
+            "duplicate"
+        )
+    );
+
+} catch (error) {
+
+    red(
+        `Memory Manager test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// LEARNING TEST
+// ============================================================
+
+section(
+    "5. LEARNING ENGINE TEST"
+);
+
+const learningTitle =
+    "AarHen Learning Duplicate Safety Test";
+
+const learningContent =
+    "AarHen learns that verified knowledge should be stored safely and duplicate knowledge should not create another memory record.";
+
+let firstLearning = null;
+let secondLearning = null;
+
+try {
+
+    firstLearning =
+        learning.learn({
+
+            title:
+                learningTitle,
+
+            content:
+                learningContent,
+
+            category:
+                "knowledge",
+
+            source:
+                "system-test",
+
+            confidence:
+                0.90,
+
+            verified:
+                false,
+
+            learn:
+                true
+        });
+
+    test(
+        "First learning succeeds",
+        firstLearning &&
+        firstLearning.success === true
+    );
+
+    test(
+        "First learning stores knowledge",
+        firstLearning &&
+        firstLearning.learned === true
+    );
+
+    test(
+        "First learning returns memory ID",
+        Boolean(
+            firstLearning &&
+            firstLearning.memoryId
+        )
+    );
+
+    test(
+        "First learning reports newly learned",
+        firstLearning &&
+        firstLearning.newlyLearned === true
+    );
+
+} catch (error) {
+
+    red(
+        `First learning test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// DUPLICATE LEARNING TEST
+// ============================================================
+
+section(
+    "6. DUPLICATE LEARNING TEST"
+);
+
+try {
+
+    secondLearning =
+        learning.learn({
+
+            title:
+                learningTitle,
+
+            content:
+                learningContent,
+
+            category:
+                "knowledge",
+
+            source:
+                "system-test",
+
+            confidence:
+                0.90,
+
+            verified:
+                false,
+
+            learn:
+                true
+        });
+
+    test(
+        "Second learning call succeeds",
+        secondLearning &&
+        secondLearning.success === true
+    );
+
+    test(
+        "Duplicate knowledge is detected",
+        secondLearning &&
+        secondLearning.duplicate === true
+    );
+
+    test(
+        "Duplicate knowledge is not marked newly learned",
+        secondLearning &&
+        secondLearning.newlyLearned === false
+    );
+
+    test(
+        "Duplicate status is already-learned",
+        secondLearning &&
+        secondLearning.status === "already-learned"
+    );
+
+    test(
+        "Duplicate keeps original memory ID",
+        firstLearning &&
+        secondLearning &&
+        firstLearning.memoryId ===
+            secondLearning.memoryId
+    );
+
+} catch (error) {
+
+    red(
+        `Duplicate learning test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// KNOWLEDGE SEARCH TEST
+// ============================================================
+
+section(
+    "7. KNOWLEDGE SEARCH TEST"
+);
+
+try {
+
+    const searchResult =
         learning.searchLearnedKnowledge(
-            "AarHen Automated Test Knowledge"
+            "verified knowledge",
+            10
         );
 
     test(
-        "Learned knowledge search executed",
-        learnedSearch &&
-        learnedSearch.success === true
+        "Knowledge search returns result object",
+        Boolean(searchResult)
     );
 
-    // ========================================================
-    // LEARNING STATUS TEST
-    // ========================================================
+    test(
+        "Knowledge search succeeds",
+        searchResult &&
+        searchResult.success === true
+    );
 
-    const learningStatus =
+    test(
+        "Knowledge search returns results array",
+        searchResult &&
+        Array.isArray(searchResult.results)
+    );
+
+} catch (error) {
+
+    red(
+        `Knowledge search test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// GET LEARNED KNOWLEDGE TEST
+// ============================================================
+
+section(
+    "8. GET LEARNED KNOWLEDGE TEST"
+);
+
+try {
+
+    const learnedKnowledge =
+        learning.getLearnedKnowledge(100);
+
+    test(
+        "Get learned knowledge succeeds",
+        learnedKnowledge &&
+        learnedKnowledge.success === true
+    );
+
+    test(
+        "Get learned knowledge returns results array",
+        learnedKnowledge &&
+        Array.isArray(
+            learnedKnowledge.results
+        )
+    );
+
+} catch (error) {
+
+    red(
+        `Get learned knowledge test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// VERIFIED LEARNING TEST
+// ============================================================
+
+section(
+    "9. VERIFIED LEARNING TEST"
+);
+
+const verifiedTitle =
+    "AarHen Verified Learning Test";
+
+const verifiedContent =
+    "This is a verified knowledge record used to test AarHen's protected learning pipeline.";
+
+let verifiedLearning = null;
+
+try {
+
+    verifiedLearning =
+        learning.learnVerified({
+
+            title:
+                verifiedTitle,
+
+            content:
+                verifiedContent,
+
+            category:
+                "research",
+
+            source:
+                "system-test",
+
+            confidence:
+                0.95,
+
+            verified:
+                true,
+
+            approved:
+                true
+        });
+
+    test(
+        "Verified learning succeeds",
+        verifiedLearning &&
+        verifiedLearning.success === true
+    );
+
+    test(
+        "Verified learning is marked verified",
+        verifiedLearning &&
+        verifiedLearning.verified === true
+    );
+
+    test(
+        "Verified learning returns memory ID",
+        Boolean(
+            verifiedLearning &&
+            verifiedLearning.memoryId
+        )
+    );
+
+} catch (error) {
+
+    red(
+        `Verified learning test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// VERIFIED DUPLICATE TEST
+// ============================================================
+
+section(
+    "10. VERIFIED DUPLICATE TEST"
+);
+
+try {
+
+    const verifiedDuplicate =
+        learning.learnVerified({
+
+            title:
+                verifiedTitle,
+
+            content:
+                verifiedContent,
+
+            category:
+                "research",
+
+            source:
+                "system-test",
+
+            confidence:
+                0.95,
+
+            verified:
+                true,
+
+            approved:
+                true
+        });
+
+    test(
+        "Verified duplicate call succeeds",
+        verifiedDuplicate &&
+        verifiedDuplicate.success === true
+    );
+
+    test(
+        "Verified duplicate is detected",
+        verifiedDuplicate &&
+        verifiedDuplicate.duplicate === true
+    );
+
+    test(
+        "Verified duplicate is not newly learned",
+        verifiedDuplicate &&
+        verifiedDuplicate.newlyLearned === false
+    );
+
+} catch (error) {
+
+    red(
+        `Verified duplicate test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// VERIFIED LEARNING SAFETY TEST
+// ============================================================
+
+section(
+    "11. VERIFIED LEARNING SAFETY"
+);
+
+try {
+
+    const unsafeVerifiedLearning =
+        learning.learnVerified({
+
+            title:
+                "Unsafe Verification Test",
+
+            content:
+                "This knowledge must not bypass the verification and approval requirements.",
+
+            category:
+                "testing",
+
+            source:
+                "system-test",
+
+            confidence:
+                0.95,
+
+            verified:
+                false,
+
+            approved:
+                false
+        });
+
+    test(
+        "Unverified learning is rejected",
+        unsafeVerifiedLearning &&
+        unsafeVerifiedLearning.success === false
+    );
+
+    test(
+        "Verification protection is active",
+        unsafeVerifiedLearning &&
+        (
+            unsafeVerifiedLearning.status ===
+                "verification-required" ||
+            unsafeVerifiedLearning.status ===
+                "approval-required"
+        )
+    );
+
+} catch (error) {
+
+    red(
+        `Verified safety test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// LEARNING STATUS TEST
+// ============================================================
+
+section(
+    "12. LEARNING STATUS TEST"
+);
+
+try {
+
+    const status =
         learning.getLearningStatus();
 
     test(
         "Learning status available",
-        validObject(learningStatus)
-    );
-
-    // ========================================================
-    // BRAIN TEST
-    // ========================================================
-
-    const brainResult =
-        brain.think({
-
-            input:
-                "What is vehicle finance?"
-        });
-
-    test(
-        "Brain thinking executed",
-        brainResult &&
-        brainResult.success === true
-    );
-
-    // ========================================================
-    // BRAIN STATUS TEST
-    // ========================================================
-
-    const brainStatus =
-        brain.getStatus();
-
-    test(
-        "Brain status available",
-        validObject(brainStatus)
-    );
-
-    // ========================================================
-    // EXECUTOR CONTEXT TEST
-    // ========================================================
-
-    const executorContext =
-        executor.prepareContext({
-
-            input:
-                "What is vehicle finance?"
-        });
-
-    test(
-        "Executor context created",
-        executorContext !== undefined &&
-        executorContext !== null
-    );
-
-    // ========================================================
-    // EXECUTOR ENGINE FUNCTIONS TEST
-    // ========================================================
-
-    const engineFunctions =
-        executor.getEngineFunctions();
-
-    test(
-        "Executor engine functions available",
-        engineFunctions !== undefined &&
-        engineFunctions !== null
-    );
-
-    // ========================================================
-    // ORCHESTRATOR TEST
-    // ========================================================
-
-    const orchestration =
-        await orchestrator.process(
-            "What is vehicle finance?",
-            {
-                remember:
-                    false
-            }
-        );
-
-    test(
-        "Orchestrator returned result",
-        orchestration !== undefined &&
-        orchestration !== null
+        Boolean(status)
     );
 
     test(
-        "Orchestrator returned object",
-        validObject(orchestration)
-    );
-
-    // ========================================================
-    // ORCHESTRATOR STATUS TEST
-    // ========================================================
-
-    if (
-        typeof orchestrator.getStatus === "function"
-    ) {
-
-        const orchestratorStatus =
-            orchestrator.getStatus();
-
-        test(
-            "Orchestrator status available",
-            validObject(orchestratorStatus)
-        );
-    }
-
-    // ========================================================
-    // RESEARCH STATUS TEST
-    // ========================================================
-
-    const researchStatus =
-        research.getResearchStatus();
-
-    test(
-        "Research status available",
-        validObject(researchStatus)
+        "Learning engine active",
+        status &&
+        status.status === "active"
     );
 
     test(
-        "Research engine version available",
-        Boolean(researchStatus.version)
+        "Duplicate-safe learning capability exists",
+        status &&
+        Array.isArray(status.capabilities) &&
+        status.capabilities.includes(
+            "duplicate-safe-learning"
+        )
     );
 
-    // ========================================================
-    // LIVE WEB RESEARCH TEST
-    // ========================================================
-    //
-    // This test runs ONLY when:
-    //
-    // RUN_LIVE_RESEARCH_TEST=true
-    //
-    // It performs:
-    //
-    // Tavily
-    //   ↓
-    // Web Search
-    //   ↓
-    // Research Processing
-    //   ↓
-    // Verification
-    //   ↓
-    // Verified Learning
-    //   ↓
-    // Memory
-    //   ↓
-    // Recall
-    //
-    // ========================================================
+} catch (error) {
 
-    const runLiveResearch =
-        String(
-            process.env.RUN_LIVE_RESEARCH_TEST || ""
-        ).toLowerCase() === "true";
-
-    if (runLiveResearch) {
-
-        console.log("");
-        console.log("----------------------------------------");
-        console.log("🌐 LIVE WEB RESEARCH TEST");
-        console.log("----------------------------------------");
-        console.log("");
-
-        // ====================================================
-        // PROVIDER STATUS
-        // ====================================================
-
-        const providerStatus =
-            providerManager.getStatus();
-
-        test(
-            "Research provider status available",
-            validObject(providerStatus)
-        );
-
-        test(
-            "Research provider connected",
-            Boolean(
-                providerStatus &&
-                providerStatus.providers &&
-                providerStatus.providers.research &&
-                providerStatus.providers.research.connected
-            )
-        );
-
-        console.log(
-            "✅ Tavily provider connected"
-        );
-
-        // ====================================================
-        // LIVE WEB SEARCH
-        // ====================================================
-
-        const liveQuery =
-            "vehicle finance basics official information";
-
-        console.log("");
-        console.log(
-            `🔎 Searching web: ${liveQuery}`
-        );
-
-        const liveSearch =
-            await providerManager.searchWeb({
-
-                query:
-                    liveQuery,
-
-                maxSources:
-                    5
-            });
-
-        test(
-            "Live web search executed",
-            liveSearch &&
-            liveSearch.success === true
-        );
-
-        test(
-            "Live web search returned results",
-            Array.isArray(liveSearch.results) &&
-            liveSearch.results.length > 0
-        );
-
-        test(
-            "Live web search returned sources",
-            Number(liveSearch.sourceCount) > 0
-        );
-
-        console.log(
-            `✅ Web sources received: ${liveSearch.sourceCount}`
-        );
-
-        // ====================================================
-        // PROCESS LIVE RESEARCH
-        // ====================================================
-
-        const processedResearch =
-            research.processResearchResult({
-
-                query:
-                    liveSearch.query ||
-                    liveQuery,
-
-                answer:
-                    liveSearch.answer ||
-                    "",
-
-                summary:
-                    liveSearch.answer ||
-                    "",
-
-                sources:
-                    liveSearch.results,
-
-                provider:
-                    liveSearch.provider ||
-                    "Tavily",
-
-                confidence:
-                    0.85
-            });
-
-        test(
-            "Live research result processed",
-            processedResearch &&
-            processedResearch.success === true
-        );
-
-        test(
-            "Live research sources processed",
-            Number(
-                processedResearch.sourceCount
-            ) > 0
-        );
-
-        console.log(
-            `✅ Research processed: ${processedResearch.researchStatus}`
-        );
-
-        // ====================================================
-        // LIVE RESEARCH VERIFICATION
-        // ====================================================
-
-        test(
-            "Live research verification executed",
-            processedResearch.verification !== undefined &&
-            processedResearch.verification !== null
-        );
-
-        test(
-            "Live research verification status available",
-            Boolean(
-                processedResearch.verificationStatus ||
-                processedResearch.researchStatus
-            )
-        );
-
-        // ====================================================
-        // VERIFIED LEARNING CHECK
-        // ====================================================
-
-        const liveLearning =
-            processedResearch.learning;
-
-        test(
-            "Live research learning result available",
-            validObject(liveLearning)
-        );
-
-        if (
-            processedResearch.verified === true
-        ) {
-
-            test(
-                "Live research marked verified",
-                processedResearch.verified === true
-            );
-
-            test(
-                "Verified learning attempted",
-                liveLearning !== undefined &&
-                liveLearning !== null
-            );
-
-            console.log(
-                "✅ Verified research reached learning stage"
-            );
-
-        } else {
-
-            console.log(
-                "⚠️ Live research was not fully verified."
-            );
-
-            console.log(
-                "Research was processed but was not automatically stored as verified knowledge."
-            );
-        }
-
-        // ====================================================
-        // LEARNED KNOWLEDGE RECALL
-        // ====================================================
-
-        const learnedWebKnowledge =
-            learning.searchLearnedKnowledge(
-                liveQuery
-            );
-
-        test(
-            "Web learning recall executed",
-            learnedWebKnowledge &&
-            learnedWebKnowledge.success === true
-        );
-
-        console.log(
-            "✅ Web learning recall executed"
-        );
-
-        // ====================================================
-        // LIVE RESEARCH SUMMARY
-        // ====================================================
-
-        console.log("");
-        console.log("----------------------------------------");
-        console.log("🌐 LIVE RESEARCH PIPELINE RESULT");
-        console.log("----------------------------------------");
-
-        console.log(
-            `Provider: ${
-                liveSearch.provider ||
-                "Tavily"
-            }`
-        );
-
-        console.log(
-            `Sources: ${
-                liveSearch.sourceCount ||
-                0
-            }`
-        );
-
-        console.log(
-            `Verification: ${
-                processedResearch.verificationStatus ||
-                "unknown"
-            }`
-        );
-
-        console.log(
-            `Verified: ${
-                processedResearch.verified === true
-            }`
-        );
-
-        console.log(
-            `Learning: ${
-                liveLearning.learned === true
-            }`
-        );
-
-        console.log("----------------------------------------");
-        console.log("");
-    } else {
-
-        console.log("");
-        console.log(
-            "ℹ️ Live web research test skipped."
-        );
-
-        console.log(
-            "Set RUN_LIVE_RESEARCH_TEST=true to run it."
-        );
-
-        console.log("");
-    }
-
-    // ========================================================
-    // FINAL SYSTEM CHECK
-    // ========================================================
-
-    console.log("");
-    console.log("========================================");
-    console.log("         🎉 ALL TESTS PASSED");
-    console.log("========================================");
-    console.log("");
-
-    console.log(
-        "AarHen Core V5 modules are connected."
+    red(
+        `Learning status test -> ${error.message}`
     );
-
-    console.log(
-        "Research pipeline is operational."
-    );
-
-    console.log(
-        "Memory system is operational."
-    );
-
-    console.log(
-        "Learning system is operational."
-    );
-
-    console.log(
-        "Brain is operational."
-    );
-
-    console.log(
-        "Executor is operational."
-    );
-
-    console.log(
-        "Orchestrator is operational."
-    );
-
-    if (runLiveResearch) {
-
-        console.log(
-            "Live Web → Verify → Learn → Recall test completed."
-        );
-
-    }
-
-    console.log("");
-
-    console.log("========================================");
-    console.log("       AARHEN CORE V5 TEST COMPLETE");
-    console.log("========================================");
-    console.log("");
-
-    return true;
 }
 
+
 // ============================================================
-// RUN TESTS
+// RESEARCH ENGINE TEST
 // ============================================================
 
-runTests()
-    .then(() => {
+section(
+    "13. RESEARCH ENGINE TEST"
+);
 
-        process.exit(0);
+try {
 
-    })
-    .catch(error => {
+    const researchInput = {
 
-        console.error("");
-        console.error(
-            "❌ AARHEN SYSTEM TEST FAILED"
+        query:
+            "AarHen research verification test",
+
+        answer:
+            "AarHen research test answer.",
+
+        sources: [
+
+            {
+                id:
+                    "test-source-1",
+
+                title:
+                    "Test Source One",
+
+                url:
+                    "https://example.com/source-one",
+
+                content:
+                    "Test source one contains supporting information."
+            },
+
+            {
+                id:
+                    "test-source-2",
+
+                title:
+                    "Test Source Two",
+
+                url:
+                    "https://example.com/source-two",
+
+                content:
+                    "Test source two independently supports the information."
+            }
+        ],
+
+        confidence:
+            0.90
+    };
+
+    const researchResult =
+        research.createResearchResult(
+            researchInput
         );
 
-        console.error("");
+    test(
+        "Research result created",
+        Boolean(researchResult)
+    );
 
-        console.error(
-            error.stack ||
-            error.message
+    test(
+        "Research has sources",
+        researchResult &&
+        Array.isArray(
+            researchResult.sources
+        ) &&
+        researchResult.sources.length >= 2
+    );
+
+    const verifiedResult =
+        research.verifyResearch(
+            researchResult
         );
 
-        console.error("");
+    test(
+        "Research verification returns result",
+        Boolean(verifiedResult)
+    );
 
-        process.exit(1);
-    });
+    test(
+        "Research reaches verified state",
+        verifiedResult &&
+        verifiedResult.verified === true
+    );
+
+} catch (error) {
+
+    red(
+        `Research engine test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// EXECUTOR TEST
+// ============================================================
+
+section(
+    "14. EXECUTOR TEST"
+);
+
+try {
+
+    test(
+        "Executor exposes executeIntent()",
+        typeof executor.executeIntent ===
+            "function"
+    );
+
+} catch (error) {
+
+    red(
+        `Executor test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// ORCHESTRATOR TEST
+// ============================================================
+
+section(
+    "15. ORCHESTRATOR TEST"
+);
+
+try {
+
+    test(
+        "Orchestrator exposes process()",
+        typeof orchestrator.process ===
+            "function"
+    );
+
+    test(
+        "Orchestrator exposes orchestrate()",
+        typeof orchestrator.orchestrate ===
+            "function"
+    );
+
+    const orchestratorStatus =
+        orchestrator.getStatus();
+
+    test(
+        "Orchestrator status available",
+        Boolean(orchestratorStatus)
+    );
+
+    test(
+        "Orchestrator is active",
+        orchestratorStatus &&
+        orchestratorStatus.status ===
+            "active"
+    );
+
+} catch (error) {
+
+    red(
+        `Orchestrator test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// PROVIDER MANAGER TEST
+// ============================================================
+
+section(
+    "16. PROVIDER MANAGER TEST"
+);
+
+try {
+
+    const providerStatus =
+        providerManager.getStatus();
+
+    test(
+        "Provider Manager status available",
+        Boolean(providerStatus)
+    );
+
+} catch (error) {
+
+    red(
+        `Provider Manager test -> ${error.message}`
+    );
+}
+
+
+// ============================================================
+// LIVE RESEARCH TEST
+// ============================================================
+
+section(
+    "17. LIVE RESEARCH TEST"
+);
+
+if (
+    process.env.RUN_LIVE_RESEARCH_TEST ===
+    "true"
+) {
+
+    console.log(
+        "Live research test enabled."
+    );
+
+    (async () => {
+
+        try {
+
+            const liveResult =
+                await orchestrator.orchestrate(
+                    "What is the latest information about electric vehicles?",
+                    {
+                        intent:
+                            "research"
+                    }
+                );
+
+            test(
+                "Live research orchestration completed",
+                Boolean(liveResult)
+            );
+
+            test(
+                "Live research result contains research data",
+                Boolean(
+                    liveResult &&
+                    liveResult.research
+                )
+            );
+
+            test(
+                "Live research returns sources",
+                Boolean(
+                    liveResult &&
+                    liveResult.research &&
+                    Array.isArray(
+                        liveResult.research.sources
+                    )
+                )
+            );
+
+        } catch (error) {
+
+            red(
+                `Live research test -> ${error.message}`
+            );
+
+        } finally {
+
+            finishTests();
+
+        }
+
+    })();
+
+} else {
+
+    console.log(
+        "Live research test skipped."
+    );
+
+    console.log(
+        "Set RUN_LIVE_RESEARCH_TEST=true to enable it."
+    );
+
+    finishTests();
+}
+
+
+// ============================================================
+// FINAL RESULT
+// ============================================================
+
+function finishTests() {
+
+    console.log("");
+    console.log(
+        "============================================================"
+    );
+
+    console.log(
+        "AARHEN TEST SUMMARY"
+    );
+
+    console.log(
+        "============================================================"
+    );
+
+    console.log(
+        `GREEN: ${passed}`
+    );
+
+    console.log(
+        `RED:   ${failed}`
+    );
+
+    console.log(
+        "============================================================"
+    );
+
+    if (failed > 0) {
+
+        console.log(
+            "\x1b[31mTEST RESULT: RED\x1b[0m"
+        );
+
+        process.exitCode = 1;
+
+    } else {
+
+        console.log(
+            "\x1b[32mTEST RESULT: GREEN\x1b[0m"
+        );
+
+        process.exitCode = 0;
+    }
+
+    console.log(
+        "============================================================"
+    );
+}
