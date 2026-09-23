@@ -343,47 +343,29 @@ function learn(input = {}) {
             buildLearningRecord(input);
 
         // --------------------------------------------------------
-        // PRIMARY KNOWLEDGE STORAGE
+        // CANONICAL MEMORY STORAGE
+        // --------------------------------------------------------
+        //
+        // IMPORTANT:
+        // Do NOT write separately through memoryStore here.
+        //
+        // memoryManager.remember()
+        //        ↓
+        // memory.remember()
+        //        ↓
+        // fingerprint
+        //        ↓
+        // duplicate check
+        //        ↓
+        // ONE canonical memory
+        //
         // --------------------------------------------------------
 
-        const saved =
-            memoryStore.saveKnowledge({
-
-                title:
-                    record.title,
-
-                content:
-                    record.content,
-
-                category:
-                    record.category,
-
-                source:
-                    record.source,
-
-                concepts:
-                    record.concepts,
-
-                chunks:
-                    record.chunks,
-
-                learnedAt:
-                    record.learnedAt,
-
-                learningEngine:
-                    record.learningEngine,
-
-                learningVersion:
-                    record.learningVersion,
-
-                verified:
-                    Boolean(input.verified),
-
-                confidence:
-                    typeof input.confidence === "number"
-                        ? input.confidence
-                        : 0.60
-            });
+        const memoryResult =
+            saveLearningToMemory(
+                record,
+                input
+            );
 
         // --------------------------------------------------------
         // DUPLICATE DETECTION
@@ -391,18 +373,8 @@ function learn(input = {}) {
 
         const alreadyLearned =
             Boolean(
-                saved &&
-                saved.duplicate === true
-            );
-
-        // --------------------------------------------------------
-        // MEMORY MANAGER SYNC
-        // --------------------------------------------------------
-
-        const memoryResult =
-            saveLearningToMemory(
-                record,
-                input
+                memoryResult &&
+                memoryResult.duplicate === true
             );
 
         // --------------------------------------------------------
@@ -415,31 +387,30 @@ function learn(input = {}) {
                 : "learned-and-stored";
 
         const memoryId =
-            saved &&
+            memoryResult &&
             (
-                saved.memoryId ||
-                saved.id
+                memoryResult.memoryId ||
+                (
+                    memoryResult.memory &&
+                    memoryResult.memory.id
+                )
             )
                 ? (
-                    saved.memoryId ||
-                    saved.id
-                )
-                : (
-                    memoryResult &&
+                    memoryResult.memoryId ||
                     (
-                        memoryResult.memoryId ||
-                        memoryResult.id
+                        memoryResult.memory &&
+                        memoryResult.memory.id
                     )
                 )
-                    ? (
-                        memoryResult.memoryId ||
-                        memoryResult.id
-                    )
-                    : null;
+                : null;
 
         return {
 
-            success: true,
+            success:
+                Boolean(
+                    memoryResult &&
+                    memoryResult.success
+                ),
 
             learned: true,
 
@@ -467,12 +438,18 @@ function learn(input = {}) {
             chunkCount:
                 record.chunks.length,
 
+            // Keep API compatibility:
+            // knowledge now points to the canonical memory.
             knowledge:
-                saved,
+                memoryResult &&
+                memoryResult.memory
+                    ? memoryResult.memory
+                    : null,
 
             knowledgeStatus:
-                saved && saved.status
-                    ? saved.status
+                memoryResult &&
+                memoryResult.status
+                    ? memoryResult.status
                     : (
                         alreadyLearned
                             ? "already-exists"
