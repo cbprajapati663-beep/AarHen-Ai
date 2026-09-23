@@ -40,7 +40,7 @@ const registry =
     require("./skills/registry");
 
 const providerManager =
-    require("./skills/providerManager");
+    require("./providers/providerManager");
 
 // ============================================================
 // TEST HELPER
