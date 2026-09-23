@@ -5,8 +5,16 @@
 
 const memory = require("./memory");
 
+// ============================================================
+// SAVE KNOWLEDGE
+// ============================================================
+
 function saveKnowledge(data = {}) {
-    if (!data.content || String(data.content).trim().length < 10) {
+
+    if (
+        !data.content ||
+        String(data.content).trim().length < 10
+    ) {
         return {
             success: false,
             error: "Knowledge content is too short."
@@ -22,19 +30,49 @@ function saveKnowledge(data = {}) {
         verified: Boolean(data.verified),
         confidence:
             typeof data.confidence === "number"
-                ? Math.max(0, Math.min(1, data.confidence))
+                ? Math.max(
+                    0,
+                    Math.min(1, data.confidence)
+                )
                 : 0.5
     });
+
+    // ========================================================
+    // DUPLICATE KNOWLEDGE
+    // ========================================================
+
+    if (saved && saved.duplicate === true) {
+
+        return {
+            success: true,
+            memoryId: saved.id,
+            memory: saved,
+            duplicate: true,
+            status: "already-exists"
+        };
+    }
+
+    // ========================================================
+    // NEW KNOWLEDGE
+    // ========================================================
 
     return {
         success: true,
         memoryId: saved.id,
         memory: saved,
+        duplicate: false,
         status: "stored"
     };
 }
 
-function findKnowledge(query = "", limit = 10) {
+// ============================================================
+// FIND KNOWLEDGE
+// ============================================================
+
+function findKnowledge(
+    query = "",
+    limit = 10
+) {
 
     const cleanQuery =
         String(query || "").trim();
@@ -44,10 +82,16 @@ function findKnowledge(query = "", limit = 10) {
 
     const knowledge =
         allMemory.filter(
-            item => item.type === "knowledge"
+            item =>
+                item.type === "knowledge"
         );
 
+    // ========================================================
+    // ALL KNOWLEDGE
+    // ========================================================
+
     if (!cleanQuery) {
+
         const results =
             knowledge
                 .slice(-Number(limit) || 10)
@@ -61,10 +105,15 @@ function findKnowledge(query = "", limit = 10) {
         };
     }
 
+    // ========================================================
+    // SEARCH KNOWLEDGE
+    // ========================================================
+
     const results =
         memory.search(cleanQuery)
             .filter(
-                item => item.type === "knowledge"
+                item =>
+                    item.type === "knowledge"
             );
 
     const finalResults =
@@ -81,14 +130,23 @@ function findKnowledge(query = "", limit = 10) {
     };
 }
 
-function getMemory(memoryId) {
-    const all = memory.getAll();
+// ============================================================
+// GET MEMORY
+// ============================================================
 
-    const found = all.find(
-        item => item.id === memoryId
-    );
+function getMemory(memoryId) {
+
+    const all =
+        memory.getAll();
+
+    const found =
+        all.find(
+            item =>
+                item.id === memoryId
+        );
 
     if (!found) {
+
         return {
             success: false,
             error: "Memory not found."
@@ -101,13 +159,23 @@ function getMemory(memoryId) {
     };
 }
 
-function updateMemory(memoryId, changes = {}) {
-    const updated = memory.update(
-        memoryId,
-        changes
-    );
+// ============================================================
+// UPDATE MEMORY
+// ============================================================
+
+function updateMemory(
+    memoryId,
+    changes = {}
+) {
+
+    const updated =
+        memory.update(
+            memoryId,
+            changes
+        );
 
     if (!updated) {
+
         return {
             success: false,
             error: "Memory not found."
@@ -121,32 +189,60 @@ function updateMemory(memoryId, changes = {}) {
     };
 }
 
+// ============================================================
+// DELETE MEMORY
+// ============================================================
+
 function deleteMemory(memoryId) {
-    return memory.forget(memoryId);
+
+    return memory.forget(
+        memoryId
+    );
 }
 
+// ============================================================
+// MEMORY STATISTICS
+// ============================================================
+
 function getMemoryStats() {
-    const all = memory.getAll();
 
-    const knowledge = all.filter(
-        item => item.type === "knowledge"
-    );
+    const all =
+        memory.getAll();
 
-    const verified = knowledge.filter(
-        item =>
-            item.verified === true ||
-            item.verificationStatus === "verified"
-    );
+    const knowledge =
+        all.filter(
+            item =>
+                item.type === "knowledge"
+        );
+
+    const verified =
+        knowledge.filter(
+            item =>
+                item.verified === true ||
+                item.verificationStatus === "verified"
+        );
 
     return {
         success: true,
-        totalMemories: all.length,
-        knowledgeCount: knowledge.length,
-        verifiedKnowledge: verified.length,
+
+        totalMemories:
+            all.length,
+
+        knowledgeCount:
+            knowledge.length,
+
+        verifiedKnowledge:
+            verified.length,
+
         unverifiedKnowledge:
-            knowledge.length - verified.length
+            knowledge.length -
+            verified.length
     };
 }
+
+// ============================================================
+// EXPORTS
+// ============================================================
 
 module.exports = {
     saveKnowledge,
