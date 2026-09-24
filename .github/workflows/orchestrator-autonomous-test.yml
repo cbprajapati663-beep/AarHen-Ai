@@ -811,6 +811,23 @@ jobs:
               result.success !==
               true
             ) {
+              console.error(
+                "Autonomous research diagnostic:",
+                JSON.stringify(
+                  {
+                    success: result.success,
+                    status: result.status,
+                    error: result.error,
+                    autonomous: result.autonomous,
+                    execution: result.execution,
+                    research: result.research,
+                    task: result.autonomous?.task
+                  },
+                  null,
+                  2
+                )
+              );
+
               throw new Error(
                 "Autonomous research through Orchestrator failed: " +
                 (
