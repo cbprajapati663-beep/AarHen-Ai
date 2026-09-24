@@ -1,0 +1,1160 @@
+name: AarHen Autonomous Guard Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/autonomousGuard.js"
+      - "core/permissions.js"
+      - ".github/workflows/autonomous-guard-test.yml"
+
+jobs:
+
+  autonomous-guard-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # SETUP
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # COMPLETE AUTONOMOUS GUARD TEST
+      # ======================================================
+
+      - name: Autonomous Guard Integration Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const guard =
+              require("./core/autonomousGuard");
+
+            const permissions =
+              require("./core/permissions");
+
+
+            // ==================================================
+            // LOAD TEST
+            // ==================================================
+
+            if (
+              !guard
+            ) {
+
+              throw new Error(
+                "Autonomous Guard could not be loaded."
+              );
+
+            }
+
+
+            if (
+              guard.AUTONOMOUS_GUARD_VERSION !==
+              "5.11.0"
+            ) {
+
+              throw new Error(
+                "Autonomous Guard version mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Autonomous Guard loaded successfully."
+            );
+
+
+            console.log(
+              "Version:",
+              guard.AUTONOMOUS_GUARD_VERSION
+            );
+
+
+            // ==================================================
+            // RESET
+            // ==================================================
+
+            const reset =
+              guard.reset();
+
+
+            if (
+              reset.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Autonomous Guard reset failed."
+              );
+
+            }
+
+
+            // ==================================================
+            // STATUS TEST
+            // ==================================================
+
+            const initialStatus =
+              guard.getStatus();
+
+
+            if (
+              initialStatus.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Initial Guard status failed."
+              );
+
+            }
+
+
+            if (
+              initialStatus.status !==
+              "active"
+            ) {
+
+              throw new Error(
+                "Autonomous Guard is not active."
+              );
+
+            }
+
+
+            if (
+              initialStatus.mode !==
+              "controlled"
+            ) {
+
+              throw new Error(
+                "Autonomous Guard mode mismatch."
+              );
+
+            }
+
+
+            if (
+              initialStatus.permissionBrainConnected !==
+              true
+            ) {
+
+              throw new Error(
+                "Permission Brain is not connected."
+              );
+
+            }
+
+
+            // ==================================================
+            // OWNER CONFIGURATION
+            // ==================================================
+
+            const ownerConfig =
+              guard.configureOwner(
+                "owner-test-001"
+              );
+
+
+            if (
+              ownerConfig.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Owner configuration failed."
+              );
+
+            }
+
+
+            if (
+              ownerConfig.ownerConfigured !==
+              true
+            ) {
+
+              throw new Error(
+                "Owner was not marked configured."
+              );
+
+            }
+
+
+            if (
+              ownerConfig.ownerId !==
+              "owner-test-001"
+            ) {
+
+              throw new Error(
+                "Configured owner ID mismatch."
+              );
+
+            }
+
+
+            // ==================================================
+            // OWNER READ TEST
+            // ==================================================
+
+            const owner =
+              guard.getOwner();
+
+
+            if (
+              owner.configured !==
+              true
+            ) {
+
+              throw new Error(
+                "Owner configuration was not persisted."
+              );
+
+            }
+
+
+            if (
+              owner.ownerId !==
+              "owner-test-001"
+            ) {
+
+              throw new Error(
+                "Stored owner ID mismatch."
+              );
+
+            }
+
+
+            // ==================================================
+            // CORRECT OWNER AUTHORIZATION
+            // ==================================================
+
+            const authorized =
+              guard.authorizeOwner(
+                "owner-test-001"
+              );
+
+
+            if (
+              authorized.success !==
+              true ||
+              authorized.authorized !==
+              true
+            ) {
+
+              throw new Error(
+                "Correct owner authorization failed."
+              );
+
+            }
+
+
+            // ==================================================
+            // WRONG OWNER AUTHORIZATION
+            // ==================================================
+
+            const unauthorized =
+              guard.authorizeOwner(
+                "wrong-owner"
+              );
+
+
+            if (
+              unauthorized.success !==
+              false ||
+              unauthorized.authorized !==
+              false
+            ) {
+
+              throw new Error(
+                "Wrong owner was incorrectly authorized."
+              );
+
+            }
+
+
+            // ==================================================
+            // PERMISSION BRAIN CONNECTION TEST
+            // ==================================================
+
+            const safePermission =
+              guard.checkPermission(
+                "calculate"
+              );
+
+
+            if (
+              safePermission.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Safe action permission check failed."
+              );
+
+            }
+
+
+            if (
+              safePermission.policy !==
+              "ALLOW"
+            ) {
+
+              throw new Error(
+                "Calculate action permission policy mismatch."
+              );
+
+            }
+
+
+            if (
+              safePermission.allowed !==
+              true
+            ) {
+
+              throw new Error(
+                "Calculate action should be directly allowed."
+              );
+
+            }
+
+
+            const permissionFromBrain =
+              permissions.check(
+                "calculate"
+              );
+
+
+            if (
+              permissionFromBrain.policy !==
+              safePermission.policy
+            ) {
+
+              throw new Error(
+                "Autonomous Guard permission result does not match Permission Brain."
+              );
+
+            }
+
+
+            // ==================================================
+            // SAFE ACTION EXECUTION GATE
+            // ==================================================
+
+            const safeExecution =
+              guard.canExecute(
+                "calculate"
+              );
+
+
+            if (
+              safeExecution.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Safe execution gate failed."
+              );
+
+            }
+
+
+            if (
+              safeExecution.allowed !==
+              true
+            ) {
+
+              throw new Error(
+                "Allowed action was incorrectly blocked."
+              );
+
+            }
+
+
+            if (
+              safeExecution.blocked !==
+              false
+            ) {
+
+              throw new Error(
+                "Allowed action incorrectly returned blocked=true."
+              );
+
+            }
+
+
+            // ==================================================
+            // PROTECTED ACTION WITHOUT APPROVAL
+            // ==================================================
+
+            const protectedBlocked =
+              guard.canExecute(
+                "send_email"
+              );
+
+
+            if (
+              protectedBlocked.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action gate failed."
+              );
+
+            }
+
+
+            if (
+              protectedBlocked.allowed !==
+              false
+            ) {
+
+              throw new Error(
+                "Protected action was allowed without approval."
+              );
+
+            }
+
+
+            if (
+              protectedBlocked.blocked !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action was not blocked."
+              );
+
+            }
+
+
+            if (
+              protectedBlocked.requiresApproval !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action did not require approval."
+              );
+
+            }
+
+
+            if (
+              protectedBlocked.protected !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action was not identified correctly."
+              );
+
+            }
+
+
+            // ==================================================
+            // PROTECTED ACTION WITH APPROVAL
+            // ==================================================
+
+            const protectedAllowed =
+              guard.canExecute(
+
+                "send_email",
+
+                {
+
+                  approved:
+                    true
+
+                }
+
+              );
+
+
+            if (
+              protectedAllowed.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Approved protected action gate failed."
+              );
+
+            }
+
+
+            if (
+              protectedAllowed.allowed !==
+              true
+            ) {
+
+              throw new Error(
+                "Approved protected action remained blocked."
+              );
+
+            }
+
+
+            if (
+              protectedAllowed.blocked !==
+              false
+            ) {
+
+              throw new Error(
+                "Approved protected action incorrectly returned blocked=true."
+              );
+
+            }
+
+
+            // ==================================================
+            // STOP INITIAL STATE
+            // ==================================================
+
+            if (
+              guard.isStopped() !==
+              false
+            ) {
+
+              throw new Error(
+                "Guard unexpectedly started in STOP state."
+              );
+
+            }
+
+
+            // ==================================================
+            // WRONG OWNER STOP TEST
+            // ==================================================
+
+            const wrongOwnerStop =
+              guard.activateStop(
+
+                "Unauthorized stop attempt",
+
+                "wrong-owner"
+
+              );
+
+
+            if (
+              wrongOwnerStop.success !==
+              false
+            ) {
+
+              throw new Error(
+                "Wrong owner was able to activate STOP."
+              );
+
+            }
+
+
+            if (
+              guard.isStopped() !==
+              false
+            ) {
+
+              throw new Error(
+                "Unauthorized STOP attempt changed Guard state."
+              );
+
+            }
+
+
+            // ==================================================
+            // CORRECT OWNER STOP
+            // ==================================================
+
+            const stop =
+              guard.activateStop(
+
+                "Emergency test stop",
+
+                "owner-test-001"
+
+              );
+
+
+            if (
+              stop.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Correct owner could not activate STOP."
+              );
+
+            }
+
+
+            if (
+              stop.stopped !==
+              true
+            ) {
+
+              throw new Error(
+                "STOP activation did not return stopped=true."
+              );
+
+            }
+
+
+            if (
+              stop.stopActive !==
+              true
+            ) {
+
+              throw new Error(
+                "STOP activation did not set stopActive=true."
+              );
+
+            }
+
+
+            if (
+              guard.isStopped() !==
+              true
+            ) {
+
+              throw new Error(
+                "Guard did not enter STOP state."
+              );
+
+            }
+
+
+            // ==================================================
+            // VERIFY STOP BLOCKS SAFE ACTION
+            // ==================================================
+
+            const stoppedExecution =
+              guard.canExecute(
+                "calculate"
+              );
+
+
+            if (
+              stoppedExecution.success !==
+              true
+            ) {
+
+              throw new Error(
+                "STOP execution gate failed."
+              );
+
+            }
+
+
+            if (
+              stoppedExecution.allowed !==
+              false
+            ) {
+
+              throw new Error(
+                "STOP state did not block safe autonomous execution."
+              );
+
+            }
+
+
+            if (
+              stoppedExecution.blocked !==
+              true
+            ) {
+
+              throw new Error(
+                "STOP state did not return blocked=true."
+              );
+
+            }
+
+
+            if (
+              stoppedExecution.stopActive !==
+              true
+            ) {
+
+              throw new Error(
+                "STOP state was not reported by execution gate."
+              );
+
+            }
+
+
+            // ==================================================
+            // VERIFY STOP BLOCKS PROTECTED ACTION TOO
+            // ==================================================
+
+            const stoppedProtected =
+              guard.canExecute(
+
+                "send_email",
+
+                {
+
+                  approved:
+                    true
+
+                }
+
+              );
+
+
+            if (
+              stoppedProtected.allowed !==
+              false
+            ) {
+
+              throw new Error(
+                "STOP state did not block approved protected action."
+              );
+
+            }
+
+
+            if (
+              stoppedProtected.blocked !==
+              true
+            ) {
+
+              throw new Error(
+                "STOP state did not block protected execution."
+              );
+
+            }
+
+
+            // ==================================================
+            // WRONG OWNER CLEAR STOP
+            // ==================================================
+
+            const wrongOwnerClear =
+              guard.clearStop(
+                "wrong-owner"
+              );
+
+
+            if (
+              wrongOwnerClear.success !==
+              false
+            ) {
+
+              throw new Error(
+                "Wrong owner was able to clear STOP."
+              );
+
+            }
+
+
+            if (
+              guard.isStopped() !==
+              true
+            ) {
+
+              throw new Error(
+                "Unauthorized STOP clear changed Guard state."
+              );
+
+            }
+
+
+            // ==================================================
+            // CORRECT OWNER CLEAR STOP
+            // ==================================================
+
+            const cleared =
+              guard.clearStop(
+                "owner-test-001"
+              );
+
+
+            if (
+              cleared.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Correct owner could not clear STOP."
+              );
+
+            }
+
+
+            if (
+              cleared.stopped !==
+              false
+            ) {
+
+              throw new Error(
+                "STOP clear did not return stopped=false."
+              );
+
+            }
+
+
+            if (
+              cleared.stopActive !==
+              false
+            ) {
+
+              throw new Error(
+                "STOP clear did not reset stopActive."
+              );
+
+            }
+
+
+            if (
+              guard.isStopped() !==
+              false
+            ) {
+
+              throw new Error(
+                "Guard remained in STOP state after owner clear."
+              );
+
+            }
+
+
+            // ==================================================
+            // EXECUTION AFTER STOP CLEAR
+            // ==================================================
+
+            const executionAfterClear =
+              guard.canExecute(
+                "calculate"
+              );
+
+
+            if (
+              executionAfterClear.allowed !==
+              true
+            ) {
+
+              throw new Error(
+                "Safe action remained blocked after STOP clear."
+              );
+
+            }
+
+
+            // ==================================================
+            // API TEST
+            // ==================================================
+
+            const requiredFunctions = [
+
+              "configureOwner",
+              "getOwner",
+              "authorizeOwner",
+              "requireOwner",
+              "isStopped",
+              "activateStop",
+              "clearStop",
+              "checkPermission",
+              "canExecute",
+              "getStatus",
+              "reset"
+
+            ];
+
+
+            for (
+              const name of
+              requiredFunctions
+            ) {
+
+              if (
+                typeof guard[name] !==
+                "function"
+              ) {
+
+                throw new Error(
+                  `Autonomous Guard API missing: ${name}`
+                );
+
+              }
+
+            }
+
+
+            // ==================================================
+            // PROTECTED ACTION LIST
+            // ==================================================
+
+            if (
+              !Array.isArray(
+                guard.PROTECTED_ACTIONS
+              )
+            ) {
+
+              throw new Error(
+                "Protected action list is missing."
+              );
+
+            }
+
+
+            const expectedProtectedActions = [
+
+              "write_file",
+              "delete_file",
+              "send_message",
+              "send_email",
+              "post_online",
+              "purchase",
+              "login",
+              "install_software",
+              "change_system_settings",
+              "execute_external_code",
+              "security_testing_against_external_target"
+
+            ];
+
+
+            for (
+              const action of
+              expectedProtectedActions
+            ) {
+
+              if (
+                !guard.PROTECTED_ACTIONS.includes(
+                  action
+                )
+              ) {
+
+                throw new Error(
+                  `Protected action missing: ${action}`
+                );
+
+              }
+
+            }
+
+
+            // ==================================================
+            // REQUIRE OWNER TEST
+            // ==================================================
+
+            const ownerRequired =
+              guard.requireOwner(
+                "owner-test-001"
+              );
+
+
+            if (
+              ownerRequired.success !==
+              true ||
+              ownerRequired.authorized !==
+              true
+            ) {
+
+              throw new Error(
+                "requireOwner failed for correct owner."
+              );
+
+            }
+
+
+            const wrongRequired =
+              guard.requireOwner(
+                "wrong-owner"
+              );
+
+
+            if (
+              wrongRequired.success !==
+              false ||
+              wrongRequired.authorized !==
+              false
+            ) {
+
+              throw new Error(
+                "requireOwner accepted wrong owner."
+              );
+
+            }
+
+
+            // ==================================================
+            // FINAL STATUS
+            // ==================================================
+
+            const finalStatus =
+              guard.getStatus();
+
+
+            if (
+              finalStatus.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Final Guard status failed."
+              );
+
+            }
+
+
+            if (
+              finalStatus.version !==
+              "5.11.0"
+            ) {
+
+              throw new Error(
+                "Final Guard version mismatch."
+              );
+
+            }
+
+
+            if (
+              finalStatus.owner?.configured !==
+              true
+            ) {
+
+              throw new Error(
+                "Final owner status is incorrect."
+              );
+
+            }
+
+
+            if (
+              finalStatus.stop?.active !==
+              false
+            ) {
+
+              throw new Error(
+                "Final STOP state is incorrect."
+              );
+
+            }
+
+
+            console.log(
+              "=========================================================="
+            );
+
+            console.log(
+              " AARHEN AUTONOMOUS SAFETY GUARD TEST"
+            );
+
+            console.log(
+              "=========================================================="
+            );
+
+            console.log(
+              " Load: PASSED"
+            );
+
+            console.log(
+              " Owner Configuration: PASSED"
+            );
+
+            console.log(
+              " Owner Authorization: PASSED"
+            );
+
+            console.log(
+              " Permission Brain: PASSED"
+            );
+
+            console.log(
+              " Safe Action Gate: PASSED"
+            );
+
+            console.log(
+              " Protected Action Gate: PASSED"
+            );
+
+            console.log(
+              " Approval Gate: PASSED"
+            );
+
+            console.log(
+              " Emergency STOP: PASSED"
+            );
+
+            console.log(
+              " STOP Authorization: PASSED"
+            );
+
+            console.log(
+              " STOP Clear: PASSED"
+            );
+
+            console.log(
+              " API Export Check: PASSED"
+            );
+
+            console.log(
+              " Final Status: PASSED"
+            );
+
+            console.log(
+              "=========================================================="
+            );
+
+            console.log(
+              " AUTONOMOUS SAFETY GUARD v5.11.0 READY"
+            );
+
+            console.log(
+              "=========================================================="
+
+            );
+
+          })().catch(
+            error => {
+
+              console.error(
+                error
+              );
+
+              process.exitCode =
+                1;
+
+            }
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=========================================================="
+          echo " AARHEN AUTONOMOUS SAFETY GUARD"
+          echo "=========================================================="
+          echo " Autonomous Guard Integration: PASSED"
+          echo " Owner Authorization: PASSED"
+          echo " Permission Gate: PASSED"
+          echo " Protected Actions: PASSED"
+          echo " Emergency STOP: PASSED"
+          echo " STOP Authorization: PASSED"
+          echo " STOP Clear: PASSED"
+          echo " API Validation: PASSED"
+          echo "=========================================================="
+          echo " AUTONOMOUS SAFETY GUARD v5.11.0 READY"
+          echo "=========================================================="
