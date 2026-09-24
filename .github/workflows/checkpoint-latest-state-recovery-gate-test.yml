@@ -1,0 +1,63 @@
+name: AarHen Latest Checkpoint Recovery Gate Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  latest-state-recovery-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify latest checkpoint governs recovery
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          bridge.reset();
+
+          const earlier = engine.saveCheckpoint({
+            id: "latest-gate-task",
+            status: "running",
+            steps: [{ id: "step-1", status: "pending" }]
+          }, { id: "latest-gate-active" });
+
+          assert(earlier.success, "Initial active checkpoint should save.");
+          assert(earlier.checkpoint.recoveryEligible === true,
+            "Earlier active checkpoint should be recovery-eligible.");
+
+          const latest = engine.saveCheckpoint({
+            id: "latest-gate-task",
+            status: "completed",
+            steps: [{ id: "step-1", status: "pending" }]
+          }, { id: "latest-gate-completed" });
+
+          assert(latest.success, "Latest completed checkpoint should save.");
+
+          const candidate = engine.getRecoveryCandidate("latest-gate-task");
+          assert(candidate.success, "Recovery candidate lookup should succeed.");
+          assert(candidate.checkpoint.id === "latest-gate-completed",
+            "Candidate must use the latest checkpoint.");
+          assert(candidate.recoverable === false,
+            "Latest completed checkpoint must prevent recovery despite an earlier active checkpoint.");
+
+          const plan = engine.buildRecoveryPlan("latest-gate-task");
+          assert(plan.success && plan.recoverable === false,
+            "Recovery plan should not recover from an earlier checkpoint when the latest is terminal.");
+          assert(plan.plan.action === "no-recovery",
+            "Latest terminal checkpoint should produce a no-recovery plan.");
+
+          console.log("Latest checkpoint recovery gate tests passed.");
+          NODE
