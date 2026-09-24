@@ -1,0 +1,1086 @@
+name: AarHen Autonomous Recovery Test
+
+on:
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+jobs:
+
+  autonomous-recovery-test:
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD COMPONENTS
+      # ======================================================
+
+      - name: Load Autonomous Recovery Stack
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const autonomousWorker =
+            require("./core/autonomousWorker");
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+          const recoveryBridge =
+            require("./core/recoveryBridge");
+
+          const recoveryEngine =
+            require("./core/recoveryEngine");
+
+          const agentRunner =
+            require("./core/agentRunner");
+
+          const guard =
+            require("./core/autonomousGuard");
+
+
+          if (
+            autonomousWorker.AUTONOMOUS_WORKER_VERSION !==
+            "5.10.3"
+          ) {
+
+            throw new Error(
+              "Autonomous Worker version mismatch."
+            );
+
+          }
+
+
+          if (
+            autonomousAgent.AUTONOMOUS_AGENT_VERSION !==
+            "5.8.3"
+          ) {
+
+            throw new Error(
+              "Autonomous Agent version mismatch."
+            );
+
+          }
+
+
+          if (
+            recoveryWorker.RECOVERY_WORKER_VERSION !==
+            "5.12.2"
+          ) {
+
+            throw new Error(
+              "Recovery Worker version mismatch."
+            );
+
+          }
+
+
+          if (
+            recoveryBridge.RECOVERY_BRIDGE_VERSION !==
+            "5.12.1"
+          ) {
+
+            throw new Error(
+              "Recovery Bridge version mismatch."
+            );
+
+          }
+
+
+          if (
+            recoveryEngine.RECOVERY_ENGINE_VERSION !==
+            "5.12.0"
+          ) {
+
+            throw new Error(
+              "Recovery Engine version mismatch."
+            );
+
+          }
+
+
+          if (
+            agentRunner.AGENT_RUNNER_VERSION !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Agent Runner version mismatch."
+            );
+
+          }
+
+
+          if (
+            guard.AUTONOMOUS_GUARD_VERSION !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Autonomous Guard version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Autonomous Worker:",
+            autonomousWorker.AUTONOMOUS_WORKER_VERSION
+          );
+
+          console.log(
+            "Autonomous Agent:",
+            autonomousAgent.AUTONOMOUS_AGENT_VERSION
+          );
+
+          console.log(
+            "Recovery Worker:",
+            recoveryWorker.RECOVERY_WORKER_VERSION
+          );
+
+          console.log(
+            "Recovery Bridge:",
+            recoveryBridge.RECOVERY_BRIDGE_VERSION
+          );
+
+          console.log(
+            "Recovery Engine:",
+            recoveryEngine.RECOVERY_ENGINE_VERSION
+          );
+
+          console.log(
+            "Agent Runner:",
+            agentRunner.AGENT_RUNNER_VERSION
+          );
+
+          console.log(
+            "Autonomous Guard:",
+            guard.AUTONOMOUS_GUARD_VERSION
+          );
+
+
+          console.log(
+            "Autonomous recovery stack loaded."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STACK STATUS TEST
+      # ======================================================
+
+      - name: Autonomous Recovery Stack Status Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const autonomousWorker =
+            require("./core/autonomousWorker");
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+
+          const autonomousStatus =
+            autonomousWorker.getStatus();
+
+          const recoveryStatus =
+            recoveryWorker.getStatus();
+
+
+          if (
+            autonomousStatus.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Autonomous Worker status is unhealthy."
+            );
+
+          }
+
+
+          if (
+            autonomousStatus.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Autonomous Worker is not active."
+            );
+
+          }
+
+
+          if (
+            autonomousStatus.systems?.autonomousAgent?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Autonomous Worker is not connected to Autonomous Agent."
+            );
+
+          }
+
+
+          if (
+            autonomousStatus.systems?.agentWorker?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Autonomous Worker is not connected to Agent Worker."
+            );
+
+          }
+
+
+          if (
+            autonomousStatus.systems?.workerProvider?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Autonomous Worker is not connected to Worker Provider."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker status is unhealthy."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.agentWorker?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not connected to Agent Worker."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.recoveryBridge?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not connected to Recovery Bridge."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.agentRunner?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not connected to Agent Runner."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.autonomousSafetyGuard?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not connected to Autonomous Guard."
+            );
+
+          }
+
+
+          console.log(
+            "Autonomous recovery stack status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # REAL AUTONOMOUS RECOVERY EXECUTION
+      # ======================================================
+
+      - name: End-to-End Autonomous Recovery Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const autonomousAgent =
+              require("./core/autonomousAgent");
+
+            const autonomousWorker =
+              require("./core/autonomousWorker");
+
+            const recoveryWorker =
+              require("./core/recoveryWorker");
+
+            const agentManager =
+              require("./core/agentManager");
+
+            const agentWorker =
+              require("./core/agentWorker");
+
+            const agentRunner =
+              require("./core/agentRunner");
+
+
+            // ------------------------------------------------
+            // RESET TEST STATE
+            // ------------------------------------------------
+
+            autonomousAgent.reset();
+
+            autonomousWorker.reset();
+
+            agentWorker.reset();
+
+
+            // ------------------------------------------------
+            // CREATE TEST AGENT
+            // ------------------------------------------------
+
+            const createdAgent =
+              autonomousAgent.createAgent({
+
+                id:
+                  "autonomous-recovery-agent",
+
+                name:
+                  "Autonomous Recovery Test Agent",
+
+                default:
+                  true
+
+              });
+
+
+            if (
+              createdAgent.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Autonomous recovery test agent creation failed: " +
+                JSON.stringify(createdAgent)
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // CREATE REAL RECOVERY RUNNER
+            // ------------------------------------------------
+            //
+            // Recovery Worker wraps the REAL Agent Runner.
+            //
+            // Every retry therefore goes through:
+            //
+            // Recovery Worker
+            //      ↓
+            // Recovery Bridge
+            //      ↓
+            // Recovery Engine
+            //      ↓
+            // Agent Runner
+            //
+            // ------------------------------------------------
+
+            let calls =
+              0;
+
+
+            const realAgentRunner =
+              agentRunner.createRunner({
+
+                source:
+                  "autonomous-recovery-e2e"
+
+              });
+
+
+            const recoveryRunner =
+              recoveryWorker.createRecoveryRunner({
+
+                runner:
+                  async executionContext => {
+
+                    calls +=
+                      1;
+
+
+                    // ----------------------------------------
+                    // FIRST ATTEMPT: simulated temporary error
+                    // ----------------------------------------
+
+                    if (
+                      calls ===
+                      1
+                    ) {
+
+                      return {
+
+                        success:
+                          false,
+
+                        error:
+                          "Temporary network failure.",
+
+                        executionStatus:
+                          "network-error"
+
+                      };
+
+                    }
+
+
+                    // ----------------------------------------
+                    // SECOND ATTEMPT: REAL CONTROLLED RUNNER
+                    // ----------------------------------------
+
+                    return realAgentRunner(
+                      executionContext
+                    );
+
+                  },
+
+                maxAttempts:
+                  3,
+
+                baseDelayMs:
+                  0,
+
+                maxDelayMs:
+                  100
+
+              });
+
+
+            // ------------------------------------------------
+            // EXECUTE THROUGH AUTONOMOUS WORKER
+            // ------------------------------------------------
+
+            const result =
+              await autonomousWorker.executeRequest(
+
+                "Calculate 10 + 20",
+
+                {
+
+                  agentId:
+                    "autonomous-recovery-agent",
+
+                  runner:
+                    recoveryRunner
+
+                }
+
+              );
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "End-to-end autonomous recovery execution failed: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY TWO ATTEMPTS
+            // ------------------------------------------------
+
+            if (
+              calls !==
+              2
+            ) {
+
+              throw new Error(
+                "Expected exactly two execution attempts, got: " +
+                calls
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY AUTONOMOUS MODE
+            // ------------------------------------------------
+
+            if (
+              !result.task?.id
+            ) {
+
+              throw new Error(
+                "Autonomous task ID is missing."
+              );
+
+            }
+
+
+            if (
+              !result.worker?.id
+            ) {
+
+              throw new Error(
+                "Autonomous worker ID is missing."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY FINAL TASK STATE
+            // ------------------------------------------------
+
+            if (
+              result.task.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Autonomous recovery task did not reach COMPLETED state: " +
+                result.task.status
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY FINAL STEP
+            // ------------------------------------------------
+
+            if (
+              result.task.steps?.[0]?.status !==
+              agentManager.STEP_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Autonomous recovery step did not complete."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY RECOVERY METADATA
+            // ------------------------------------------------
+
+            const execution =
+              result.execution || {};
+
+
+            const recovery =
+              execution.recovery ||
+              result.task.steps?.[0]?.result?.recovery ||
+              null;
+
+
+            if (
+              !recovery
+            ) {
+
+              throw new Error(
+                "Autonomous recovery metadata is missing."
+              );
+
+            }
+
+
+            if (
+              recovery.recovered !==
+              true
+            ) {
+
+              throw new Error(
+                "Autonomous recovery did not report recovered=true."
+              );
+
+            }
+
+
+            if (
+              recovery.attempts !==
+              2
+            ) {
+
+              throw new Error(
+                "Autonomous recovery attempt count mismatch."
+              );
+
+            }
+
+
+            if (
+              !Array.isArray(
+                recovery.history
+              )
+            ) {
+
+              throw new Error(
+                "Autonomous recovery history is missing."
+              );
+
+            }
+
+
+            if (
+              recovery.history.length !==
+              1
+            ) {
+
+              throw new Error(
+                "Expected one failed attempt in recovery history."
+              );
+
+            }
+
+
+            if (
+              recovery.history[0].classification !==
+              "network"
+            ) {
+
+              throw new Error(
+                "Recovery history classification mismatch."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY WORKER RETURNED TO IDLE
+            // ------------------------------------------------
+
+            const workerStatus =
+              result.workerStatus;
+
+
+            if (
+              workerStatus !==
+              agentWorker.WORKER_STATES.IDLE
+            ) {
+
+              throw new Error(
+                "Autonomous worker did not return to idle state: " +
+                workerStatus
+              );
+
+            }
+
+
+            console.log(
+              "End-to-end autonomous recovery test passed."
+            );
+
+
+            console.log(
+              "Attempts:",
+              calls
+            );
+
+
+            console.log(
+              "Task:",
+              result.task.id
+            );
+
+
+            console.log(
+              "Task Status:",
+              result.task.status
+            );
+
+
+            console.log(
+              "Worker:",
+              result.worker.id
+            );
+
+
+            console.log(
+              "Worker Status:",
+              result.workerStatus
+            );
+
+
+            console.log(
+              "Recovery:",
+              JSON.stringify(
+                recovery,
+                null,
+                2
+              )
+            );
+
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # PROTECTED ACTION + RECOVERY SAFETY TEST
+      # ======================================================
+
+      - name: Protected Action Must Not Retry
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const autonomousAgent =
+              require("./core/autonomousAgent");
+
+            const autonomousWorker =
+              require("./core/autonomousWorker");
+
+            const recoveryWorker =
+              require("./core/recoveryWorker");
+
+
+            autonomousAgent.reset();
+
+            autonomousWorker.reset();
+
+
+            const agent =
+              autonomousAgent.createAgent({
+
+                id:
+                  "protected-recovery-agent",
+
+                name:
+                  "Protected Recovery Agent",
+
+                default:
+                  true
+
+              });
+
+
+            if (
+              agent.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected recovery agent creation failed."
+              );
+
+            }
+
+
+            let calls =
+              0;
+
+
+            const recoveryRunner =
+              recoveryWorker.createRecoveryRunner({
+
+                runner:
+                  async () => {
+
+                    calls +=
+                      1;
+
+
+                    return {
+
+                      success:
+                        false,
+
+                      requiresApproval:
+                        true,
+
+                      executionStatus:
+                        "approval-required",
+
+                      error:
+                        "Action requires approval."
+
+                    };
+
+                  },
+
+                maxAttempts:
+                  3,
+
+                baseDelayMs:
+                  0
+
+              });
+
+
+            const result =
+              await autonomousWorker.executeRequest(
+
+                "Send a message",
+
+                {
+
+                  agentId:
+                    "protected-recovery-agent",
+
+                  runner:
+                    recoveryRunner
+
+                }
+
+              );
+
+
+            // ------------------------------------------------
+            // A protected action can stop at approval before
+            // runner invocation. That is valid and safe.
+            // ------------------------------------------------
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected autonomous request failed unexpectedly: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            if (
+              result.task?.status !==
+              "waiting_approval"
+            ) {
+
+              throw new Error(
+                "Protected autonomous task did not enter waiting_approval state: " +
+                result.task?.status
+              );
+
+            }
+
+
+            if (
+              calls !==
+              0
+            ) {
+
+              throw new Error(
+                "Protected action runner should not execute before approval."
+              );
+
+            }
+
+
+            console.log(
+              "Protected autonomous recovery safety test passed."
+            );
+
+
+            console.log(
+              "Runner calls before approval:",
+              calls
+            );
+
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # FINAL HEALTH
+      # ======================================================
+
+      - name: Final Autonomous Recovery Health Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const autonomousWorker =
+            require("./core/autonomousWorker");
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+          const agentRunner =
+            require("./core/agentRunner");
+
+
+          const autonomousStatus =
+            autonomousWorker.getStatus();
+
+          const recoveryStatus =
+            recoveryWorker.getStatus();
+
+          const runnerStatus =
+            agentRunner.getStatus();
+
+
+          if (
+            autonomousStatus.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Autonomous Worker final health check failed."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker final health check failed."
+            );
+
+          }
+
+
+          if (
+            runnerStatus.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Agent Runner final health check failed."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.agentRunner?.version !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Final Recovery Worker Agent Runner version mismatch."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.autonomousSafetyGuard?.version !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Final Recovery Worker Guard version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Final Autonomous Recovery health test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=============================================="
+          echo " AARHEN AUTONOMOUS RECOVERY TEST"
+          echo "=============================================="
+          echo " Stack Load: PASSED"
+          echo " Stack Status: PASSED"
+          echo " End-to-End Recovery: PASSED"
+          echo " Autonomous Worker: PASSED"
+          echo " Recovery Worker: PASSED"
+          echo " Recovery Bridge: PASSED"
+          echo " Recovery Engine: PASSED"
+          echo " Agent Runner: PASSED"
+          echo " Protected Action Safety: PASSED"
+          echo " Final Health: PASSED"
+          echo "=============================================="
+          echo " AUTONOMOUS RECOVERY INTEGRATION READY"
+          echo "=============================================="
