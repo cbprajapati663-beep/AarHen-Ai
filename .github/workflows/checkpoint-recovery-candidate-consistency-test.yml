@@ -18,13 +18,12 @@ jobs:
         run: |
           node --input-type=commonjs - <<'NODE'
           const engine = require("./core/checkpointEngine");
-          const bridge = require("./core/checkpointBridge");
 
           function assert(condition, message) {
             if (!condition) throw new Error(message);
           }
 
-          bridge.reset();
+          engine.reset();
 
           const saved = engine.saveCheckpoint({
             id: "candidate-consistency-task",
@@ -39,19 +38,17 @@ jobs:
 
           assert(saved.success, "Checkpoint save should succeed.");
 
-          const candidates = engine.getRecoveryCandidates();
-          const candidate = candidates.find(item =>
-            item.taskId === "candidate-consistency-task"
-          );
+          const candidateResult = engine.getRecoveryCandidate("candidate-consistency-task");
+          assert(candidateResult.success && candidateResult.recoverable,
+            "Expected task to be a recovery candidate.");
 
-          assert(candidate, "Expected task to appear in recovery candidates.");
-
+          const candidate = candidateResult.checkpoint;
           const planResult = engine.buildRecoveryPlan("candidate-consistency-task");
           assert(planResult.success && planResult.recoverable,
             "Expected a recoverable recovery plan.");
 
           const plan = planResult.plan;
-          assert(plan.checkpointId === candidate.checkpointId,
+          assert(plan.checkpointId === candidate.id,
             "Recovery plan checkpoint must match candidate checkpoint.");
           assert(plan.taskId === candidate.taskId,
             "Recovery plan task ID must match candidate task ID.");
