@@ -1,0 +1,68 @@
+name: AarHen Checkpoint Counter After Deletion Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-counter-after-deletion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify counters update after checkpoint deletion
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          bridge.reset();
+
+          const first = engine.saveCheckpoint({
+            id: "counter-delete-task-a",
+            status: "completed",
+            steps: []
+          }, { id: "counter-delete-checkpoint-a" });
+
+          const second = engine.saveCheckpoint({
+            id: "counter-delete-task-b",
+            status: "paused",
+            steps: []
+          }, { id: "counter-delete-checkpoint-b" });
+
+          assert(first.success && second.success,
+            "Initial checkpoints should save successfully.");
+
+          let status = engine.getStatus();
+          assert(status.checkpointCount === 2, "Expected two checkpoints before deletion.");
+          assert(status.trackedTasks === 2, "Expected two tracked tasks before deletion.");
+          assert(status.completedCheckpoints === 1, "Expected one completed checkpoint before deletion.");
+          assert(status.pausedCheckpoints === 1, "Expected one paused checkpoint before deletion.");
+
+          const deleted = engine.deleteCheckpoint("counter-delete-checkpoint-a");
+          assert(deleted.success, "Deleting the completed checkpoint should succeed.");
+
+          status = engine.getStatus();
+          assert(status.checkpointCount === 1, "Checkpoint count should decrement after deletion.");
+          assert(status.trackedTasks === 1, "Tracked task count should decrement after last task checkpoint is deleted.");
+          assert(status.completedCheckpoints === 0, "Completed counter should decrement after deletion.");
+          assert(status.pausedCheckpoints === 1, "Unrelated paused counter should remain unchanged.");
+
+          console.log("Checkpoint counter after deletion tests passed.");
+          console.log(JSON.stringify({
+            checkpointCount: status.checkpointCount,
+            trackedTasks: status.trackedTasks,
+            completed: status.completedCheckpoints,
+            paused: status.pausedCheckpoints
+          }, null, 2));
+          NODE
