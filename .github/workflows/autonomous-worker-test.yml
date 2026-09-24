@@ -145,7 +145,7 @@ jobs:
           if (
             providerBridge
               .PROVIDER_BRIDGE_VERSION !==
-            "5.9.1"
+            "5.9.2"
           ) {
             throw new Error(
               "Provider Bridge version mismatch."
