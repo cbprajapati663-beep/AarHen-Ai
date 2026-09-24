@@ -1,0 +1,453 @@
+name: AarHen Knowledge Context Test
+
+on:
+  push:
+    paths:
+      - "core/knowledgeContext.js"
+      - "core/documentContext.js"
+      - "core/documentManager.js"
+      - "engines/documentIngestion.js"
+      - "engines/documentKnowledgeBridge.js"
+      - "engines/documentLearning.js"
+      - "core/learning.js"
+      - "core/memoryStore.js"
+      - ".github/workflows/knowledge-context-test.yml"
+
+  workflow_dispatch:
+
+jobs:
+  knowledge-context-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # DEPENDENCIES
+      # ======================================================
+
+      - name: Install Dependencies
+        run: |
+          npm install --prefer-offline
+
+
+      # ======================================================
+      # LOAD TEST
+      # ======================================================
+
+      - name: Load Knowledge Context
+        run: |
+          node - <<'NODE'
+          const knowledgeContext =
+            require("./core/knowledgeContext");
+
+          if (!knowledgeContext) {
+            throw new Error(
+              "Knowledge Context could not be loaded."
+            );
+          }
+
+          const requiredFunctions = [
+            "buildUnifiedContext",
+            "buildAnswerContext",
+            "augmentBrainResult",
+            "hasKnowledge",
+            "getStatus"
+          ];
+
+          for (const name of requiredFunctions) {
+            if (
+              typeof knowledgeContext[name] !==
+              "function"
+            ) {
+              throw new Error(
+                `${name}() is missing.`
+              );
+            }
+          }
+
+          console.log(
+            "Knowledge Context module: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Check Knowledge Context Status
+        run: |
+          node - <<'NODE'
+          const knowledgeContext =
+            require("./core/knowledgeContext");
+
+          const status =
+            knowledgeContext.getStatus();
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          if (!status.success) {
+            throw new Error(
+              "Knowledge Context status failed."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Knowledge Context is not active."
+            );
+          }
+
+          console.log(
+            "Knowledge Context status: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT KNOWLEDGE INPUT
+      # ======================================================
+
+      - name: Seed Test Knowledge
+        run: |
+          node - <<'NODE'
+          const documentManager =
+            require("./core/documentManager");
+
+          const text = `
+          AarHen Knowledge Context Test.
+
+          Heritage Auto Finance provides
+          used car finance, new car finance,
+          commercial vehicle finance,
+          refinance and vehicle insurance assistance.
+
+          This text is used only to validate
+          unified knowledge retrieval.
+          `;
+
+          const result =
+            documentManager.ingestText(
+              text,
+              {
+                fileName:
+                  "aarhen-knowledge-context-test.txt",
+
+                category:
+                  "business",
+
+                source:
+                  "knowledge-context-test",
+
+                confidence:
+                  0.85
+              }
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (
+            !result.success
+          ) {
+            throw new Error(
+              "Test knowledge could not be ingested."
+            );
+          }
+
+          if (
+            !result.ingested
+          ) {
+            throw new Error(
+              "Test knowledge was not stored."
+            );
+          }
+
+          console.log(
+            "Test knowledge seed: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # UNIFIED CONTEXT TEST
+      # ======================================================
+
+      - name: Build Unified Knowledge Context
+        run: |
+          node - <<'NODE'
+          const knowledgeContext =
+            require("./core/knowledgeContext");
+
+          const result =
+            knowledgeContext.buildUnifiedContext(
+              "What services does Heritage Auto Finance provide?",
+              {},
+              {
+                limit: 5
+              }
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (!result.success) {
+            throw new Error(
+              "Unified context creation failed."
+            );
+          }
+
+          if (
+            !result.documents ||
+            result.documents.count <= 0
+          ) {
+            throw new Error(
+              "Unified context did not contain document knowledge."
+            );
+          }
+
+          if (
+            !result.rag ||
+            !result.rag.available
+          ) {
+            throw new Error(
+              "Unified context did not contain RAG context."
+            );
+          }
+
+          if (
+            !result.availability ||
+            !result.availability.anyKnowledge
+          ) {
+            throw new Error(
+              "Unified knowledge availability flag is false."
+            );
+          }
+
+          console.log(
+            "Unified knowledge context: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # ANSWER CONTEXT TEST
+      # ======================================================
+
+      - name: Build Answer Context
+        run: |
+          node - <<'NODE'
+          const knowledgeContext =
+            require("./core/knowledgeContext");
+
+          const result =
+            knowledgeContext.buildAnswerContext(
+              "What services does Heritage Auto Finance provide?",
+              {},
+              {
+                limit: 5
+              }
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (!result.success) {
+            throw new Error(
+              "Answer context creation failed."
+            );
+          }
+
+          if (
+            !result.hasContext
+          ) {
+            throw new Error(
+              "Answer context is empty."
+            );
+          }
+
+          if (
+            !result.context.includes(
+              "DOCUMENT"
+            )
+          ) {
+            throw new Error(
+              "Answer context does not contain document knowledge."
+            );
+          }
+
+          console.log(
+            "Answer context: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # BRAIN AUGMENTATION TEST
+      # ======================================================
+
+      - name: Test Brain Result Augmentation
+        run: |
+          node - <<'NODE'
+          const knowledgeContext =
+            require("./core/knowledgeContext");
+
+          const fakeBrainResult = {
+            success: true,
+
+            memory: {
+              related: [],
+              verified: []
+            },
+
+            knowledge: {
+              related: [],
+              verified: []
+            }
+          };
+
+          const result =
+            knowledgeContext.augmentBrainResult(
+              "What services does Heritage Auto Finance provide?",
+              fakeBrainResult,
+              {
+                limit: 5
+              }
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (
+            !result.unifiedKnowledge
+          ) {
+            throw new Error(
+              "unifiedKnowledge was not added."
+            );
+          }
+
+          if (
+            !result.knowledgeContext
+          ) {
+            throw new Error(
+              "knowledgeContext was not added."
+            );
+          }
+
+          if (
+            !result.answerContext
+          ) {
+            throw new Error(
+              "answerContext was not added."
+            );
+          }
+
+          console.log(
+            "Brain result augmentation: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # KNOWLEDGE DETECTION TEST
+      # ======================================================
+
+      - name: Test Knowledge Detection
+        run: |
+          node - <<'NODE'
+          const knowledgeContext =
+            require("./core/knowledgeContext");
+
+          const result =
+            knowledgeContext.buildUnifiedContext(
+              "Heritage Auto Finance vehicle finance",
+              {},
+              {
+                limit: 5
+              }
+            );
+
+          const detected =
+            knowledgeContext.hasKnowledge(
+              result
+            );
+
+          if (!detected) {
+            throw new Error(
+              "Knowledge detection returned false."
+            );
+          }
+
+          console.log(
+            "Knowledge detection: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+          echo "=========================================="
+          echo "AARHEN UNIFIED KNOWLEDGE CONTEXT TEST"
+          echo "=========================================="
+          echo "Module Load            : GREEN"
+          echo "Status                 : GREEN"
+          echo "Knowledge Seed        : GREEN"
+          echo "Unified Context        : GREEN"
+          echo "Answer Context         : GREEN"
+          echo "Brain Augmentation     : GREEN"
+          echo "Knowledge Detection    : GREEN"
+          echo "=========================================="
+          echo "UNIFIED KNOWLEDGE LAYER READY"
+          echo "=========================================="
