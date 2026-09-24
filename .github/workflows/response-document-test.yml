@@ -1,0 +1,1089 @@
+name: AarHen Response Document Test
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  response-document-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD RESPONSE ENGINE
+      # ======================================================
+
+      - name: Load Response Engine
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          if (!response) {
+            throw new Error(
+              "Response Engine could not be loaded."
+            );
+          }
+
+          console.log(
+            "Response Engine loaded successfully."
+          );
+
+          console.log(
+            "Version:",
+            response.RESPONSE_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RESPONSE STATUS
+      # ======================================================
+
+      - name: Response Engine Status Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const status =
+            response.getResponseStatus();
+
+          if (!status) {
+            throw new Error(
+              "Response status missing."
+            );
+          }
+
+          if (
+            status.success !== true
+          ) {
+            throw new Error(
+              "Response Engine status failed."
+            );
+          }
+
+          if (
+            status.status !== "ready"
+          ) {
+            throw new Error(
+              "Response Engine is not ready."
+            );
+          }
+
+          if (
+            status.capabilities
+              ?.documentFormatting !== true
+          ) {
+            throw new Error(
+              "Document formatting capability missing."
+            );
+          }
+
+          if (
+            status.capabilities
+              ?.documentKnowledgeDisplay !== true
+          ) {
+            throw new Error(
+              "Document knowledge display capability missing."
+            );
+          }
+
+          if (
+            status.capabilities
+              ?.documentSourceDisplay !== true
+          ) {
+            throw new Error(
+              "Document source display capability missing."
+            );
+          }
+
+          console.log(
+            "Response Engine status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT OBJECT RESOLUTION
+      # ======================================================
+
+      - name: Document Object Resolution Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const input = {
+
+            request:
+              "What does my document say about vehicle finance?",
+
+            requestContext: {
+
+              documentAware:
+                true,
+
+              documentKnowledgeEnabled:
+                true,
+
+              documentKnowledge: [
+
+                {
+
+                  title:
+                    "Vehicle Finance Policy",
+
+                  content:
+                    "The document explains vehicle loan eligibility and required documents.",
+
+                  source:
+                    "vehicle-finance-policy.txt",
+
+                  documentType:
+                    "txt"
+
+                }
+
+              ],
+
+              documentDocuments: {
+
+                results: [
+
+                  {
+
+                    title:
+                      "vehicle-finance-policy.txt",
+
+                    source:
+                      "vehicle-finance-policy.txt"
+
+                  }
+
+                ],
+
+                count:
+                  1,
+
+                available:
+                  true
+
+              },
+
+              documentRag: {
+
+                available:
+                  true
+
+              },
+
+              answerContext:
+                "According to the document, vehicle loan eligibility depends on the stated policy requirements."
+
+            }
+
+          };
+
+
+          const documentObject =
+            response.resolveDocumentObject(
+              input
+            );
+
+
+          if (
+            !documentObject ||
+            typeof documentObject !== "object"
+          ) {
+            throw new Error(
+              "Document object could not be resolved."
+            );
+          }
+
+
+          const knowledge =
+            response.resolveDocumentKnowledge(
+              input
+            );
+
+
+          if (
+            !Array.isArray(knowledge)
+          ) {
+            throw new Error(
+              "Document knowledge is not an array."
+            );
+          }
+
+
+          if (
+            knowledge.length !== 1
+          ) {
+            throw new Error(
+              "Document knowledge count mismatch."
+            );
+          }
+
+
+          console.log(
+            "Document object resolution passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT SOURCE TEST
+      # ======================================================
+
+      - name: Document Source Resolution Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const input = {
+
+            requestContext: {
+
+              documentDocuments: {
+
+                results: [
+
+                  {
+
+                    title:
+                      "vehicle-finance-policy.txt",
+
+                    source:
+                      "vehicle-finance-policy.txt",
+
+                    documentType:
+                      "txt"
+
+                  },
+
+                  {
+
+                    title:
+                      "insurance-policy.pdf",
+
+                    source:
+                      "insurance-policy.pdf",
+
+                    documentType:
+                      "pdf"
+
+                  }
+
+                ],
+
+                count:
+                  2,
+
+                available:
+                  true
+
+              }
+
+            }
+
+          };
+
+
+          const sources =
+            response.resolveDocumentSources(
+              input
+            );
+
+
+          if (
+            !Array.isArray(sources)
+          ) {
+            throw new Error(
+              "Document sources are not an array."
+            );
+          }
+
+
+          if (
+            sources.length !== 2
+          ) {
+            throw new Error(
+              "Document source count mismatch."
+            );
+          }
+
+
+          if (
+            !sources[0].title
+          ) {
+            throw new Error(
+              "First document source title missing."
+            );
+          }
+
+
+          if (
+            !sources[1].source
+          ) {
+            throw new Error(
+              "Second document source path missing."
+            );
+          }
+
+
+          console.log(
+            "Document source resolution passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # ANSWER CONTEXT TEST
+      # ======================================================
+
+      - name: Document Answer Context Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const input = {
+
+            executionContext: {
+
+              answerContext:
+                "This answer was created from the uploaded vehicle finance document."
+
+            }
+
+          };
+
+
+          const result =
+            response.resolveDocumentAnswerContext(
+              input
+            );
+
+
+          if (
+            result !==
+            "This answer was created from the uploaded vehicle finance document."
+          ) {
+            throw new Error(
+              "Document answer context was not resolved correctly."
+            );
+          }
+
+
+          console.log(
+            "Document answer context test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RAG TEST
+      # ======================================================
+
+      - name: Document RAG Resolution Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const input = {
+
+            documentContext: {
+
+              rag: {
+
+                available:
+                  true,
+
+                query:
+                  "vehicle finance",
+
+                context:
+                  "Vehicle finance RAG context."
+
+              }
+
+            }
+
+          };
+
+
+          const result =
+            response.resolveDocumentRag(
+              input
+            );
+
+
+          if (
+            !result
+          ) {
+            throw new Error(
+              "Document RAG context was not resolved."
+            );
+          }
+
+
+          if (
+            result.available !== true
+          ) {
+            throw new Error(
+              "Document RAG availability was lost."
+            );
+          }
+
+
+          console.log(
+            "Document RAG resolution passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT STATUS TEST
+      # ======================================================
+
+      - name: Document Status Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const result =
+            response.resolveDocumentStatus({
+
+              requestContext: {
+
+                documentAware:
+                  true,
+
+                documentKnowledgeEnabled:
+                  true,
+
+                documentKnowledge: [
+
+                  {
+
+                    title:
+                      "Vehicle Finance",
+
+                    content:
+                      "Vehicle finance knowledge."
+
+                  }
+
+                ],
+
+                documentDocuments: {
+
+                  results: [
+
+                    {
+
+                      title:
+                        "vehicle-finance.txt",
+
+                      source:
+                        "vehicle-finance.txt"
+
+                    }
+
+                  ],
+
+                  count:
+                    1
+
+                },
+
+                documentRag: {
+
+                  available:
+                    true
+
+                },
+
+                answerContext:
+                  "Document answer context."
+
+              }
+
+            });
+
+
+          if (
+            result.enabled !== true
+          ) {
+            throw new Error(
+              "Document system should be enabled."
+            );
+          }
+
+
+          if (
+            result.aware !== true
+          ) {
+            throw new Error(
+              "Document-aware mode missing."
+            );
+          }
+
+
+          if (
+            result.knowledgeCount !== 1
+          ) {
+            throw new Error(
+              "Document knowledge count mismatch."
+            );
+          }
+
+
+          if (
+            result.sourceCount !== 1
+          ) {
+            throw new Error(
+              "Document source count mismatch."
+            );
+          }
+
+
+          if (
+            result.answerContextAvailable !== true
+          ) {
+            throw new Error(
+              "Document answer context was not detected."
+            );
+          }
+
+
+          if (
+            result.ragAvailable !== true
+          ) {
+            throw new Error(
+              "Document RAG was not detected."
+            );
+          }
+
+
+          if (
+            result.detected !== true
+          ) {
+            throw new Error(
+              "Document knowledge was not detected."
+            );
+          }
+
+
+          console.log(
+            "Document status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FORMAT DOCUMENT TEST
+      # ======================================================
+
+      - name: Format Document Response Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const result =
+            response.formatDocument({
+
+              requestContext: {
+
+                documentAware:
+                  true,
+
+                documentKnowledge: [
+
+                  {
+
+                    title:
+                      "Vehicle Finance Policy",
+
+                    content:
+                      "Vehicle finance requires the documents mentioned in the policy.",
+
+                    source:
+                      "vehicle-finance-policy.txt"
+
+                  }
+
+                ],
+
+                documentDocuments: {
+
+                  results: [
+
+                    {
+
+                      title:
+                        "vehicle-finance-policy.txt",
+
+                      source:
+                        "vehicle-finance-policy.txt"
+
+                    }
+
+                  ],
+
+                  count:
+                    1
+
+                },
+
+                documentRag: {
+
+                  available:
+                    true
+
+                },
+
+                answerContext:
+                  "The document describes vehicle finance requirements."
+
+              }
+
+            });
+
+
+          if (
+            typeof result !== "string"
+          ) {
+            throw new Error(
+              "Formatted document response is not a string."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "Document Knowledge"
+            )
+          ) {
+            throw new Error(
+              "Document Knowledge header missing."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "vehicle-finance-policy.txt"
+            )
+          ) {
+            throw new Error(
+              "Document source missing from response."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "Vehicle Finance Policy"
+            )
+          ) {
+            throw new Error(
+              "Document knowledge title missing."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "Document context:"
+            )
+          ) {
+            throw new Error(
+              "Document context summary missing."
+            );
+          }
+
+
+          console.log(
+            "Document response formatting passed."
+          );
+
+          console.log(
+            result
+          );
+
+          NODE
+
+
+      # ======================================================
+      # MAIN CREATE RESPONSE TEST
+      # ======================================================
+
+      - name: Create Response Document Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const result =
+            response.createResponse({
+
+              success:
+                true,
+
+              request:
+                "What does my document say about vehicle finance?",
+
+              status:
+                "completed",
+
+              execution: {
+
+                success:
+                  true,
+
+                category:
+                  "knowledge",
+
+                intent:
+                  "knowledge_search",
+
+                result: {
+
+                  message:
+                    "Knowledge search completed."
+
+                },
+
+                documentContext: {
+
+                  aware:
+                    true
+
+                }
+
+              },
+
+              requestContext: {
+
+                documentAware:
+                  true,
+
+                documentKnowledgeEnabled:
+                  true,
+
+                documentKnowledge: [
+
+                  {
+
+                    title:
+                      "Vehicle Finance Policy",
+
+                    content:
+                      "The policy states the required vehicle finance documents.",
+
+                    source:
+                      "vehicle-finance-policy.txt"
+
+                  }
+
+                ],
+
+                documentDocuments: {
+
+                  results: [
+
+                    {
+
+                      title:
+                        "vehicle-finance-policy.txt",
+
+                      source:
+                        "vehicle-finance-policy.txt"
+
+                    }
+
+                  ],
+
+                  count:
+                    1,
+
+                  available:
+                    true
+
+                },
+
+                documentRag: {
+
+                  available:
+                    true
+
+                },
+
+                answerContext:
+                  "The document states the required vehicle finance documents."
+
+              }
+
+            });
+
+
+          if (
+            typeof result !== "string"
+          ) {
+            throw new Error(
+              "createResponse did not return a string."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "Knowledge search completed."
+            )
+          ) {
+            throw new Error(
+              "Base execution response missing."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "Document Knowledge"
+            )
+          ) {
+            throw new Error(
+              "Document Knowledge response missing."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "The document states the required vehicle finance documents."
+            )
+          ) {
+            throw new Error(
+              "Document answer context missing."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "vehicle-finance-policy.txt"
+            )
+          ) {
+            throw new Error(
+              "Document source missing."
+            );
+          }
+
+
+          console.log(
+            "Main document response test passed."
+          );
+
+          console.log(
+            result
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RESEARCH REGRESSION TEST
+      # ======================================================
+
+      - name: Research Response Regression Test
+        run: |
+          node - <<'NODE'
+
+          const response =
+            require("./core/response");
+
+          const result =
+            response.createResponse({
+
+              success:
+                true,
+
+              request:
+                "AarHen research test",
+
+              status:
+                "completed",
+
+              research: {
+
+                success:
+                  true,
+
+                answer:
+                  "Test research answer.",
+
+                sources: [
+
+                  {
+
+                    title:
+                      "Research Source One",
+
+                    url:
+                      "https://example.com/one"
+
+                  },
+
+                  {
+
+                    title:
+                      "Research Source Two",
+
+                    url:
+                      "https://example.com/two"
+
+                  }
+
+                ],
+
+                sourceCount:
+                  2,
+
+                verified:
+                  true,
+
+                verificationStatus:
+                  "verified",
+
+                confidence:
+                  0.90
+
+              }
+
+            });
+
+
+          if (
+            typeof result !== "string"
+          ) {
+            throw new Error(
+              "Research response is not a string."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "Web Research Result"
+            )
+          ) {
+            throw new Error(
+              "Research response header missing."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "Sources: 2"
+            )
+          ) {
+            throw new Error(
+              "Research source count regression detected."
+            );
+          }
+
+
+          if (
+            !result.includes(
+              "Verification: verified"
+            )
+          ) {
+            throw new Error(
+              "Research verification regression detected."
+            );
+          }
+
+
+          console.log(
+            "Research regression test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN RESPONSE DOCUMENT TEST"
+          echo "=============================================="
+          echo " Response Engine: LOADED"
+          echo " Document Resolver: PASSED"
+          echo " Document Knowledge: PASSED"
+          echo " Document Sources: PASSED"
+          echo " Answer Context: PASSED"
+          echo " Document RAG: PASSED"
+          echo " Document Formatting: PASSED"
+          echo " Main Response: PASSED"
+          echo " Research Regression: PASSED"
+          echo "=============================================="
+          echo " RESPONSE ENGINE DOCUMENT INTEGRATION READY"
+          echo "=============================================="
