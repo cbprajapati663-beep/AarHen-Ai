@@ -1,0 +1,60 @@
+name: AarHen Checkpoint Terminal Recovery Safety Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  terminal-recovery-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify terminal states are not recoverable
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          bridge.reset();
+
+          const cases = [
+            ["completed", "completed"],
+            ["stopped", "stopped"],
+            ["cancelled", "cancelled"]
+          ];
+
+          for (const [taskId, state] of cases) {
+            const result = engine.saveCheckpoint({
+              id: "terminal-safety-" + taskId,
+              status: state,
+              steps: [{ id: "step-1", status: "pending" }]
+            }, { id: "terminal-safety-checkpoint-" + taskId });
+
+            assert(result.success, "Checkpoint save failed for " + state + ".");
+            assert(result.checkpoint.recoveryEligible === false,
+              state + " checkpoint must not be marked recoverable.");
+          }
+
+          const active = engine.saveCheckpoint({
+            id: "terminal-safety-active",
+            status: "running",
+            steps: [{ id: "step-active", status: "pending" }]
+          }, { id: "terminal-safety-checkpoint-active" });
+
+          assert(active.success, "Active checkpoint should save.");
+          assert(active.checkpoint.recoveryEligible === true,
+            "Active task with pending work should remain recovery-eligible.");
+
+          console.log("Checkpoint terminal recovery safety tests passed.");
+          NODE
