@@ -1150,6 +1150,46 @@ function listCheckpoints(
 
 
 // ============================================================
+// VALIDATE CHECKPOINT RECOVERY INTEGRITY
+// ============================================================
+
+function validateCheckpointForRecovery(checkpoint) {
+    if (!checkpoint || typeof checkpoint !== "object") {
+        return { valid: false, reason: "Checkpoint is missing or invalid." };
+    }
+    const task = safeObject(checkpoint.task);
+    if (!safeString(checkpoint.id) || !safeString(checkpoint.taskId)) {
+        return { valid: false, reason: "Checkpoint identity is missing." };
+    }
+    if (task.id !== checkpoint.taskId) {
+        return { valid: false, reason: "Checkpoint task identity does not match its snapshot." };
+    }
+    if (!Array.isArray(task.steps) || task.totalSteps !== task.steps.length) {
+        return { valid: false, reason: "Checkpoint step data is inconsistent." };
+    }
+    const count = (status) => task.steps.filter(step => step && step.status === status).length;
+    if (task.completedSteps !== count(agentManager.STEP_STATES.COMPLETED) ||
+        task.failedSteps !== count(agentManager.STEP_STATES.FAILED) ||
+        task.pendingSteps !== count(agentManager.STEP_STATES.PENDING)) {
+        return { valid: false, reason: "Checkpoint step counters do not match its step snapshot." };
+    }
+    if (task.stopRequested === true ||
+        task.status === agentManager.TASK_STATES.STOPPED ||
+        task.status === agentManager.TASK_STATES.CANCELLED ||
+        task.status === agentManager.TASK_STATES.COMPLETED ||
+        task.status === agentManager.TASK_STATES.WAITING_APPROVAL) {
+        return { valid: false, reason: "Task state is blocked from automatic recovery." };
+    }
+    if (checkpoint.recoveryEligible !== true) {
+        return { valid: false, reason: "Checkpoint is not marked as recovery eligible." };
+    }
+    if (task.pendingSteps <= 0) {
+        return { valid: false, reason: "Checkpoint has no pending steps to recover." };
+    }
+    return { valid: true, reason: "Checkpoint integrity and recovery gates passed." };
+}
+
+// ============================================================
 // GET RECOVERY CANDIDATE
 // ============================================================
 
@@ -1186,32 +1226,14 @@ function getRecoveryCandidate(
     }
 
 
-    const checkpoint =
-        latest.checkpoint;
-
+    const checkpoint = latest.checkpoint;
+    const validation = validateCheckpointForRecovery(checkpoint);
 
     return {
-
-        success:
-            true,
-
-        recoverable:
-            checkpoint.recoveryEligible ===
-            true,
-
-        checkpoint:
-            clone(
-                checkpoint
-            ),
-
-        reason:
-            checkpoint.recoveryEligible ===
-            true
-
-                ? "Latest checkpoint contains unfinished recoverable task state."
-
-                : "Latest checkpoint does not contain a recoverable task state."
-
+        success: true,
+        recoverable: validation.valid,
+        checkpoint: clone(checkpoint),
+        reason: validation.reason
     };
 
 }
@@ -1936,6 +1958,7 @@ module.exports = {
     listCheckpoints,
 
     getRecoveryCandidate,
+    validateCheckpointForRecovery,
 
     compareWithLatestCheckpoint,
 
