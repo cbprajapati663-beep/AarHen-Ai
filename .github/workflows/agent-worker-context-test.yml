@@ -1,0 +1,159 @@
+name: AarHen Agent Worker Context Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/agentWorker.js"
+      - "core/agentRunner.js"
+      - "core/agentManager.js"
+      - ".github/workflows/agent-worker-context-test.yml"
+
+jobs:
+  agent-worker-context-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify runtime worker context forwarding
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          (async () => {
+            const agentWorker = require("./core/agentWorker");
+            const agentManager = require("./core/agentManager");
+
+            agentWorker.reset();
+
+            const workerResult = agentWorker.createWorker({
+              id: "context-forwarding-worker",
+              name: "Context Forwarding Worker"
+            });
+
+            if (workerResult.success !== true) {
+              throw new Error("Worker creation failed.");
+            }
+
+            const agentResult = agentManager.createAgent({
+              id: "context-forwarding-agent",
+              name: "Context Forwarding Agent"
+            });
+
+            if (agentResult.success !== true) {
+              throw new Error("Agent creation failed.");
+            }
+
+            const taskResult = agentManager.createTask(
+              agentResult.agent.id,
+              { request: "Verify runtime context forwarding" }
+            );
+
+            if (taskResult.success !== true) {
+              throw new Error("Task creation failed.");
+            }
+
+            const stepResult = agentManager.addStep(taskResult.task.id, {
+              description: "Verify runtime context forwarding",
+              action: "calculate",
+              requiresApproval: false,
+              approved: true,
+              input: { request: "Verify runtime context forwarding" }
+            });
+
+            if (stepResult.success !== true) {
+              throw new Error("Task step creation failed: " + (stepResult.error || "unknown error"));
+            }
+
+            const assigned = agentWorker.assignTask(
+              workerResult.worker.id,
+              taskResult.task.id
+            );
+
+            if (assigned.success !== true) {
+              throw new Error("Task assignment failed: " + (assigned.error || "unknown error"));
+            }
+
+            let receivedExecution = null;
+
+            const execution = await agentWorker.runAssignedTask(
+              workerResult.worker.id,
+              {
+                context: {
+                  requestId: "ctx-test-2026",
+                  research: {
+                    provider: "mock-context-provider",
+                    sourceCount: 2
+                  }
+                },
+                runner: async executionContext => {
+                  receivedExecution = executionContext;
+
+                  if (!executionContext.task?.id) {
+                    throw new Error("Runner did not receive task metadata.");
+                  }
+
+                  if (!executionContext.step?.id) {
+                    throw new Error("Runner did not receive step metadata.");
+                  }
+
+                  return {
+                    success: true,
+                    output: "runtime context forwarding verified"
+                  };
+                }
+              }
+            );
+
+            if (execution.success !== true) {
+              throw new Error("Worker execution failed: " + (execution.error || execution.execution?.error || "unknown error"));
+            }
+
+            const receivedContext = receivedExecution?.context || {};
+
+            if (receivedContext.workerId !== workerResult.worker.id) {
+              throw new Error("Worker ID was not forwarded to the runner.");
+            }
+
+            if (receivedContext.workerName !== workerResult.worker.name) {
+              throw new Error("Worker name was not forwarded to the runner.");
+            }
+
+            if (receivedContext.requestId !== "ctx-test-2026") {
+              throw new Error("Caller request context was not forwarded to the runner.");
+            }
+
+            if (receivedContext.research?.provider !== "mock-context-provider") {
+              throw new Error("Nested research provider context was not forwarded.");
+            }
+
+            if (receivedContext.research?.sourceCount !== 2) {
+              throw new Error("Nested research source count was not forwarded.");
+            }
+
+            if (execution.task?.status !== agentManager.TASK_STATES.COMPLETED) {
+              throw new Error("Task did not reach completed state.");
+            }
+
+            if (execution.workerStatus !== agentWorker.WORKER_STATES.IDLE) {
+              throw new Error("Worker did not return to idle.");
+            }
+
+            console.log("Worker runtime context forwarding test passed.");
+            console.log(JSON.stringify({
+              workerId: receivedContext.workerId,
+              requestId: receivedContext.requestId,
+              researchProvider: receivedContext.research.provider,
+              researchSourceCount: receivedContext.research.sourceCount,
+              taskStatus: execution.task.status,
+              workerStatus: execution.workerStatus
+            }, null, 2));
+          })().catch(error => {
+            console.error(error);
+            process.exitCode = 1;
+          });
+          NODE
