@@ -1,0 +1,413 @@
+name: AarHen Document Manager Test
+
+on:
+  push:
+    paths:
+      - "core/documentManager.js"
+      - "engines/documentIngestion.js"
+      - "engines/documentLearning.js"
+      - "engines/documentKnowledgeBridge.js"
+      - "core/learning.js"
+      - "core/memoryStore.js"
+      - ".github/workflows/document-manager-test.yml"
+
+  workflow_dispatch:
+
+jobs:
+  document-manager-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # DEPENDENCY INSTALL
+      # ======================================================
+
+      - name: Install Dependencies
+        run: |
+          npm install --prefer-offline
+
+
+      # ======================================================
+      # MODULE LOAD TEST
+      # ======================================================
+
+      - name: Load Document Manager
+        run: |
+          node - <<'NODE'
+          const manager = require("./core/documentManager");
+
+          if (!manager) {
+            throw new Error("Document Manager could not be loaded.");
+          }
+
+          if (typeof manager.ingestText !== "function") {
+            throw new Error("ingestText() is missing.");
+          }
+
+          if (typeof manager.ingestDocument !== "function") {
+            throw new Error("ingestDocument() is missing.");
+          }
+
+          if (typeof manager.searchKnowledge !== "function") {
+            throw new Error("searchKnowledge() is missing.");
+          }
+
+          if (typeof manager.searchDocuments !== "function") {
+            throw new Error("searchDocuments() is missing.");
+          }
+
+          if (typeof manager.buildRagContext !== "function") {
+            throw new Error("buildRagContext() is missing.");
+          }
+
+          if (typeof manager.queryKnowledge !== "function") {
+            throw new Error("queryKnowledge() is missing.");
+          }
+
+          if (typeof manager.getStatus !== "function") {
+            throw new Error("getStatus() is missing.");
+          }
+
+          console.log("Document Manager module load: GREEN");
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Check Document Manager Status
+        run: |
+          node - <<'NODE'
+          const manager = require("./core/documentManager");
+
+          const status =
+            manager.getStatus();
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          if (!status.success) {
+            throw new Error(
+              "Document Manager status failed."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Document Manager is not active."
+            );
+          }
+
+          console.log(
+            "Document Manager status: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # TEXT INGESTION TEST
+      # ======================================================
+
+      - name: Test Text Ingestion
+        run: |
+          node - <<'NODE'
+          const manager =
+            require("./core/documentManager");
+
+          const text = `
+          AarHen Document Manager Test.
+
+          Heritage Auto Finance provides
+          vehicle finance assistance including
+          new car finance, used car finance,
+          commercial vehicle finance,
+          refinance and vehicle insurance assistance.
+
+          This test confirms that document text
+          can enter the AarHen knowledge pipeline.
+          `;
+
+          const result =
+            manager.ingestText(
+              text,
+              {
+                fileName:
+                  "aarhen-manager-test.txt",
+
+                category:
+                  "business",
+
+                source:
+                  "aarhen-document-manager-test",
+
+                confidence:
+                  0.80
+              }
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (
+            !result.success
+          ) {
+            throw new Error(
+              "Text ingestion failed."
+            );
+          }
+
+          if (
+            !result.ingested
+          ) {
+            throw new Error(
+              "Text was not ingested into knowledge."
+            );
+          }
+
+          console.log(
+            "Text ingestion: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # KNOWLEDGE SEARCH TEST
+      # ======================================================
+
+      - name: Test Knowledge Search
+        run: |
+          node - <<'NODE'
+          const manager =
+            require("./core/documentManager");
+
+          const result =
+            manager.searchKnowledge(
+              "Heritage Auto Finance vehicle finance",
+              5
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (
+            !result.success
+          ) {
+            throw new Error(
+              "Knowledge search failed."
+            );
+          }
+
+          if (
+            result.count <= 0
+          ) {
+            throw new Error(
+              "Knowledge search returned zero results."
+            );
+          }
+
+          console.log(
+            "Knowledge search: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT SEARCH TEST
+      # ======================================================
+
+      - name: Test Document Search
+        run: |
+          node - <<'NODE'
+          const manager =
+            require("./core/documentManager");
+
+          const result =
+            manager.searchDocuments(
+              "Heritage Auto Finance vehicle finance",
+              5
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (
+            !result.success
+          ) {
+            throw new Error(
+              "Document search failed."
+            );
+          }
+
+          if (
+            result.count <= 0
+          ) {
+            throw new Error(
+              "Document search returned zero results."
+            );
+          }
+
+          console.log(
+            "Document search: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # RAG TEST
+      # ======================================================
+
+      - name: Test RAG Context
+        run: |
+          node - <<'NODE'
+          const manager =
+            require("./core/documentManager");
+
+          const result =
+            manager.buildRagContext(
+              "What services does Heritage Auto Finance provide?",
+              5
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (
+            !result.success
+          ) {
+            throw new Error(
+              "RAG context generation failed."
+            );
+          }
+
+          if (
+            !result.context ||
+            result.context.trim().length === 0
+          ) {
+            throw new Error(
+              "RAG context is empty."
+            );
+          }
+
+          console.log(
+            "RAG context: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # UNIFIED QUERY TEST
+      # ======================================================
+
+      - name: Test Unified Knowledge Query
+        run: |
+          node - <<'NODE'
+          const manager =
+            require("./core/documentManager");
+
+          const result =
+            manager.queryKnowledge(
+              "Heritage Auto Finance vehicle finance",
+              {
+                limit: 5
+              }
+            );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          if (
+            !result.success
+          ) {
+            throw new Error(
+              "Unified knowledge query failed."
+            );
+          }
+
+          if (
+            result.totalKnowledgeResults <= 0 &&
+            result.totalDocumentResults <= 0
+          ) {
+            throw new Error(
+              "Unified query returned no knowledge."
+            );
+          }
+
+          console.log(
+            "Unified knowledge query: GREEN"
+          );
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+          echo "=========================================="
+          echo "AARHEN DOCUMENT MANAGER TEST"
+          echo "=========================================="
+          echo "Module Load       : GREEN"
+          echo "Status            : GREEN"
+          echo "Text Ingestion    : GREEN"
+          echo "Knowledge Search  : GREEN"
+          echo "Document Search   : GREEN"
+          echo "RAG Context       : GREEN"
+          echo "Unified Query     : GREEN"
+          echo "=========================================="
+          echo "DOCUMENT MANAGER PIPELINE READY"
+          echo "=========================================="
