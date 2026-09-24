@@ -2,33 +2,52 @@
 // AARHEN CORE V5
 // SKILL HANDLERS
 // ============================================================
+// Version: 5.8.3
+//
+// Purpose:
+// Central registry for AarHen skill engines.
+//
+// Important:
+// Category names used by Intent / Router / Executor / Agent
+// layers must resolve to the correct engine here.
+// ============================================================
+
 
 const finance =
     require("../engines/finance");
 
+
 const calculator =
     require("../engines/calculator");
+
 
 const knowledge =
     require("../engines/knowledge");
 
+
 const research =
     require("../engines/research");
+
 
 const coding =
     require("../engines/coding");
 
+
 const cybersecurity =
     require("../engines/cybersecurity");
+
 
 const dataAnalysis =
     require("../engines/dataAnalysis");
 
+
 const documents =
     require("../engines/documents");
 
+
 const business =
     require("../business/businessBrain");
+
 
 const providerManager =
     require("../providers/providerManager");
@@ -37,20 +56,69 @@ const providerManager =
 // ============================================================
 // HANDLER REGISTRY
 // ============================================================
+//
+// IMPORTANT:
+// Some layers use "calculation" while the original engine
+// name is "calculator".
+//
+// Some layers use "data" while the engine registry originally
+// used "data-analysis".
+//
+// Both aliases are intentionally supported.
+// ============================================================
 
 const HANDLERS = {
+
+    // --------------------------------------------------------
+    // Core engines
+    // --------------------------------------------------------
+
     finance,
+
     calculator,
+
+    calculation:
+        calculator,
+
     knowledge,
+
     research,
+
     coding,
+
     cybersecurity,
-    "data-analysis": dataAnalysis,
+
+    security:
+        cybersecurity,
+
+    // --------------------------------------------------------
+    // Data
+    // --------------------------------------------------------
+
+    "data-analysis":
+        dataAnalysis,
+
+    data:
+        dataAnalysis,
+
+    // --------------------------------------------------------
+    // Documents
+    // --------------------------------------------------------
+
     documents,
+
+    // --------------------------------------------------------
+    // Business
+    // --------------------------------------------------------
+
     business,
 
+    // --------------------------------------------------------
     // Research provider access
-    providers: providerManager
+    // --------------------------------------------------------
+
+    providers:
+        providerManager
 };
 
 
@@ -58,20 +126,50 @@ const HANDLERS = {
 // ENGINE ACCESS
 // ============================================================
 
-function getEngine(category) {
-    return HANDLERS[category] || null;
-}
+function getEngine(
+    category
+) {
+
+    const key =
+        String(
+            category || ""
+        )
+            .trim()
+            .toLowerCase();
 
 
-function hasEngine(category) {
-    return Boolean(
-        HANDLERS[category]
+    return (
+        HANDLERS[key] ||
+        null
     );
 }
 
 
+// ============================================================
+// ENGINE EXISTENCE
+// ============================================================
+
+function hasEngine(
+    category
+) {
+
+    return Boolean(
+        getEngine(
+            category
+        )
+    );
+}
+
+
+// ============================================================
+// AVAILABLE ENGINES
+// ============================================================
+
 function getAvailableEngines() {
-    return Object.keys(HANDLERS);
+
+    return Object.keys(
+        HANDLERS
+    );
 }
 
 
@@ -80,13 +178,19 @@ function getAvailableEngines() {
 // ============================================================
 
 function getResearchProvider() {
+
     return providerManager.getProvider(
         "research"
     );
 }
 
 
+// ============================================================
+// RESEARCH PROVIDER STATUS
+// ============================================================
+
 function getResearchProviderStatus() {
+
     return providerManager.getStatus();
 }
 
@@ -104,13 +208,26 @@ async function searchWeb({
         !query ||
         typeof query !== "string"
     ) {
+
         return {
-            success: false,
-            error: "Research query is required.",
-            sources: [],
-            sourceCount: 0,
-            confidence: 0,
-            verificationStatus: "not-verified"
+
+            success:
+                false,
+
+            error:
+                "Research query is required.",
+
+            sources:
+                [],
+
+            sourceCount:
+                0,
+
+            confidence:
+                0,
+
+            verificationStatus:
+                "not-verified"
         };
     }
 
@@ -119,32 +236,43 @@ async function searchWeb({
 
         const providerResult =
             await providerManager.searchWeb({
+
                 query,
+
                 maxSources
+
             });
 
 
-        // --------------------------------------------------------
+        // ----------------------------------------------------
         // Normalize provider response
-        // --------------------------------------------------------
+        // ----------------------------------------------------
 
         const rawSources =
             Array.isArray(
                 providerResult?.sources
             )
+
                 ? providerResult.sources
+
                 : Array.isArray(
                     providerResult?.results
                 )
+
                     ? providerResult.results
+
                     : [];
 
 
         const sources =
             rawSources.map(
-                (source, index) => {
+                (
+                    source,
+                    index
+                ) => {
 
                     return {
+
                         id:
                             source.id ||
                             `research-source-${index + 1}`,
@@ -172,25 +300,31 @@ async function searchWeb({
                             "",
 
                         score:
-                            typeof source.score === "number"
+                            typeof source.score ===
+                            "number"
+
                                 ? source.score
+
                                 : null,
 
                         publishedDate:
                             source.publishedDate ||
                             source.published_date ||
                             null
+
                     };
 
                 }
             );
 
 
-        // --------------------------------------------------------
+        // ----------------------------------------------------
         // Confidence
-        // --------------------------------------------------------
+        // ----------------------------------------------------
 
-        let confidence = 0;
+        let confidence =
+            0;
+
 
         if (
             typeof providerResult?.confidence ===
@@ -204,14 +338,15 @@ async function searchWeb({
             sources.length >= 2
         ) {
 
-            confidence = 0.80;
+            confidence =
+                0.80;
 
         } else if (
             sources.length === 1
         ) {
 
-            confidence = 0.60;
-
+            confidence =
+                0.60;
         }
 
 
@@ -225,9 +360,9 @@ async function searchWeb({
             );
 
 
-        // --------------------------------------------------------
+        // ----------------------------------------------------
         // Verification status
-        // --------------------------------------------------------
+        // ----------------------------------------------------
 
         let verificationStatus =
             "not-verified";
@@ -255,13 +390,12 @@ async function searchWeb({
 
             verificationStatus =
                 "partially-verified";
-
         }
 
 
-        // --------------------------------------------------------
+        // ----------------------------------------------------
         // Standardized response
-        // --------------------------------------------------------
+        // ----------------------------------------------------
 
         return {
 
@@ -289,7 +423,8 @@ async function searchWeb({
                 null,
 
             raw:
-                providerResult || null
+                providerResult ||
+                null
 
         };
 
@@ -297,7 +432,8 @@ async function searchWeb({
 
         return {
 
-            success: false,
+            success:
+                false,
 
             query,
 
@@ -305,19 +441,20 @@ async function searchWeb({
                 error.message ||
                 "Web research failed.",
 
-            sources: [],
+            sources:
+                [],
 
-            sourceCount: 0,
+            sourceCount:
+                0,
 
-            confidence: 0,
+            confidence:
+                0,
 
             verificationStatus:
                 "not-verified"
 
         };
-
     }
-
 }
 
 
