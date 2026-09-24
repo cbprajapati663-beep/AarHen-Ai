@@ -2,22 +2,24 @@
 // AARHEN CORE V5
 // RESPONSE ENGINE
 // ============================================================
-//
-// Version: 5.5.6
+// Version: 5.7.6
 //
 // Improvements:
-// - Fixed research source count display
-// - Supports sources/results across all research layers
-// - Supports executor + orchestrator research objects
-// - Displays verification correctly
-// - Displays verified learning correctly
-// - Avoids unnecessary re-processing
-// - Keeps existing public exports
+// - Existing research response handling preserved
+// - Research source count display preserved
+// - Research verification display preserved
+// - Research learning display preserved
+// - Document knowledge response support
+// - Document RAG context support
+// - Document answer context support
+// - Document source display
+// - Safe nested document context resolution
+// - Existing public exports preserved
 // ============================================================
 
 
 const RESPONSE_VERSION =
-    "5.5.6";
+    "5.7.6";
 
 
 // ============================================================
@@ -276,18 +278,6 @@ function formatMissingInput(
 // ============================================================
 // RESEARCH OBJECT RESOLVER
 // ============================================================
-//
-// Research data may come from:
-//
-// execution.research
-// execution.result
-// execution.result.research
-// result.research
-// result.execution.research
-//
-// This resolver keeps the response layer independent
-// from the exact upstream nesting.
-// ============================================================
 
 function resolveResearchObject(
     input = {}
@@ -375,17 +365,6 @@ function resolveResearchObject(
 // ============================================================
 // RESEARCH SOURCE RESOLVER
 // ============================================================
-//
-// IMPORTANT FIX:
-//
-// Old code only checked:
-//     research.results
-//
-// Current AarHen pipeline commonly uses:
-//     research.sources
-//
-// This resolver supports both.
-// ============================================================
 
 function resolveResearchSources(
     input = {}
@@ -442,10 +421,6 @@ function resolveResearchSources(
     ];
 
 
-    /*
-     * First valid non-empty source collection wins.
-     */
-
     for (
         const candidate of
         candidates
@@ -464,10 +439,6 @@ function resolveResearchSources(
         }
     }
 
-
-    /*
-     * Explicit empty arrays are still normalized.
-     */
 
     for (
         const candidate of
@@ -886,6 +857,953 @@ function isResearchError(
 
 
 // ============================================================
+// DOCUMENT OBJECT RESOLVER
+// ============================================================
+// Document data can arrive from:
+//
+// result.executionContext
+// result.execution.documentContext
+// result.documentContext
+// result.requestContext
+// result.brain.knowledge
+// result.executionContext.brain.knowledge
+//
+// The response engine searches these locations without
+// changing the upstream data model.
+// ============================================================
+
+function resolveDocumentObject(
+    input = {}
+) {
+
+    const root =
+        safeObject(
+            input
+        );
+
+
+    const execution =
+        safeObject(
+            root.execution
+        );
+
+
+    const executionContext =
+        safeObject(
+            root.executionContext
+        );
+
+
+    const requestContext =
+        safeObject(
+            root.requestContext
+        );
+
+
+    const brain =
+        safeObject(
+            root.brain
+        );
+
+
+    const brainKnowledge =
+        safeObject(
+            brain.knowledge
+        );
+
+
+    const executionBrain =
+        safeObject(
+            executionContext.brain
+        );
+
+
+    const executionBrainKnowledge =
+        safeObject(
+            executionBrain.knowledge
+        );
+
+
+    const candidates = [
+
+        root.documentContext,
+
+        requestContext.documentContext,
+
+        executionContext.documentContext,
+
+        execution.documentContext,
+
+        root.documentKnowledge,
+
+        requestContext.documentKnowledge,
+
+        executionContext.documentKnowledge,
+
+        execution.documentKnowledge,
+
+        brainKnowledge.documentKnowledge,
+
+        executionBrainKnowledge.documentKnowledge,
+
+        executionBrain.documentKnowledge
+
+    ];
+
+
+    for (
+        const candidate of
+        candidates
+    ) {
+
+        if (
+            !candidate ||
+            typeof candidate !==
+                "object"
+        ) {
+
+            continue;
+        }
+
+
+        const hasDocumentData =
+
+            Array.isArray(
+                candidate.documentKnowledge
+            ) ||
+
+            Array.isArray(
+                candidate.results
+            ) ||
+
+            Array.isArray(
+                candidate.documents
+            ) ||
+
+            candidate.rag ||
+
+            candidate.answerContext ||
+
+            candidate.knowledgeContext ||
+
+            candidate.documentDetected ===
+                true;
+
+
+        if (
+            hasDocumentData
+        ) {
+
+            return candidate;
+        }
+    }
+
+
+    return {};
+}
+
+
+// ============================================================
+// DOCUMENT KNOWLEDGE RESOLVER
+// ============================================================
+
+function resolveDocumentKnowledge(
+    input = {}
+) {
+
+    const root =
+        safeObject(
+            input
+        );
+
+
+    const executionContext =
+        safeObject(
+            root.executionContext
+        );
+
+
+    const documentObject =
+        resolveDocumentObject(
+            root
+        );
+
+
+    const candidates = [
+
+        documentObject.documentKnowledge,
+
+        root.documentKnowledge,
+
+        root.requestContext?.documentKnowledge,
+
+        executionContext.documentKnowledge,
+
+        executionContext.brain
+            ?.knowledge
+            ?.documentKnowledge,
+
+        documentObject.knowledge
+            ?.documentKnowledge
+
+    ];
+
+
+    for (
+        const candidate of
+        candidates
+    ) {
+
+        if (
+            Array.isArray(
+                candidate
+            ) &&
+            candidate.length > 0
+        ) {
+
+            return normalizeDocumentKnowledge(
+                candidate
+            );
+        }
+    }
+
+
+    for (
+        const candidate of
+        candidates
+    ) {
+
+        if (
+            Array.isArray(
+                candidate
+            )
+        ) {
+
+            return normalizeDocumentKnowledge(
+                candidate
+            );
+        }
+    }
+
+
+    return [];
+}
+
+
+// ============================================================
+// NORMALIZE DOCUMENT KNOWLEDGE
+// ============================================================
+
+function normalizeDocumentKnowledge(
+    items = []
+) {
+
+    return safeArray(
+        items
+    )
+
+        .map(
+            (
+                item,
+                index
+            ) => {
+
+                const source =
+                    safeObject(
+                        item
+                    );
+
+
+                return {
+
+                    id:
+                        firstNonEmpty(
+
+                            source.id,
+
+                            source.memoryId,
+
+                            `document-knowledge-${index + 1}`
+
+                        ),
+
+                    title:
+                        firstNonEmpty(
+
+                            source.title,
+
+                            source.name,
+
+                            source.documentName,
+
+                            `Document Knowledge ${index + 1}`
+
+                        ),
+
+                    content:
+                        firstNonEmpty(
+
+                            source.content,
+
+                            source.text,
+
+                            source.snippet,
+
+                            source.answer,
+
+                            ""
+
+                        ),
+
+                    source:
+                        firstNonEmpty(
+
+                            source.source,
+
+                            source.documentSource,
+
+                            source.documentName,
+
+                            source.fileName,
+
+                            ""
+
+                        ),
+
+                    documentType:
+                        firstNonEmpty(
+
+                            source.documentType,
+
+                            source.type,
+
+                            ""
+
+                        ),
+
+                    verified:
+                        source.verified === true,
+
+                    confidence:
+                        Number.isFinite(
+                            Number(
+                                source.confidence
+                            )
+                        )
+
+                            ? Number(
+                                source.confidence
+                            )
+
+                            : null
+
+                };
+            }
+        )
+
+        .filter(
+            item =>
+                item.title ||
+                item.content ||
+                item.source
+        );
+}
+
+
+// ============================================================
+// DOCUMENT SOURCE RESOLVER
+// ============================================================
+
+function resolveDocumentSources(
+    input = {}
+) {
+
+    const root =
+        safeObject(
+            input
+        );
+
+
+    const documentObject =
+        resolveDocumentObject(
+            root
+        );
+
+
+    const executionContext =
+        safeObject(
+            root.executionContext
+        );
+
+
+    const candidates = [
+
+        documentObject.documents,
+
+        documentObject.results,
+
+        root.documentDocuments,
+
+        root.requestContext?.documentDocuments,
+
+        executionContext.documentDocuments,
+
+        executionContext.brain
+            ?.knowledge
+            ?.documentDocuments
+
+    ];
+
+
+    for (
+        const candidate of
+        candidates
+    ) {
+
+        if (
+            Array.isArray(
+                candidate
+            ) &&
+            candidate.length > 0
+        ) {
+
+            return normalizeDocumentSources(
+                candidate
+            );
+        }
+    }
+
+
+    for (
+        const candidate of
+        candidates
+    ) {
+
+        if (
+            Array.isArray(
+                candidate
+            )
+        ) {
+
+            return normalizeDocumentSources(
+                candidate
+            );
+        }
+    }
+
+
+    return [];
+}
+
+
+// ============================================================
+// NORMALIZE DOCUMENT SOURCES
+// ============================================================
+
+function normalizeDocumentSources(
+    sources = []
+) {
+
+    return safeArray(
+        sources
+    )
+
+        .map(
+            (
+                source,
+                index
+            ) => {
+
+                const item =
+                    safeObject(
+                        source
+                    );
+
+
+                return {
+
+                    id:
+                        firstNonEmpty(
+
+                            item.id,
+
+                            `document-source-${index + 1}`
+
+                        ),
+
+                    title:
+                        firstNonEmpty(
+
+                            item.title,
+
+                            item.name,
+
+                            item.documentName,
+
+                            item.fileName,
+
+                            `Document ${index + 1}`
+
+                        ),
+
+                    source:
+                        firstNonEmpty(
+
+                            item.source,
+
+                            item.documentSource,
+
+                            item.documentName,
+
+                            item.fileName,
+
+                            ""
+
+                        ),
+
+                    type:
+                        firstNonEmpty(
+
+                            item.documentType,
+
+                            item.type,
+
+                            ""
+
+                        ),
+
+                    count:
+                        Number(
+                            item.count
+                        ) || 0
+
+                };
+            }
+        )
+
+        .filter(
+            item =>
+                item.title ||
+                item.source
+        );
+}
+
+
+// ============================================================
+// DOCUMENT ANSWER CONTEXT RESOLVER
+// ============================================================
+
+function resolveDocumentAnswerContext(
+    input = {}
+) {
+
+    const root =
+        safeObject(
+            input
+        );
+
+
+    const documentObject =
+        resolveDocumentObject(
+            root
+        );
+
+
+    const executionContext =
+        safeObject(
+            root.executionContext
+        );
+
+
+    const execution =
+        safeObject(
+            root.execution
+        );
+
+
+    return normalize(
+
+        firstNonEmpty(
+
+            root.answerContext,
+
+            documentObject.answerContext,
+
+            executionContext.answerContext,
+
+            executionContext
+                .brain
+                ?.knowledge
+                ?.documentAnswerContext,
+
+            execution.documentContext
+                ?.answerContext,
+
+            ""
+
+        )
+
+    );
+}
+
+
+// ============================================================
+// DOCUMENT RAG RESOLVER
+// ============================================================
+
+function resolveDocumentRag(
+    input = {}
+) {
+
+    const root =
+        safeObject(
+            input
+        );
+
+
+    const documentObject =
+        resolveDocumentObject(
+            root
+        );
+
+
+    const executionContext =
+        safeObject(
+            root.executionContext
+        );
+
+
+    return (
+
+        documentObject.rag ||
+
+        root.documentRag ||
+
+        root.requestContext
+            ?.documentRag ||
+
+        executionContext.documentRag ||
+
+        executionContext
+            .brain
+            ?.knowledge
+            ?.documentRag ||
+
+        null
+
+    );
+}
+
+
+// ============================================================
+// DOCUMENT STATUS RESOLVER
+// ============================================================
+
+function resolveDocumentStatus(
+    input = {}
+) {
+
+    const knowledge =
+        resolveDocumentKnowledge(
+            input
+        );
+
+
+    const sources =
+        resolveDocumentSources(
+            input
+        );
+
+
+    const answerContext =
+        resolveDocumentAnswerContext(
+            input
+        );
+
+
+    const rag =
+        resolveDocumentRag(
+            input
+        );
+
+
+    const root =
+        safeObject(
+            input
+        );
+
+
+    const executionContext =
+        safeObject(
+            root.executionContext
+        );
+
+
+    const documentAware =
+        root.documentAware === true ||
+
+        root.pipeline
+            ?.documentAware === true ||
+
+        root.requestContext
+            ?.documentAware === true ||
+
+        executionContext.documentAware ===
+            true ||
+
+        knowledge.length > 0 ||
+
+        sources.length > 0;
+
+
+    return {
+
+        enabled:
+            root.documentKnowledgeEnabled !== false &&
+            root.requestContext
+                ?.documentKnowledgeEnabled !== false &&
+            executionContext
+                .documentKnowledgeEnabled !== false,
+
+        aware:
+            documentAware,
+
+        knowledgeCount:
+            knowledge.length,
+
+        sourceCount:
+            sources.length,
+
+        answerContextAvailable:
+            Boolean(
+                answerContext
+            ),
+
+        ragAvailable:
+            Boolean(
+                rag
+            ),
+
+        detected:
+            documentAware ||
+            Boolean(
+                answerContext
+            ) ||
+            Boolean(
+                rag
+            ),
+
+        knowledge,
+
+        sources,
+
+        answerContext,
+
+        rag
+
+    };
+}
+
+
+// ============================================================
+// DOCUMENT RESPONSE FORMATTER
+// ============================================================
+
+function formatDocument(
+    input = {}
+) {
+
+    const status =
+        resolveDocumentStatus(
+            input
+        );
+
+
+    if (
+        !status.detected
+    ) {
+
+        return "";
+    }
+
+
+    let response =
+        "";
+
+
+    // --------------------------------------------------------
+    // DOCUMENT HEADER
+    // --------------------------------------------------------
+
+    response +=
+        "📄 Document Knowledge";
+
+
+    // --------------------------------------------------------
+    // ANSWER CONTEXT
+    // --------------------------------------------------------
+
+    if (
+        status.answerContext
+    ) {
+
+        response +=
+
+            `\n\n${status.answerContext}`;
+    }
+
+
+    // --------------------------------------------------------
+    // KNOWLEDGE ITEMS
+    // --------------------------------------------------------
+
+    const knowledge =
+        status.knowledge;
+
+
+    if (
+        knowledge.length > 0
+    ) {
+
+        response +=
+            "\n\nRelevant document information:";
+
+
+        const visibleKnowledge =
+            knowledge.slice(
+                0,
+                5
+            );
+
+
+        visibleKnowledge.forEach(
+
+            (
+                item,
+                index
+            ) => {
+
+                const content =
+                    normalize(
+                        item.content
+                    );
+
+
+                const title =
+                    firstNonEmpty(
+
+                        item.title,
+
+                        `Document item ${index + 1}`
+
+                    );
+
+
+                response +=
+
+                    `\n${index + 1}. ${title}`;
+
+
+                if (
+                    content
+                ) {
+
+                    response +=
+
+                        ` — ${content}`;
+                }
+
+            }
+
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // DOCUMENT SOURCES
+    // --------------------------------------------------------
+
+    const sources =
+        status.sources;
+
+
+    if (
+        sources.length > 0
+    ) {
+
+        response +=
+            "\n\n📚 Document sources:";
+
+
+        const visibleSources =
+            sources.slice(
+                0,
+                5
+            );
+
+
+        visibleSources.forEach(
+
+            (
+                source,
+                index
+            ) => {
+
+                const title =
+                    firstNonEmpty(
+
+                        source.title,
+
+                        source.source,
+
+                        `Document ${index + 1}`
+
+                    );
+
+
+                response +=
+
+                    `\n${index + 1}. ${title}`;
+
+            }
+
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // RAG STATUS
+    // --------------------------------------------------------
+
+    if (
+        status.ragAvailable
+    ) {
+
+        response +=
+            "\n🧩 RAG context: available";
+    }
+
+
+    // --------------------------------------------------------
+    // DOCUMENT VERIFICATION / COUNT INFO
+    // --------------------------------------------------------
+
+    if (
+        status.knowledgeCount > 0 ||
+        status.sourceCount > 0
+    ) {
+
+        response +=
+
+            `\n📊 Document context: ${status.knowledgeCount} knowledge item(s), ${status.sourceCount} document source(s)`;
+    }
+
+
+    return response;
+}
+
+
+// ============================================================
 // WEB RESEARCH RESPONSE
 // ============================================================
 
@@ -902,13 +1820,6 @@ function formatResearch(
         );
     }
 
-
-    /*
-     * Handle both:
-     *
-     * formatResearch(researchObject)
-     * formatResearch(orchestrationResult)
-     */
 
     const research =
         resolveResearchObject(
@@ -980,9 +1891,9 @@ function formatResearch(
         "";
 
 
-    /* --------------------------------------------------------
-       ANSWER
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // ANSWER
+    // --------------------------------------------------------
 
     if (
         answer
@@ -1002,22 +1913,18 @@ function formatResearch(
     }
 
 
-    /* --------------------------------------------------------
-       SOURCE COUNT
-    --------------------------------------------------------
-
-       FIX:
-       Use actual normalized sources length.
-    */
+    // --------------------------------------------------------
+    // SOURCE COUNT
+    // --------------------------------------------------------
 
     response +=
 
         `\n\n📚 Sources: ${sources.length}`;
 
 
-    /* --------------------------------------------------------
-       VERIFICATION
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // VERIFICATION
+    // --------------------------------------------------------
 
     response +=
 
@@ -1033,9 +1940,9 @@ function formatResearch(
                 : "\n🔍 Verification: review required";
 
 
-    /* --------------------------------------------------------
-       CONFIDENCE
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // CONFIDENCE
+    // --------------------------------------------------------
 
     if (
         Number.isFinite(
@@ -1054,9 +1961,9 @@ function formatResearch(
     }
 
 
-    /* --------------------------------------------------------
-       LEARNING
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // LEARNING
+    // --------------------------------------------------------
 
     if (
         learning
@@ -1099,24 +2006,22 @@ function formatResearch(
     }
 
 
-    /* --------------------------------------------------------
-       QUERY
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // QUERY
+    // --------------------------------------------------------
 
     if (
         query
     ) {
 
-        /*
-         * Query deliberately not displayed as a separate line
-         * to keep normal user responses compact.
-         */
+        // Query deliberately kept out of the main response
+        // to keep normal output compact.
     }
 
 
-    /* --------------------------------------------------------
-       SOURCE DETAILS
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // SOURCE DETAILS
+    // --------------------------------------------------------
 
     if (
         sources.length > 0
@@ -1143,8 +2048,11 @@ function formatResearch(
                 response +=
 
                     `\n${index + 1}. ${
+
                         source.title ||
+
                         "Untitled source"
+
                     }`;
 
 
@@ -1271,30 +2179,83 @@ function formatExecution(
     }
 
 
+    // --------------------------------------------------------
+    // GENERIC RESULT MESSAGE
+    // --------------------------------------------------------
+
+    let response =
+        "";
+
+
     if (
         execution.result &&
-
         typeof execution.result.message ===
             "string"
     ) {
 
-        return execution.result.message;
-    }
+        response =
+            execution.result.message;
 
-
-    if (
+    } else if (
         execution.message &&
         typeof execution.message ===
             "string"
     ) {
 
-        return execution.message;
+        response =
+            execution.message;
+
+    } else {
+
+        response =
+            "AarHen ne task successfully process kiya.";
     }
 
 
-    return (
-        "AarHen ne task successfully process kiya."
-    );
+    return response;
+}
+
+
+// ============================================================
+// APPEND DOCUMENT KNOWLEDGE
+// ============================================================
+
+function appendDocumentKnowledge(
+    baseResponse,
+    result
+) {
+
+    const documentResponse =
+        formatDocument(
+            result
+        );
+
+
+    if (
+        !documentResponse
+    ) {
+
+        return baseResponse;
+    }
+
+
+    if (
+        normalize(
+            baseResponse
+        )
+    ) {
+
+        return (
+
+            `${baseResponse}\n\n` +
+
+            documentResponse
+
+        );
+    }
+
+
+    return documentResponse;
 }
 
 
@@ -1306,50 +2267,58 @@ function createResponse(
     result = {}
 ) {
 
-    /*
-     * Highest priority:
-     * approval
-     */
+    // --------------------------------------------------------
+    // APPROVAL
+    // --------------------------------------------------------
 
     if (
         result.status ===
         "approval-required"
     ) {
 
-        return (
+        let response =
 
             "Is action ko perform karne se pehle " +
 
-            "aapki approval required hai."
+            "aapki approval required hai.";
 
+
+        return appendDocumentKnowledge(
+            response,
+            result
         );
     }
 
 
-    /*
-     * Missing information.
-     */
+    // --------------------------------------------------------
+    // MISSING INFORMATION
+    // --------------------------------------------------------
 
     if (
         result.status ===
         "needs-user-input"
     ) {
 
-        return formatMissingInput(
+        let response =
 
-            result.execution?.missingParameters
+            formatMissingInput(
 
+                result.execution
+                    ?.missingParameters
+
+            );
+
+
+        return appendDocumentKnowledge(
+            response,
+            result
         );
     }
 
 
-    /*
-     * Research:
-     *
-     * Some execution wrappers may not retain the
-     * category in the same place, so detect research
-     * before generic execution formatting.
-     */
+    // --------------------------------------------------------
+    // RESEARCH
+    // --------------------------------------------------------
 
     const hasResearch =
 
@@ -1371,7 +2340,14 @@ function createResponse(
         hasResearch
     ) {
 
-        return formatResearch(
+        const response =
+            formatResearch(
+                result
+            );
+
+
+        return appendDocumentKnowledge(
+            response,
             result
         );
     }
@@ -1381,29 +2357,43 @@ function createResponse(
         executionResearch
     ) {
 
-        return formatResearch(
+        const response =
+            formatResearch(
+                result
+            );
+
+
+        return appendDocumentKnowledge(
+            response,
             result
         );
     }
 
 
-    /*
-     * Standard execution flow.
-     */
+    // --------------------------------------------------------
+    // STANDARD EXECUTION
+    // --------------------------------------------------------
 
     if (
         result.execution
     ) {
 
-        return formatExecution(
-            result.execution
+        const response =
+            formatExecution(
+                result.execution
+            );
+
+
+        return appendDocumentKnowledge(
+            response,
+            result
         );
     }
 
 
-    /*
-     * Direct result.
-     */
+    // --------------------------------------------------------
+    // DIRECT RESEARCH RESULT
+    // --------------------------------------------------------
 
     if (
         result.category ===
@@ -1413,15 +2403,42 @@ function createResponse(
             "web_research"
     ) {
 
-        return formatResearch(
+        const response =
+            formatResearch(
+                result
+            );
+
+
+        return appendDocumentKnowledge(
+            response,
             result
         );
     }
 
 
-    /*
-     * Generic error.
-     */
+    // --------------------------------------------------------
+    // DIRECT DOCUMENT REQUEST
+    // --------------------------------------------------------
+
+    const documentStatus =
+        resolveDocumentStatus(
+            result
+        );
+
+
+    if (
+        documentStatus.detected
+    ) {
+
+        return formatDocument(
+            result
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // GENERIC ERROR
+    // --------------------------------------------------------
 
     if (
         result.error
@@ -1431,8 +2448,14 @@ function createResponse(
     }
 
 
+    // --------------------------------------------------------
+    // DEFAULT
+    // --------------------------------------------------------
+
     return (
+
         "AarHen ne request process kar li hai."
+
     );
 }
 
@@ -1459,8 +2482,17 @@ function getResponseStatus() {
 
         capabilities: {
 
+            // ------------------------------------------------
+            // FINANCE
+            // ------------------------------------------------
+
             financeFormatting:
                 true,
+
+
+            // ------------------------------------------------
+            // RESEARCH
+            // ------------------------------------------------
 
             researchFormatting:
                 true,
@@ -1479,6 +2511,34 @@ function getResponseStatus() {
 
             nestedResearchResolution:
                 true,
+
+
+            // ------------------------------------------------
+            // DOCUMENT
+            // ------------------------------------------------
+
+            documentFormatting:
+                true,
+
+            documentKnowledgeDisplay:
+                true,
+
+            documentSourceDisplay:
+                true,
+
+            documentAnswerContextDisplay:
+                true,
+
+            documentRagStatusDisplay:
+                true,
+
+            nestedDocumentResolution:
+                true,
+
+
+            // ------------------------------------------------
+            // OTHER
+            // ------------------------------------------------
 
             approvalResponse:
                 true,
@@ -1529,6 +2589,26 @@ module.exports = {
     resolveResearchAnswer,
 
     formatResearch,
+
+    resolveDocumentObject,
+
+    resolveDocumentKnowledge,
+
+    normalizeDocumentKnowledge,
+
+    resolveDocumentSources,
+
+    normalizeDocumentSources,
+
+    resolveDocumentAnswerContext,
+
+    resolveDocumentRag,
+
+    resolveDocumentStatus,
+
+    formatDocument,
+
+    appendDocumentKnowledge,
 
     formatExecution,
 
