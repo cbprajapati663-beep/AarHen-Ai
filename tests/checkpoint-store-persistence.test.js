@@ -21,6 +21,11 @@ try {
   assert.deepEqual(store.get("cp-1"), checkpoint);
   assert.deepEqual(store.list(), [checkpoint]);
 
+  // Simulate a process restart by creating a fresh store instance.
+  const restartedStore = createCheckpointStore({ directory });
+  assert.deepEqual(restartedStore.get("cp-1"), checkpoint);
+  assert.deepEqual(restartedStore.list(), [checkpoint]);
+
   assert.throws(() => store.get("../outside"), /valid checkpoint ID/);
   assert.throws(() => store.save({ id: "../escape", taskId: "task-1" }), /valid checkpoint ID/);
   assert.equal(store.remove("cp-1").deleted, true);
