@@ -1,0 +1,762 @@
+name: AarHen Agent Planner Test
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  agent-planner-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD PLANNER
+      # ======================================================
+
+      - name: Load Agent Planner
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          if (!planner) {
+            throw new Error(
+              "core/agentPlanner.js could not be loaded."
+            );
+          }
+
+          if (
+            planner.AGENT_PLANNER_VERSION !==
+            "5.8.1"
+          ) {
+            throw new Error(
+              "Agent Planner version mismatch."
+            );
+          }
+
+          console.log(
+            "Agent Planner loaded successfully."
+          );
+
+          console.log(
+            "Version:",
+            planner.AGENT_PLANNER_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Agent Planner Status Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const status =
+            planner.getStatus();
+
+          if (!status) {
+            throw new Error(
+              "Planner status missing."
+            );
+          }
+
+          if (
+            status.success !== true
+          ) {
+            throw new Error(
+              "Planner status is not healthy."
+            );
+          }
+
+          if (
+            status.status !== "active"
+          ) {
+            throw new Error(
+              "Planner is not active."
+            );
+          }
+
+          if (
+            status.agentManager?.connected !== true
+          ) {
+            throw new Error(
+              "Agent Manager is not connected."
+            );
+          }
+
+          if (
+            status.intentSystem?.connected !== true
+          ) {
+            throw new Error(
+              "Intent system is not connected."
+            );
+          }
+
+          if (
+            status.routerSystem?.connected !== true
+          ) {
+            throw new Error(
+              "Router system is not connected."
+            );
+          }
+
+          if (
+            status.permissionSystem?.connected !== true
+          ) {
+            throw new Error(
+              "Permission system is not connected."
+            );
+          }
+
+          console.log(
+            "Agent Planner status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # REQUEST ANALYSIS TEST
+      # ======================================================
+
+      - name: Request Analysis Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.analyzeRequest(
+              "Calculate EMI for a 5 lakh vehicle loan"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Request analysis failed."
+            );
+          }
+
+          if (
+            !result.intent
+          ) {
+            throw new Error(
+              "Intent result is missing."
+            );
+          }
+
+          if (
+            !result.routing
+          ) {
+            throw new Error(
+              "Routing result is missing."
+            );
+          }
+
+          if (
+            !result.intent.category
+          ) {
+            throw new Error(
+              "Intent category is missing."
+            );
+          }
+
+          console.log(
+            "Request analysis test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CALCULATION PLAN TEST
+      # ======================================================
+
+      - name: Calculation Plan Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Calculate 125 + 75"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Calculation plan creation failed."
+            );
+          }
+
+          if (
+            result.category !==
+            "calculation"
+          ) {
+            throw new Error(
+              "Calculation category mismatch."
+            );
+          }
+
+          if (
+            result.plan.length !== 1
+          ) {
+            throw new Error(
+              "Calculation plan should contain one step."
+            );
+          }
+
+          if (
+            result.plan[0].action !==
+            "calculate"
+          ) {
+            throw new Error(
+              "Calculation action mismatch."
+            );
+          }
+
+          if (
+            result.plan[0].requiresApproval !==
+            false
+          ) {
+            throw new Error(
+              "Safe calculation should not require approval."
+            );
+          }
+
+          if (
+            result.plan[0].approved !==
+            true
+          ) {
+            throw new Error(
+              "Safe calculation step should be approved."
+            );
+          }
+
+          console.log(
+            "Calculation plan test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RESEARCH PLAN TEST
+      # ======================================================
+
+      - name: Research Plan Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Research the latest vehicle finance information"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Research plan creation failed."
+            );
+          }
+
+          if (
+            result.category !==
+            "research"
+          ) {
+            throw new Error(
+              "Research category mismatch."
+            );
+          }
+
+          if (
+            result.plan.length !== 2
+          ) {
+            throw new Error(
+              "Research plan should contain two steps."
+            );
+          }
+
+          if (
+            result.plan[0].action !==
+            "read_public_information"
+          ) {
+            throw new Error(
+              "Research collection action mismatch."
+            );
+          }
+
+          if (
+            result.plan[1].action !==
+            "read_public_information"
+          ) {
+            throw new Error(
+              "Research verification action mismatch."
+            );
+          }
+
+          if (
+            result.plan.some(
+              step =>
+                step.requiresApproval !== false
+            )
+          ) {
+            throw new Error(
+              "Public research steps should not require approval."
+            );
+          }
+
+          console.log(
+            "Research plan test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT PLAN TEST
+      # ======================================================
+
+      - name: Document Plan Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Read my PDF document about vehicle finance"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Document plan creation failed."
+            );
+          }
+
+          if (
+            result.category !==
+            "documents"
+          ) {
+            throw new Error(
+              "Document category mismatch."
+            );
+          }
+
+          if (
+            result.plan.length !== 2
+          ) {
+            throw new Error(
+              "Document plan should contain two steps."
+            );
+          }
+
+          if (
+            result.plan.some(
+              step =>
+                step.action !==
+                "search_knowledge"
+            )
+          ) {
+            throw new Error(
+              "Document plan action mismatch."
+            );
+          }
+
+          if (
+            result.plan.some(
+              step =>
+                step.requiresApproval !== false
+            )
+          ) {
+            throw new Error(
+              "Document knowledge steps should not require approval."
+            );
+          }
+
+          console.log(
+            "Document plan test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # BUSINESS PLAN TEST
+      # ======================================================
+
+      - name: Business Plan Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Show Heritage Auto Finance used car finance information"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Business plan creation failed."
+            );
+          }
+
+          if (
+            result.category !==
+            "business"
+          ) {
+            throw new Error(
+              "Business category mismatch."
+            );
+          }
+
+          if (
+            result.plan.length !== 2
+          ) {
+            throw new Error(
+              "Business plan should contain two steps."
+            );
+          }
+
+          if (
+            result.plan.some(
+              step =>
+                step.action !==
+                "search_knowledge"
+            )
+          ) {
+            throw new Error(
+              "Business plan action mismatch."
+            );
+          }
+
+          console.log(
+            "Business plan test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SECURITY APPROVAL TEST
+      # ======================================================
+
+      - name: Security Approval Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Test a security vulnerability on an external target"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Security plan creation failed."
+            );
+          }
+
+          if (
+            result.category !==
+            "security"
+          ) {
+            throw new Error(
+              "Security category mismatch."
+            );
+          }
+
+          if (
+            result.plan.length !== 1
+          ) {
+            throw new Error(
+              "Security plan should contain one step."
+            );
+          }
+
+          if (
+            result.plan[0].action !==
+            "security_testing_against_external_target"
+          ) {
+            throw new Error(
+              "Security action mismatch."
+            );
+          }
+
+          if (
+            result.plan[0].requiresApproval !==
+            true
+          ) {
+            throw new Error(
+              "Security external-target action should require approval."
+            );
+          }
+
+          if (
+            result.plan[0].approved !==
+            false
+          ) {
+            throw new Error(
+              "Security approval should not be automatic."
+            );
+          }
+
+          if (
+            result.approvalRequired !==
+            true
+          ) {
+            throw new Error(
+              "Planner approvalRequired flag is missing."
+            );
+          }
+
+          console.log(
+            "Security approval test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PLAN SUMMARY TEST
+      # ======================================================
+
+      - name: Plan Summary Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Calculate 2 + 2"
+            );
+
+          const summary =
+            planner.getPlanSummary(
+              result
+            );
+
+          if (
+            summary.success !== true
+          ) {
+            throw new Error(
+              "Plan summary failed."
+            );
+          }
+
+          if (
+            summary.stepCount !== 1
+          ) {
+            throw new Error(
+              "Plan summary step count mismatch."
+            );
+          }
+
+          if (
+            summary.actions[0] !==
+            "calculate"
+          ) {
+            throw new Error(
+              "Plan summary action mismatch."
+            );
+          }
+
+          console.log(
+            "Plan summary test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # AGENT MANAGER INTEGRATION TEST
+      # ======================================================
+
+      - name: Planner Agent Manager Integration Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const agentManager =
+            require("./core/agentManager");
+
+          agentManager.reset();
+
+
+          const agent =
+            agentManager.createAgent({
+
+              name:
+                "Planner Integration Agent"
+
+            });
+
+
+          if (
+            agent.success !== true
+          ) {
+            throw new Error(
+              "Integration agent creation failed."
+            );
+          }
+
+
+          const result =
+            planner.createPlannedTask(
+
+              agent.agent.id,
+
+              "Calculate 10 + 20"
+
+            );
+
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Planner could not create planned task."
+            );
+          }
+
+
+          if (
+            !result.task
+          ) {
+            throw new Error(
+              "Planned task is missing."
+            );
+          }
+
+
+          if (
+            result.task.steps.length !== 1
+          ) {
+            throw new Error(
+              "Planned task step count mismatch."
+            );
+          }
+
+
+          if (
+            result.task.steps[0].action !==
+            "calculate"
+          ) {
+            throw new Error(
+              "Planned task action mismatch."
+            );
+          }
+
+
+          if (
+            result.task.status !==
+            agentManager.TASK_STATES.READY
+          ) {
+            throw new Error(
+              "Planned task should be ready."
+            );
+          }
+
+
+          console.log(
+            "Planner Agent Manager integration test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN AGENT PLANNER TEST"
+          echo "=============================================="
+          echo " Planner Load: PASSED"
+          echo " Planner Status: PASSED"
+          echo " Intent Integration: PASSED"
+          echo " Router Integration: PASSED"
+          echo " Permission Integration: PASSED"
+          echo " Calculation Planning: PASSED"
+          echo " Research Planning: PASSED"
+          echo " Document Planning: PASSED"
+          echo " Business Planning: PASSED"
+          echo " Security Approval: PASSED"
+          echo " Plan Summary: PASSED"
+          echo " Agent Manager Integration: PASSED"
+          echo "=============================================="
+          echo " AGENT PLANNER v5.8.1 READY"
+          echo "=============================================="
