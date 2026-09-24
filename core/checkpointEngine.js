@@ -739,6 +739,28 @@ function saveCheckpoint(
     }
 
 
+    if (
+        !safeString(
+            task.id
+        )
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            error:
+                "Task ID is required to save a checkpoint.",
+
+            checkpoint:
+                null
+
+        };
+
+    }
+
+
     const checkpoint =
         buildCheckpoint(
 
