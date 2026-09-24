@@ -1,0 +1,93 @@
+name: AarHen Recovery Plan Non-Mutation Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  recovery-plan-non-mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify recovery planning does not mutate task state
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          engine.reset();
+
+          const agent = manager.createAgent({
+            id: "plan-nonmutation-agent",
+            name: "Recovery plan non-mutation test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "plan-nonmutation-agent",
+            "Verify recovery plan is read-only",
+            { id: "plan-nonmutation-task" }
+          );
+          assert(created.success, "Task creation failed.");
+
+          const added = manager.addStep("plan-nonmutation-task", {
+            id: "plan-nonmutation-step",
+            name: "Pending work",
+            description: "Read-only recovery plan test",
+            action: "calculate",
+            input: { expression: "2 + 2" }
+          });
+          assert(added.success, "Step creation failed.");
+
+          const started = manager.startTask("plan-nonmutation-task");
+          assert(started.success, "Task start failed.");
+
+          const saved = bridge.saveTaskCheckpoint("plan-nonmutation-task");
+          assert(saved.success, "Checkpoint save failed.");
+
+          const paused = manager.pauseTask("plan-nonmutation-task", "Test pause");
+          assert(paused.success, "Task pause failed.");
+
+          const beforeResult = manager.getTask("plan-nonmutation-task");
+          assert(beforeResult.success, "Could not read task before plan.");
+          const beforeStatus = beforeResult.task.status;
+          const beforeStop = beforeResult.task.stopRequested;
+          const beforePause = beforeResult.task.pauseRequested;
+
+          const plan = bridge.buildRecoveryPlan("plan-nonmutation-task");
+          assert(plan.success, "Recovery plan construction failed.");
+
+          const afterResult = manager.getTask("plan-nonmutation-task");
+          assert(afterResult.success, "Could not read task after plan.");
+          assert(afterResult.task.status === beforeStatus, "Recovery planning changed task status.");
+          assert(afterResult.task.stopRequested === beforeStop, "Recovery planning changed STOP flag.");
+          assert(afterResult.task.pauseRequested === beforePause, "Recovery planning changed pause flag.");
+
+          const checkpoint = bridge.getLatestCheckpoint("plan-nonmutation-task");
+          assert(checkpoint.success, "Checkpoint disappeared after plan.");
+          assert(
+            checkpoint.checkpoint.task.status === "running",
+            "Checkpoint snapshot should remain the saved running state."
+          );
+
+          console.log("Recovery plan non-mutation tests passed.");
+          console.log(JSON.stringify({
+            taskStatusBeforePlan: beforeStatus,
+            taskStatusAfterPlan: afterResult.task.status,
+            checkpointState: checkpoint.checkpoint.task.status,
+            planAction: plan.plan.action
+          }, null, 2));
+          NODE
