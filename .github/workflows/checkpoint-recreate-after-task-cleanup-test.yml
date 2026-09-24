@@ -1,0 +1,78 @@
+name: AarHen Checkpoint Recreate After Task Cleanup Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-recreate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify checkpoint history can be recreated after cleanup
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          assert(manager.createAgent({
+            id: "recreate-agent",
+            name: "Checkpoint recreate lifecycle test"
+          }).success, "Agent creation failed.");
+          assert(manager.createTask("recreate-agent", "Recreate checkpoint task", {
+            id: "recreate-task"
+          }).success, "Task creation failed.");
+          assert(manager.startTask("recreate-task").success, "Task start failed.");
+
+          const oldSave = bridge.saveTaskCheckpoint("recreate-task", {
+            id: "old-checkpoint"
+          });
+          assert(oldSave.success, "Initial checkpoint save failed.");
+
+          const cleanup = bridge.deleteTaskCheckpoints("recreate-task");
+          assert(cleanup.success && cleanup.deleted === 1,
+            "Task checkpoint cleanup should delete the old checkpoint.");
+          assert(!bridge.getLatestCheckpoint("recreate-task").success,
+            "Latest checkpoint must be absent immediately after cleanup.");
+
+          const newSave = bridge.saveTaskCheckpoint("recreate-task", {
+            id: "new-checkpoint"
+          });
+          assert(newSave.success, "Saving a checkpoint after cleanup failed.");
+
+          const latest = bridge.getLatestCheckpoint("recreate-task");
+          assert(latest.success &&
+            latest.checkpoint.id === "new-checkpoint",
+            "New checkpoint must become latest after cleanup and resave.");
+
+          const list = engine.listCheckpoints("recreate-task");
+          const status = engine.getStatus();
+          assert(list.count === 1 &&
+            list.checkpoints[0].id === "new-checkpoint",
+            "Task history must contain only the newly saved checkpoint.");
+          assert(status.checkpointCount === 1 && status.trackedTasks === 1,
+            "Counters must reflect the recreated checkpoint history.");
+
+          console.log("Checkpoint recreate-after-cleanup tests passed.");
+          console.log(JSON.stringify({
+            deletedOldCheckpoints: cleanup.deleted,
+            latestCheckpointId: latest.checkpoint.id,
+            historyCount: list.count,
+            trackedTasks: status.trackedTasks
+          }, null, 2));
+          NODE
