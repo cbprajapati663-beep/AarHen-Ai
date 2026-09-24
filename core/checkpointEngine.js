@@ -669,7 +669,11 @@ function isRecoveryEligible(
 
         input.status ===
             agentManager.TASK_STATES
-                .CANCELLED
+                .CANCELLED ||
+
+        input.status ===
+            agentManager.TASK_STATES
+                .WAITING_APPROVAL
     ) {
 
         return false;
