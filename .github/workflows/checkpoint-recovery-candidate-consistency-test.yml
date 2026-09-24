@@ -1,0 +1,60 @@
+name: AarHen Recovery Candidate Consistency Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  recovery-candidate-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify recovery candidate and plan consistency
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          bridge.reset();
+
+          const saved = engine.saveCheckpoint({
+            id: "candidate-consistency-task",
+            status: "running",
+            currentStepIndex: 1,
+            currentStepId: "step-2",
+            steps: [
+              { id: "step-1", status: "completed" },
+              { id: "step-2", status: "pending" }
+            ]
+          }, { id: "candidate-consistency-checkpoint" });
+
+          assert(saved.success, "Checkpoint save should succeed.");
+
+          const candidates = engine.getRecoveryCandidates();
+          const candidate = candidates.find(item =>
+            item.taskId === "candidate-consistency-task"
+          );
+
+          assert(candidate, "Expected task to appear in recovery candidates.");
+
+          const planResult = engine.buildRecoveryPlan("candidate-consistency-task");
+          assert(planResult.success && planResult.recoverable,
+            "Expected a recoverable recovery plan.");
+
+          const plan = planResult.plan;
+          assert(plan.checkpointId === candidate.checkpointId,
+            "Recovery plan checkpoint must match candidate checkpoint.");
+          assert(plan.taskId === candidate.taskId,
+            "Recovery plan task ID must match candidate task ID.");
+
+          console.log("Recovery candidate consistency tests passed.");
+          NODE
