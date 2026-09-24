@@ -1,0 +1,114 @@
+name: AarHen Worker Queue Execution Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/agentWorker.js"
+      - "core/agentRunner.js"
+      - "core/agentManager.js"
+      - ".github/workflows/worker-queue-execution-test.yml"
+
+jobs:
+  worker-queue-execution-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify sequential queue execution and completion
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          (async () => {
+            const workerApi = require("./core/agentWorker");
+            const manager = require("./core/agentManager");
+
+            workerApi.reset();
+
+            const workerResult = workerApi.createWorker({
+              id: "queue-test-worker",
+              name: "Queue Execution Worker"
+            });
+            if (workerResult.success !== true) throw new Error("Worker creation failed.");
+
+            const agentResult = manager.createAgent({
+              id: "queue-test-agent",
+              name: "Queue Execution Agent"
+            });
+            if (agentResult.success !== true) throw new Error("Agent creation failed.");
+
+            const taskIds = [];
+            for (const label of ["first", "second"]) {
+              const taskResult = manager.createTask(agentResult.agent.id, {
+                request: "Execute " + label + " queued task"
+              });
+              if (taskResult.success !== true) {
+                throw new Error("Task creation failed: " + (taskResult.error || "unknown error"));
+              }
+
+              const stepResult = manager.addStep(taskResult.task.id, {
+                description: "Complete " + label + " queued task",
+                action: "calculate",
+                requiresApproval: false,
+                approved: true,
+                input: { value: label }
+              });
+              if (stepResult.success !== true) {
+                throw new Error("Step creation failed: " + (stepResult.error || "unknown error"));
+              }
+
+              const assigned = workerApi.assignTask(workerResult.worker.id, taskResult.task.id);
+              if (assigned.success !== true) {
+                throw new Error("Task assignment failed: " + (assigned.error || "unknown error"));
+              }
+              taskIds.push(taskResult.task.id);
+            }
+
+            const queueBefore = workerApi.getQueue(workerResult.worker.id);
+            if (queueBefore.queueLength !== 2) {
+              throw new Error("Expected 2 queued tasks, got " + queueBefore.queueLength);
+            }
+
+            const run = await workerApi.runQueue(workerResult.worker.id, {
+              runner: async () => ({ success: true, output: "test step completed" }),
+              maxTasks: 2
+            });
+
+            if (run.success !== true) {
+              throw new Error("Queue execution failed: " + (run.error || "unknown error"));
+            }
+
+            for (const taskId of taskIds) {
+              const latest = manager.getTask(taskId);
+              if (latest.success !== true || latest.task.status !== manager.TASK_STATES.COMPLETED) {
+                throw new Error("Queued task did not complete: " + taskId + " status=" + (latest.task?.status || "missing"));
+              }
+            }
+
+            const queueAfter = workerApi.getQueue(workerResult.worker.id);
+            if (queueAfter.queueLength !== 0) {
+              throw new Error("Completed tasks remained in queue.");
+            }
+
+            if (queueAfter.status !== workerApi.WORKER_STATES.IDLE) {
+              throw new Error("Worker did not return to idle: " + queueAfter.status);
+            }
+
+            console.log("Worker queue execution test passed.");
+            console.log(JSON.stringify({
+              queuedTasks: taskIds.length,
+              processed: run.processed,
+              taskStatuses: taskIds.map(id => manager.getTask(id).task.status),
+              remainingQueue: queueAfter.queueLength,
+              workerStatus: queueAfter.status
+            }, null, 2));
+          })().catch(error => {
+            console.error(error);
+            process.exitCode = 1;
+          });
+          NODE
