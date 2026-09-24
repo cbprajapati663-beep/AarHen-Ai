@@ -1472,6 +1472,16 @@ function buildRecoveryPlan(
             action:
                 "resume-from-checkpoint",
 
+            // This plan is descriptive only; execution must use the controlled worker.
+            executable:
+                false,
+
+            executionMode:
+                "inspection-only",
+
+            requiresControlledExecution:
+                true,
+
             taskId:
                 checkpoint.taskId,
 
