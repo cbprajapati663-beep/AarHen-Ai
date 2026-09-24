@@ -749,6 +749,28 @@ function saveCheckpoint(
         );
 
 
+    if (
+        checkpoints.has(
+            checkpoint.id
+        )
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            error:
+                "Checkpoint ID already exists.",
+
+            checkpoint:
+                null
+
+        };
+
+    }
+
+
     checkpoints.set(
         checkpoint.id,
         checkpoint
