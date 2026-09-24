@@ -1,0 +1,90 @@
+name: AarHen Individual Checkpoint Deletion Consistency Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-individual-deletion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify individual checkpoint deletion and index consistency
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "individual-delete-agent",
+            name: "Individual checkpoint deletion consistency test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "individual-delete-agent",
+            "Individual checkpoint deletion",
+            { id: "individual-delete-task" }
+          );
+          assert(created.success, "Task creation failed.");
+          assert(manager.startTask("individual-delete-task").success,
+            "Task start failed.");
+
+          for (const id of ["individual-checkpoint-1", "individual-checkpoint-2"]) {
+            assert(bridge.saveTaskCheckpoint("individual-delete-task", { id }).success,
+              "Checkpoint save failed: " + id);
+          }
+
+          const firstDelete = bridge.deleteCheckpoint("individual-checkpoint-1");
+          assert(firstDelete.success, "Deleting the first checkpoint failed.");
+
+          const afterFirst = bridge.listCheckpoints("individual-delete-task");
+          assert(afterFirst.success && afterFirst.count === 1,
+            "Exactly one checkpoint should remain after deleting the first.");
+          assert(afterFirst.checkpoints[0].id === "individual-checkpoint-2",
+            "The remaining checkpoint ID is incorrect.");
+
+          const latestAfterFirst = bridge.getLatestCheckpoint("individual-delete-task");
+          assert(latestAfterFirst.success &&
+            latestAfterFirst.checkpoint.id === "individual-checkpoint-2",
+            "Latest checkpoint was not preserved after deleting an older checkpoint.");
+
+          const secondDelete = bridge.deleteCheckpoint("individual-checkpoint-2");
+          assert(secondDelete.success, "Deleting the remaining checkpoint failed.");
+
+          const afterSecond = bridge.listCheckpoints("individual-delete-task");
+          assert(afterSecond.success && afterSecond.count === 0,
+            "No checkpoints should remain after deleting both individually.");
+
+          const latestAfterSecond = bridge.getLatestCheckpoint("individual-delete-task");
+          assert(latestAfterSecond.success === false,
+            "Latest checkpoint should be unavailable after all checkpoints are deleted.");
+
+          const task = manager.getTask("individual-delete-task");
+          assert(task.success && task.task.status === "running",
+            "Individual checkpoint deletion changed the live task state.");
+
+          console.log("Individual checkpoint deletion consistency tests passed.");
+          console.log(JSON.stringify({
+            firstDeleted: firstDelete.checkpointId,
+            remainingAfterFirst: afterFirst.count,
+            latestAfterFirst: latestAfterFirst.checkpoint.id,
+            secondDeleted: secondDelete.checkpointId,
+            remainingAfterSecond: afterSecond.count,
+            liveTaskStatus: task.task.status
+          }, null, 2));
+          NODE
