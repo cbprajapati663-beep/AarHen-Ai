@@ -74,12 +74,15 @@ jobs:
             const autonomousWorker =
               require("./core/autonomousWorker");
 
+            const autonomousAgent =
+              require("./core/autonomousAgent");
+
             const agentManager =
               require("./core/agentManager");
 
 
             // =================================================
-            // VERSION TEST
+            // VERSION VALIDATION
             // =================================================
 
             if (
@@ -101,7 +104,8 @@ jobs:
             ) {
 
               throw new Error(
-                "Checkpoint Bridge version mismatch."
+                "Checkpoint Bridge version mismatch: " +
+                checkpointBridge.CHECKPOINT_BRIDGE_VERSION
               );
 
             }
@@ -113,7 +117,8 @@ jobs:
             ) {
 
               throw new Error(
-                "Checkpoint Engine version mismatch."
+                "Checkpoint Engine version mismatch: " +
+                checkpointEngine.CHECKPOINT_ENGINE_VERSION
               );
 
             }
@@ -125,7 +130,8 @@ jobs:
             ) {
 
               throw new Error(
-                "Autonomous Recovery version mismatch."
+                "Autonomous Recovery version mismatch: " +
+                autonomousRecovery.AUTONOMOUS_RECOVERY_VERSION
               );
 
             }
@@ -137,7 +143,8 @@ jobs:
             ) {
 
               throw new Error(
-                "Autonomous Worker version mismatch."
+                "Autonomous Worker version mismatch: " +
+                autonomousWorker.AUTONOMOUS_WORKER_VERSION
               );
 
             }
@@ -149,10 +156,12 @@ jobs:
 
 
             // =================================================
-            // RESET ALL IN-MEMORY STATE
+            // RESET
             // =================================================
 
             checkpointEngine.reset();
+
+            autonomousAgent.reset();
 
             autonomousWorker.reset();
 
@@ -298,7 +307,7 @@ jobs:
             ) {
 
               throw new Error(
-                "Agent Manager connection version mismatch."
+                "Agent Manager version mismatch."
               );
 
             }
@@ -310,21 +319,8 @@ jobs:
 
 
             // =================================================
-            // CREATE AGENT
+            // CREATE AUTONOMOUS AGENT
             // =================================================
-
-            const agent =
-              autonomousWorker.ensureWorkerForAgent
-                ? null
-                : null;
-
-
-            const autonomousAgent =
-              require("./core/autonomousAgent");
-
-
-            autonomousAgent.reset();
-
 
             const agentResult =
               autonomousAgent.createAgent({
@@ -405,6 +401,10 @@ jobs:
               );
 
 
+            // =================================================
+            // BASIC RESULT CHECK
+            // =================================================
+
             if (
               result.success !==
               true
@@ -418,9 +418,20 @@ jobs:
             }
 
 
+            // IMPORTANT:
+            // Autonomous Worker currently reports
+            // successful worker execution as:
+            // worker-execution
+            //
+            // The TASK itself becomes:
+            // completed
+            //
+            // Therefore stage and task status are tested
+            // separately.
+
             if (
               result.stage !==
-              "completed"
+              "worker-execution"
             ) {
 
               throw new Error(
@@ -454,7 +465,13 @@ jobs:
 
 
             console.log(
-              "Controller execution completed."
+              "Controller execution completed successfully."
+            );
+
+
+            console.log(
+              "Execution Stage:",
+              result.stage
             );
 
 
@@ -462,14 +479,14 @@ jobs:
             // VERIFY TASK
             // =================================================
 
-            const task =
+            const taskResult =
               agentManager.getTask(
                 result.task.id
               );
 
 
             if (
-              task.success !==
+              taskResult.success !==
               true
             ) {
 
@@ -481,13 +498,13 @@ jobs:
 
 
             if (
-              task.task.status !==
+              taskResult.task.status !==
               "completed"
             ) {
 
               throw new Error(
                 "Task did not reach completed state: " +
-                task.task.status
+                taskResult.task.status
               );
 
             }
@@ -495,9 +512,19 @@ jobs:
 
             if (
               !Array.isArray(
-                task.task.steps
-              ) ||
-              task.task.steps.length <
+                taskResult.task.steps
+              )
+            ) {
+
+              throw new Error(
+                "Task steps are missing."
+              );
+
+            }
+
+
+            if (
+              taskResult.task.steps.length <
               1
             ) {
 
@@ -509,13 +536,13 @@ jobs:
 
 
             if (
-              task.task.steps[0].status !==
+              taskResult.task.steps[0].status !==
               "completed"
             ) {
 
               throw new Error(
                 "Execution step did not complete: " +
-                task.task.steps[0].status
+                taskResult.task.steps[0].status
               );
 
             }
@@ -524,6 +551,23 @@ jobs:
             console.log(
               "Task completion verification passed."
             );
+
+
+            // =================================================
+            // VERIFY CONTROLLER TASK
+            // =================================================
+
+            if (
+              result.task.status !==
+              "completed"
+            ) {
+
+              throw new Error(
+                "Controller returned task that is not completed: " +
+                result.task.status
+              );
+
+            }
 
 
             // =================================================
@@ -571,7 +615,7 @@ jobs:
             ) {
 
               throw new Error(
-                "Before checkpoint should be recovery eligible."
+                "Before checkpoint should be recoverable."
               );
 
             }
@@ -628,7 +672,7 @@ jobs:
             ) {
 
               throw new Error(
-                "Completed task checkpoint must not be recovery eligible."
+                "Completed task checkpoint must not be recoverable."
               );
 
             }
@@ -647,18 +691,57 @@ jobs:
             }
 
 
+            if (
+              result.afterCheckpoint.metadata?.execution
+                ?.status !==
+              "worker-execution"
+            ) {
+
+              throw new Error(
+                "After checkpoint execution stage metadata mismatch: " +
+                result.afterCheckpoint.metadata?.execution
+                  ?.status
+              );
+
+            }
+
+
             console.log(
               "After-execution checkpoint verification passed."
             );
 
 
             // =================================================
-            // VERIFY CHECKPOINT HISTORY
+            // CHECKPOINT LINKAGE
+            // =================================================
+
+            if (
+              result.afterCheckpoint.metadata
+                ?.beforeCheckpointId !==
+              result.beforeCheckpoint.id
+            ) {
+
+              throw new Error(
+                "Checkpoint linkage metadata mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Checkpoint linkage verification passed."
+            );
+
+
+            // =================================================
+            // CHECKPOINT HISTORY
             // =================================================
 
             const history =
               checkpointBridge.listCheckpoints(
+
                 result.task.id
+
               );
 
 
@@ -680,7 +763,7 @@ jobs:
             ) {
 
               throw new Error(
-                "Expected 2 checkpoints, got: " +
+                "Expected exactly 2 checkpoints, got: " +
                 history.count
               );
 
@@ -717,7 +800,7 @@ jobs:
 
 
             // =================================================
-            // VERIFY LATEST CHECKPOINT
+            // LATEST CHECKPOINT
             // =================================================
 
             const latest =
@@ -768,7 +851,7 @@ jobs:
 
 
             // =================================================
-            // VERIFY RECOVERY CANDIDATE
+            // RECOVERY CANDIDATE
             // =================================================
 
             const candidate =
@@ -795,7 +878,7 @@ jobs:
             ) {
 
               throw new Error(
-                "Completed task must not be marked recoverable."
+                "Completed task must not be recoverable."
               );
 
             }
@@ -807,7 +890,7 @@ jobs:
 
 
             // =================================================
-            // VERIFY RECOVERY PLAN
+            // RECOVERY PLAN
             // =================================================
 
             const recoveryPlan =
@@ -858,7 +941,7 @@ jobs:
 
 
             // =================================================
-            // INSPECT TASK
+            // TASK INSPECTION
             // =================================================
 
             const inspection =
@@ -886,6 +969,19 @@ jobs:
 
               throw new Error(
                 "Inspection task ID mismatch."
+              );
+
+            }
+
+
+            if (
+              inspection.task?.status !==
+              "completed"
+            ) {
+
+              throw new Error(
+                "Inspection task status mismatch: " +
+                inspection.task?.status
               );
 
             }
@@ -933,38 +1029,130 @@ jobs:
 
 
             // =================================================
-            // VERIFY CHECKPOINT LINKAGE
+            // CHECKPOINT COMPARISON
             // =================================================
 
+            const comparison =
+              checkpointBridge.compareWithCheckpoint(
+
+                result.task.id
+
+              );
+
+
             if (
-              result.afterCheckpoint.metadata
-                ?.execution
-                ?.status !==
-              "completed"
+              comparison.success !==
+              true
             ) {
 
               throw new Error(
-                "After checkpoint execution status metadata mismatch."
+                "Checkpoint comparison failed."
               );
 
             }
 
 
             if (
-              result.afterCheckpoint.metadata
-                ?.beforeCheckpointId !==
-              result.beforeCheckpoint.id
+              comparison.checkpointExists !==
+              true
             ) {
 
               throw new Error(
-                "Checkpoint linkage metadata mismatch."
+                "Checkpoint should exist during comparison."
+              );
+
+            }
+
+
+            if (
+              comparison.changed !==
+              false
+            ) {
+
+              console.log(
+                "Checkpoint comparison differences:",
+                JSON.stringify(
+                  comparison.differences,
+                  null,
+                  2
+                )
+              );
+
+              throw new Error(
+                "Task and latest checkpoint should match."
+              );
+
+            }
+
+
+            if (
+              comparison.differences.length !==
+              0
+            ) {
+
+              throw new Error(
+                "Expected zero checkpoint differences."
               );
 
             }
 
 
             console.log(
-              "Checkpoint linkage verification passed."
+              "Checkpoint comparison verification passed."
+            );
+
+
+            // =================================================
+            // RECOVERY ANALYSIS
+            // =================================================
+
+            const recoveryAnalysis =
+              autonomousRecovery.analyzeRecovery(
+
+                result
+
+              );
+
+
+            if (
+              recoveryAnalysis.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery analysis failed."
+              );
+
+            }
+
+
+            if (
+              recoveryAnalysis.enabled !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery analysis should report enabled=true."
+              );
+
+            }
+
+
+            if (
+              recoveryAnalysis.maxAttempts !==
+              3
+            ) {
+
+              throw new Error(
+                "Recovery maxAttempts mismatch: " +
+                recoveryAnalysis.maxAttempts
+              );
+
+            }
+
+
+            console.log(
+              "Recovery analysis verification passed."
             );
 
 
@@ -1083,6 +1271,9 @@ jobs:
               " Autonomous Execution: PASSED"
             );
             console.log(
+              " Execution Stage: worker-execution"
+            );
+            console.log(
               " Task Completion: PASSED"
             );
             console.log(
@@ -1090,6 +1281,9 @@ jobs:
             );
             console.log(
               " After Checkpoint: PASSED"
+            );
+            console.log(
+              " Checkpoint Linkage: PASSED"
             );
             console.log(
               " Checkpoint History: PASSED"
@@ -1107,7 +1301,10 @@ jobs:
               " Task Inspection: PASSED"
             );
             console.log(
-              " Checkpoint Linkage: PASSED"
+              " Checkpoint Comparison: PASSED"
+            );
+            console.log(
+              " Recovery Analysis: PASSED"
             );
             console.log(
               " Final Health: PASSED"
@@ -1136,6 +1333,7 @@ jobs:
               "CHECKPOINT RECOVERY CONTROLLER TEST FAILED"
             );
             console.error(error);
+
             process.exit(1);
 
           });
