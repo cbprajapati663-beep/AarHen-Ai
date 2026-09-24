@@ -229,6 +229,15 @@ function buildExecutionOptions(
         retryableClasses:
             config.retryableClasses,
 
+        // Preserve the caller's execution context when the
+        // recovery runner is created. Without this, research
+        // context and provider metadata are lost before the
+        // Agent Runner executes public-information steps.
+        context:
+            safeObject(
+                config.context
+            ),
+
         source:
             config.source ||
             "autonomous-recovery"
