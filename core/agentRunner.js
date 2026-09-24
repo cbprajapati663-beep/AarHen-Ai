@@ -2,36 +2,44 @@
 // AARHEN CORE V5
 // AGENT RUNNER
 // ============================================================
-// Version: 5.8.2
+// Version: 5.8.3
 //
 // Purpose:
 // - Execute Agent Manager tasks through controlled runners
 // - Connect Agent Manager with existing Skill Executor
 // - Re-check permissions before every action
-// - Convert planned agent steps into existing AarHen intents
+// - Convert planned Agent steps into controlled execution
 // - Preserve task context
 // - Prevent uncontrolled arbitrary execution
-// - Provide safe custom action handlers
+// - Safely handle protected external actions
 //
 // Important:
-// This module does NOT directly execute arbitrary JavaScript.
-// Every action is permission-checked before execution.
+// Protected actions such as send_message, send_email,
+// write_file and delete_file are NOT directly performed here.
+//
+// Until the corresponding external connector is integrated,
+// AarHen returns a controlled handoff result instead of
+// pretending that the external action was actually performed.
 // ============================================================
 
 const agentManager =
     require("./agentManager");
 
+
 const executor =
     require("../skills/executor");
+
 
 const permissions =
     require("./permissions");
 
+
 const intent =
     require("./intent");
 
+
 const AGENT_RUNNER_VERSION =
-    "5.8.2";
+    "5.8.3";
 
 
 // ============================================================
@@ -51,7 +59,9 @@ function safeObject(value) {
 
 function safeArray(value) {
 
-    return Array.isArray(value)
+    return Array.isArray(
+        value
+    )
         ? value
         : [];
 }
@@ -91,12 +101,14 @@ function clone(value) {
 
 
 // ============================================================
-// ACTION → INTENT MAPPING
+// ACTION MAP
 // ============================================================
 //
-// These mappings connect Agent steps with AarHen's
-// existing Skill Executor.
+// Built-in actions connected to existing Skill Executor.
 //
+// Protected external actions intentionally use category
+// "external-action" because they are not yet connected to
+// a real email / messaging / file system connector.
 // ============================================================
 
 const ACTION_MAP = Object.freeze({
@@ -154,7 +166,7 @@ const ACTION_MAP = Object.freeze({
     send_message: {
 
         category:
-            "general",
+            "external-action",
 
         intent:
             "send_message"
@@ -164,7 +176,7 @@ const ACTION_MAP = Object.freeze({
     send_email: {
 
         category:
-            "general",
+            "external-action",
 
         intent:
             "send_email"
@@ -174,7 +186,7 @@ const ACTION_MAP = Object.freeze({
     write_file: {
 
         category:
-            "general",
+            "external-action",
 
         intent:
             "write_file"
@@ -184,7 +196,7 @@ const ACTION_MAP = Object.freeze({
     delete_file: {
 
         category:
-            "general",
+            "external-action",
 
         intent:
             "delete_file"
@@ -192,6 +204,24 @@ const ACTION_MAP = Object.freeze({
     }
 
 });
+
+
+// ============================================================
+// PROTECTED ACTIONS
+// ============================================================
+
+const PROTECTED_EXTERNAL_ACTIONS =
+    Object.freeze([
+
+        "send_message",
+
+        "send_email",
+
+        "write_file",
+
+        "delete_file"
+
+    ]);
 
 
 // ============================================================
@@ -204,26 +234,6 @@ const customActions =
 
 // ============================================================
 // REGISTER CUSTOM ACTION
-// ============================================================
-//
-// A custom action must still be permission checked.
-//
-// The handler receives:
-//
-// {
-//   task,
-//   step,
-//   context,
-//   permission
-// }
-//
-// and must return:
-//
-// {
-//   success: true,
-//   ...result
-// }
-//
 // ============================================================
 
 function registerAction(
@@ -242,10 +252,12 @@ function registerAction(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             error:
                 "Action name is required."
+
         };
     }
 
@@ -257,10 +269,12 @@ function registerAction(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             error:
                 "Action handler must be a function."
+
         };
     }
 
@@ -278,7 +292,9 @@ function registerAction(
 
 
     customActions.set(
+
         name,
+
         {
 
             handler,
@@ -296,12 +312,14 @@ function registerAction(
                 )
 
         }
+
     );
 
 
     return {
 
-        success: true,
+        success:
+            true,
 
         action:
             name,
@@ -311,6 +329,7 @@ function registerAction(
 
         requiresApproval:
             permission.requiresApproval
+
     };
 }
 
@@ -337,10 +356,12 @@ function unregisterAction(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             error:
                 "Action is not registered."
+
         };
     }
 
@@ -352,10 +373,12 @@ function unregisterAction(
 
     return {
 
-        success: true,
+        success:
+            true,
 
         action:
             name
+
     };
 }
 
@@ -369,70 +392,84 @@ function listActions() {
     const builtIn =
         Object.keys(
             ACTION_MAP
-        ).map(
-            action => {
+        )
+            .map(
+                action => {
 
-                const permission =
-                    permissions.check(
-                        action
-                    );
+                    const permission =
+                        permissions.check(
+                            action
+                        );
 
 
-                return {
+                    return {
 
-                    action,
+                        action,
 
-                    type:
-                        "built-in",
+                        type:
+                            "built-in",
 
-                    category:
-                        ACTION_MAP[action]
-                            .category,
+                        category:
+                            ACTION_MAP[
+                                action
+                            ].category,
 
-                    intent:
-                        ACTION_MAP[action]
-                            .intent,
+                        intent:
+                            ACTION_MAP[
+                                action
+                            ].intent,
 
-                    policy:
-                        permission.policy,
+                        policy:
+                            permission.policy,
 
-                    requiresApproval:
-                        permission.requiresApproval
+                        requiresApproval:
+                            permission.requiresApproval,
 
-                };
-            }
-        );
+                        protectedExternalAction:
+                            PROTECTED_EXTERNAL_ACTIONS
+                                .includes(
+                                    action
+                                )
+
+                    };
+                }
+            );
 
 
     const custom =
         Array.from(
             customActions.entries()
-        ).map(
-            ([action, config]) => ({
+        )
+            .map(
+                ([action, config]) => ({
 
-                action,
+                    action,
 
-                type:
-                    "custom",
+                    type:
+                        "custom",
 
-                policy:
-                    config.permission
-                        .policy,
+                    policy:
+                        config.permission
+                            .policy,
 
-                requiresApproval:
-                    config.permission
-                        .requiresApproval,
+                    requiresApproval:
+                        config.permission
+                            .requiresApproval,
 
-                description:
-                    config.description
+                    description:
+                        config.description,
 
-            })
-        );
+                    protectedExternalAction:
+                        false
+
+                })
+            );
 
 
     return {
 
-        success: true,
+        success:
+            true,
 
         actions:
             [
@@ -443,6 +480,7 @@ function listActions() {
         count:
             builtIn.length +
             custom.length
+
     };
 }
 
@@ -469,7 +507,7 @@ function resolvePermission(
 
 
 // ============================================================
-// VERIFY STEP APPROVAL
+// VERIFY APPROVAL
 // ============================================================
 
 function verifyApproval(
@@ -484,10 +522,12 @@ function verifyApproval(
 
         return {
 
-            approved: true,
+            approved:
+                true,
 
             requiresApproval:
                 false
+
         };
     }
 
@@ -495,10 +535,12 @@ function verifyApproval(
     return {
 
         approved:
-            step.approved === true,
+            step.approved ===
+            true,
 
         requiresApproval:
             true
+
     };
 }
 
@@ -520,20 +562,24 @@ function buildExecutorIntent(
 
 
     const mapped =
-        ACTION_MAP[action];
+        ACTION_MAP[
+            action
+        ];
 
 
     if (!mapped) {
 
         return {
 
-            success: false,
+            success:
+                false,
 
             error:
                 `No built-in intent mapping exists for action: ${action}`,
 
             intentData:
                 null
+
         };
     }
 
@@ -578,12 +624,6 @@ function buildExecutorIntent(
     };
 
 
-    // --------------------------------------------------------
-    // For explicitly mapped actions, preserve the planned
-    // category and intent instead of allowing generic keyword
-    // detection to silently change the execution path.
-    // --------------------------------------------------------
-
     const intentData = {
 
         success:
@@ -617,6 +657,7 @@ function buildExecutorIntent(
 
             agentAction:
                 action
+
         }
 
     };
@@ -624,9 +665,227 @@ function buildExecutorIntent(
 
     return {
 
-        success: true,
+        success:
+            true,
 
         intentData
+
+    };
+}
+
+
+// ============================================================
+// CONTROLLED PROTECTED ACTION
+// ============================================================
+//
+// IMPORTANT:
+//
+// These actions are approval-protected but not yet wired to
+// real external connectors.
+//
+// AarHen therefore:
+// 1. Re-checks permission.
+// 2. Confirms approval.
+// 3. Creates a safe handoff.
+// 4. Does NOT claim that the real external action happened.
+//
+// Later:
+// email / WhatsApp / filesystem connectors can replace
+// this handoff implementation.
+// ============================================================
+
+async function executeProtectedAction(
+    task,
+    step,
+    context,
+    permission
+) {
+
+    const action =
+        safeString(
+            step.action
+        );
+
+
+    if (
+        !PROTECTED_EXTERNAL_ACTIONS
+            .includes(
+                action
+            )
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            action,
+
+            error:
+                "Action is not recognized as a protected external action.",
+
+            executionStatus:
+                "invalid-protected-action"
+
+        };
+    }
+
+
+    if (
+        permission.policy !==
+        "ASK"
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            action,
+
+            error:
+                "Protected action permission policy is invalid.",
+
+            executionStatus:
+                "permission-policy-error"
+
+        };
+    }
+
+
+    if (
+        step.approved !==
+        true
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            action,
+
+            requiresApproval:
+                true,
+
+            error:
+                "Protected external action requires approval.",
+
+            executionStatus:
+                "approval-required"
+
+        };
+    }
+
+
+    if (
+        task.stopRequested ===
+        true
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            action,
+
+            stopped:
+                true,
+
+            error:
+                "Task stop was requested.",
+
+            executionStatus:
+                "task-stopped"
+
+        };
+    }
+
+
+    if (
+        task.pauseRequested ===
+        true
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            action,
+
+            paused:
+                true,
+
+            error:
+                "Task is paused.",
+
+            executionStatus:
+                "task-paused"
+
+        };
+    }
+
+
+    const stepInput =
+        safeObject(
+            step.input
+        );
+
+
+    return {
+
+        success:
+            true,
+
+        action,
+
+        executed:
+            false,
+
+        externalExecution:
+            false,
+
+        awaitingIntegration:
+            true,
+
+        requiresApproval:
+            true,
+
+        approved:
+            true,
+
+        handoff: {
+
+            taskId:
+                task.id,
+
+            agentId:
+                task.agentId,
+
+            stepId:
+                step.id,
+
+            action,
+
+            request:
+                stepInput.request ||
+                task.request,
+
+            input:
+                clone(
+                    stepInput
+                )
+
+        },
+
+        message:
+            `Protected action "${action}" was approved and prepared for external connector integration. No external action was sent or changed by this layer.`,
+
+        executionStatus:
+            "protected-action-prepared"
+
     };
 }
 
@@ -643,9 +902,13 @@ async function executeBuiltIn(
 
     const executorIntent =
         buildExecutorIntent(
+
             task,
+
             step,
+
             context
+
         );
 
 
@@ -664,14 +927,38 @@ async function executeBuiltIn(
 
 
     // --------------------------------------------------------
-    // Research protection
+    // Protected external actions
     // --------------------------------------------------------
-    //
-    // The Skill Executor expects research context for a
-    // research step. It does not perform a second search.
-    //
-    // Therefore this runner only executes a research action
-    // when research context is already available.
+
+    if (
+        PROTECTED_EXTERNAL_ACTIONS
+            .includes(
+                action
+            )
+    ) {
+
+        const permission =
+            resolvePermission(
+                step
+            );
+
+
+        return executeProtectedAction(
+
+            task,
+
+            step,
+
+            context,
+
+            permission
+
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Research protection
     // --------------------------------------------------------
 
     if (
@@ -699,7 +986,8 @@ async function executeBuiltIn(
 
             return {
 
-                success: false,
+                success:
+                    false,
 
                 action,
 
@@ -708,6 +996,7 @@ async function executeBuiltIn(
 
                 executionStatus:
                     "research-context-required"
+
             };
         }
     }
@@ -717,7 +1006,10 @@ async function executeBuiltIn(
 
         const result =
             await executor.executeIntent(
-                executorIntent.intentData
+
+                executorIntent
+                    .intentData
+
             );
 
 
@@ -741,7 +1033,8 @@ async function executeBuiltIn(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             action,
 
@@ -751,6 +1044,7 @@ async function executeBuiltIn(
 
             executionStatus:
                 "executor-error"
+
         };
     }
 }
@@ -775,10 +1069,12 @@ async function executeCustomAction(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             error:
                 "Custom action handler is not available."
+
         };
     }
 
@@ -832,7 +1128,8 @@ async function executeCustomAction(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             action:
                 step.action,
@@ -843,6 +1140,7 @@ async function executeCustomAction(
 
             executionStatus:
                 "custom-action-error"
+
         };
     }
 }
@@ -881,12 +1179,14 @@ function createRunner(
         if (
             effectivePermission.policy ===
             "ASK" &&
-            step.approved !== true
+            step.approved !==
+            true
         ) {
 
             return {
 
-                success: false,
+                success:
+                    false,
 
                 requiresApproval:
                     true,
@@ -899,6 +1199,7 @@ function createRunner(
 
                 executionStatus:
                     "approval-required"
+
             };
         }
 
@@ -914,15 +1215,18 @@ function createRunner(
 
             return {
 
-                success: false,
+                success:
+                    false,
 
-                stopped: true,
+                stopped:
+                    true,
 
                 error:
                     "Task stop was requested.",
 
                 executionStatus:
                     "task-stopped"
+
             };
         }
 
@@ -938,15 +1242,18 @@ function createRunner(
 
             return {
 
-                success: false,
+                success:
+                    false,
 
-                paused: true,
+                paused:
+                    true,
 
                 error:
                     "Task is paused.",
 
                 executionStatus:
                     "task-paused"
+
             };
         }
 
@@ -972,10 +1279,12 @@ function createRunner(
                     ...context,
 
                     taskContext:
-                        task.context || {},
+                        task.context ||
+                        {},
 
                     stepInput:
-                        step.input || {}
+                        step.input ||
+                        {}
 
                 },
 
@@ -1008,10 +1317,12 @@ function createRunner(
                     ...context,
 
                     taskContext:
-                        task.context || {},
+                        task.context ||
+                        {},
 
                     stepInput:
-                        step.input || {}
+                        step.input ||
+                        {}
 
                 }
 
@@ -1025,7 +1336,8 @@ function createRunner(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             action:
                 step.action,
@@ -1035,6 +1347,7 @@ function createRunner(
 
             executionStatus:
                 "unknown-action"
+
         };
     };
 }
@@ -1111,16 +1424,6 @@ async function runTask(
 // ============================================================
 // CREATE + RUN TASK
 // ============================================================
-//
-// Convenience method:
-//
-// 1. Agent Manager task create
-// 2. Planner attaches plan
-// 3. Runner executes
-//
-// Planner is injected by caller so this module does not
-// create a circular dependency automatically.
-// ============================================================
 
 async function createAndRunTask(
     planner,
@@ -1137,10 +1440,12 @@ async function createAndRunTask(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             error:
                 "A valid Agent Planner is required."
+
         };
     }
 
@@ -1163,7 +1468,8 @@ async function createAndRunTask(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             stage:
                 "planning",
@@ -1186,7 +1492,8 @@ async function createAndRunTask(
 
         return {
 
-            success: false,
+            success:
+                false,
 
             stage:
                 "task-creation",
@@ -1202,12 +1509,14 @@ async function createAndRunTask(
 
     if (
         planned.task.status ===
-        agentManager.TASK_STATES.WAITING_APPROVAL
+        agentManager.TASK_STATES
+            .WAITING_APPROVAL
     ) {
 
         return {
 
-            success: true,
+            success:
+                true,
 
             waitingApproval:
                 true,
@@ -1290,7 +1599,8 @@ function getTaskStatus(
             .filter(
                 step =>
                     step.status ===
-                    agentManager.STEP_STATES.COMPLETED
+                    agentManager.STEP_STATES
+                        .COMPLETED
             )
             .length;
 
@@ -1302,7 +1612,8 @@ function getTaskStatus(
             .filter(
                 step =>
                     step.status ===
-                    agentManager.STEP_STATES.FAILED
+                    agentManager.STEP_STATES
+                        .FAILED
             )
             .length;
 
@@ -1314,14 +1625,16 @@ function getTaskStatus(
             .filter(
                 step =>
                     step.status ===
-                    agentManager.STEP_STATES.PENDING
+                    agentManager.STEP_STATES
+                        .PENDING
             )
             .length;
 
 
     return {
 
-        success: true,
+        success:
+            true,
 
         runnerVersion:
             AGENT_RUNNER_VERSION,
@@ -1376,13 +1689,16 @@ function getStatus() {
     const executorStatus =
         typeof executor.getStatus ===
         "function"
+
             ? executor.getStatus()
+
             : null;
 
 
     return {
 
-        success: true,
+        success:
+            true,
 
         version:
             AGENT_RUNNER_VERSION,
@@ -1425,6 +1741,25 @@ function getStatus() {
 
         },
 
+        protectedExternalActions: {
+
+            count:
+                PROTECTED_EXTERNAL_ACTIONS
+                    .length,
+
+            actions:
+                [
+                    ...PROTECTED_EXTERNAL_ACTIONS
+                ],
+
+            externalExecutionConnected:
+                false,
+
+            mode:
+                "safe-handoff"
+
+        },
+
         actionCount:
             listActions().count,
 
@@ -1438,10 +1773,6 @@ function getStatus() {
 // ============================================================
 // RESET
 // ============================================================
-//
-// Primarily useful for tests.
-// Does not reset Agent Manager itself.
-// ============================================================
 
 function reset() {
 
@@ -1450,10 +1781,12 @@ function reset() {
 
     return {
 
-        success: true,
+        success:
+            true,
 
         status:
             "agent-runner-reset"
+
     };
 }
 
@@ -1468,6 +1801,8 @@ module.exports = {
 
     ACTION_MAP,
 
+    PROTECTED_EXTERNAL_ACTIONS,
+
     registerAction,
 
     unregisterAction,
@@ -1479,6 +1814,8 @@ module.exports = {
     verifyApproval,
 
     buildExecutorIntent,
+
+    executeProtectedAction,
 
     createRunner,
 
