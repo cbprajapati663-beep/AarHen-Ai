@@ -1,0 +1,92 @@
+name: AarHen Checkpoint Task Deletion Isolation Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-task-deletion-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify task checkpoint deletion isolation
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "delete-isolation-agent",
+            name: "Checkpoint deletion isolation test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          for (const id of ["delete-isolation-task-a", "delete-isolation-task-b"]) {
+            const created = manager.createTask(
+              "delete-isolation-agent",
+              "Checkpoint deletion isolation " + id,
+              { id }
+            );
+            assert(created.success, "Task creation failed: " + id);
+            assert(manager.startTask(id).success, "Task start failed: " + id);
+          }
+
+          assert(bridge.saveTaskCheckpoint("delete-isolation-task-a", {
+            id: "delete-isolation-a-1"
+          }).success, "First task A checkpoint save failed.");
+
+          assert(bridge.saveTaskCheckpoint("delete-isolation-task-a", {
+            id: "delete-isolation-a-2"
+          }).success, "Second task A checkpoint save failed.");
+
+          assert(bridge.saveTaskCheckpoint("delete-isolation-task-b", {
+            id: "delete-isolation-b-1"
+          }).success, "Task B checkpoint save failed.");
+
+          const deleted = bridge.deleteTaskCheckpoints("delete-isolation-task-a");
+          assert(deleted.success && deleted.deleted === 2,
+            "Deleting task A checkpoints should remove exactly two checkpoints.");
+
+          const taskACheckpoints = bridge.listCheckpoints("delete-isolation-task-a");
+          assert(taskACheckpoints.success && taskACheckpoints.count === 0,
+            "Task A checkpoints remain after deletion.");
+
+          const taskBCheckpoints = bridge.listCheckpoints("delete-isolation-task-b");
+          assert(taskBCheckpoints.success && taskBCheckpoints.count === 1,
+            "Deleting task A checkpoints affected task B checkpoint history.");
+
+          const taskBLatest = bridge.getLatestCheckpoint("delete-isolation-task-b");
+          assert(taskBLatest.success && taskBLatest.checkpoint.id === "delete-isolation-b-1",
+            "Task B latest checkpoint was not preserved.");
+
+          const taskA = manager.getTask("delete-isolation-task-a");
+          const taskB = manager.getTask("delete-isolation-task-b");
+          assert(taskA.success && taskA.task.status === "running",
+            "Deleting checkpoints changed task A live state.");
+          assert(taskB.success && taskB.task.status === "running",
+            "Deleting checkpoints changed task B live state.");
+
+          console.log("Checkpoint task deletion isolation tests passed.");
+          console.log(JSON.stringify({
+            deletedTaskACheckpoints: deleted.deleted,
+            remainingTaskACheckpoints: taskACheckpoints.count,
+            remainingTaskBCheckpoints: taskBCheckpoints.count,
+            taskBLatestCheckpoint: taskBLatest.checkpoint.id,
+            taskAStatus: taskA.task.status,
+            taskBStatus: taskB.task.status
+          }, null, 2));
+          NODE
