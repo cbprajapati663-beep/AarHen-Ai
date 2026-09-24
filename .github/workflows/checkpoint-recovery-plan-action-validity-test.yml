@@ -1,0 +1,55 @@
+name: AarHen Recovery Plan Action Validity Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  recovery-plan-action-validity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify plan action matches recovery eligibility
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          engine.reset();
+
+          const active = engine.saveCheckpoint({
+            id: "action-validity-active",
+            status: "running",
+            steps: [{ id: "pending-step", status: "pending" }]
+          }, { id: "action-validity-active-checkpoint" });
+          assert(active.success, "Active checkpoint save failed.");
+
+          const activePlan = engine.buildRecoveryPlan("action-validity-active");
+          assert(activePlan.success && activePlan.recoverable,
+            "Active task should have a recoverable plan.");
+          assert(activePlan.plan.action === "resume-from-checkpoint",
+            "Recoverable plan must use resume-from-checkpoint action.");
+
+          const completed = engine.saveCheckpoint({
+            id: "action-validity-completed",
+            status: "completed",
+            steps: [{ id: "done-step", status: "completed" }]
+          }, { id: "action-validity-completed-checkpoint" });
+          assert(completed.success, "Completed checkpoint save failed.");
+
+          const completedPlan = engine.buildRecoveryPlan("action-validity-completed");
+          assert(completedPlan.success && completedPlan.recoverable === false,
+            "Completed task must not be recoverable.");
+          assert(completedPlan.plan.action === "no-recovery",
+            "Non-recoverable plan must use no-recovery action.");
+
+          console.log("Recovery plan action validity tests passed.");
+          NODE
