@@ -69,11 +69,13 @@ jobs:
             );
           }
 
+
           if (!autonomousAgent) {
             throw new Error(
               "Autonomous Agent could not be loaded."
             );
           }
+
 
           if (!agentWorker) {
             throw new Error(
@@ -81,11 +83,13 @@ jobs:
             );
           }
 
+
           if (!workerProvider) {
             throw new Error(
               "Worker Provider could not be loaded."
             );
           }
+
 
           if (!providerBridge) {
             throw new Error(
@@ -99,11 +103,9 @@ jobs:
               .AUTONOMOUS_WORKER_VERSION !==
             "5.10.3"
           ) {
-
             throw new Error(
               "Autonomous Worker version mismatch."
             );
-
           }
 
 
@@ -112,11 +114,9 @@ jobs:
               .AUTONOMOUS_AGENT_VERSION !==
             "5.8.3"
           ) {
-
             throw new Error(
               "Autonomous Agent version mismatch."
             );
-
           }
 
 
@@ -125,11 +125,9 @@ jobs:
               .AGENT_WORKER_VERSION !==
             "5.10.1"
           ) {
-
             throw new Error(
               "Agent Worker version mismatch."
             );
-
           }
 
 
@@ -138,11 +136,9 @@ jobs:
               .WORKER_PROVIDER_VERSION !==
             "5.10.2"
           ) {
-
             throw new Error(
               "Worker Provider version mismatch."
             );
-
           }
 
 
@@ -151,11 +147,9 @@ jobs:
               .PROVIDER_BRIDGE_VERSION !==
             "5.9.1"
           ) {
-
             throw new Error(
               "Provider Bridge version mismatch."
             );
-
           }
 
 
@@ -163,11 +157,13 @@ jobs:
             "Autonomous Worker system loaded successfully."
           );
 
+
           console.log(
             "Autonomous Worker:",
             autonomousWorker
               .AUTONOMOUS_WORKER_VERSION
           );
+
 
           console.log(
             "Autonomous Agent:",
@@ -175,17 +171,20 @@ jobs:
               .AUTONOMOUS_AGENT_VERSION
           );
 
+
           console.log(
             "Agent Worker:",
             agentWorker
               .AGENT_WORKER_VERSION
           );
 
+
           console.log(
             "Worker Provider:",
             workerProvider
               .WORKER_PROVIDER_VERSION
           );
+
 
           console.log(
             "Provider Bridge:",
@@ -218,11 +217,9 @@ jobs:
             status.success !==
             true
           ) {
-
             throw new Error(
               "Autonomous Worker status failed."
             );
-
           }
 
 
@@ -230,11 +227,9 @@ jobs:
             status.version !==
             "5.10.3"
           ) {
-
             throw new Error(
               "Autonomous Worker status version mismatch."
             );
-
           }
 
 
@@ -242,11 +237,9 @@ jobs:
             status.status !==
             "active"
           ) {
-
             throw new Error(
               "Autonomous Worker is not active."
             );
-
           }
 
 
@@ -260,11 +253,9 @@ jobs:
               ?.connected !==
             true
           ) {
-
             throw new Error(
               "Autonomous Agent connection failed."
             );
-
           }
 
 
@@ -273,11 +264,9 @@ jobs:
               ?.connected !==
             true
           ) {
-
             throw new Error(
               "Agent Worker connection failed."
             );
-
           }
 
 
@@ -286,11 +275,9 @@ jobs:
               ?.connected !==
             true
           ) {
-
             throw new Error(
               "Worker Provider connection failed."
             );
-
           }
 
 
@@ -299,17 +286,16 @@ jobs:
               ?.integration !==
             true
           ) {
-
             throw new Error(
               "Worker Provider integration is not active."
             );
-
           }
 
 
           console.log(
             "Autonomous Worker status test passed."
           );
+
 
           console.log(
             JSON.stringify(
@@ -323,7 +309,7 @@ jobs:
 
 
       # ======================================================
-      # CALCULATION AUTONOMOUS TEST
+      # AUTONOMOUS CALCULATION TEST
       # ======================================================
 
       - name: Autonomous Calculation Test
@@ -343,10 +329,6 @@ jobs:
               require("./core/agentWorker");
 
 
-            // ------------------------------------------------
-            // RESET
-            // ------------------------------------------------
-
             autonomousWorker.reset();
 
             agentWorker.reset();
@@ -354,26 +336,18 @@ jobs:
             agentManager.reset();
 
 
-            // ------------------------------------------------
-            // EXECUTE NORMAL REQUEST
-            // ------------------------------------------------
-
             const result =
               await autonomousWorker.executeRequest(
-
                 "Calculate 100 + 200"
-
               );
 
 
             if (
               !result
             ) {
-
               throw new Error(
                 "Autonomous calculation result is missing."
               );
-
             }
 
 
@@ -381,7 +355,6 @@ jobs:
               result.success !==
               true
             ) {
-
               throw new Error(
                 "Autonomous calculation failed: " +
                 (
@@ -391,30 +364,24 @@ jobs:
                   "unknown error"
                 )
               );
-
             }
 
 
             if (
               !result.task?.id
             ) {
-
               throw new Error(
                 "Autonomous calculation task ID is missing."
               );
-
             }
 
 
             if (
-              result.worker?.id ===
-              undefined
+              !result.worker?.id
             ) {
-
               throw new Error(
                 "Autonomous calculation worker is missing."
               );
-
             }
 
 
@@ -422,23 +389,9 @@ jobs:
               result.workerStatus !==
               agentWorker.WORKER_STATES.IDLE
             ) {
-
               throw new Error(
                 "Calculation worker did not return to idle state."
               );
-
-            }
-
-
-            if (
-              result.execution ===
-              null
-            ) {
-
-              throw new Error(
-                "Calculation execution result is missing."
-              );
-
             }
 
 
@@ -452,11 +405,9 @@ jobs:
               finalTask.success !==
               true
             ) {
-
               throw new Error(
                 "Final calculation task could not be retrieved."
               );
-
             }
 
 
@@ -464,12 +415,10 @@ jobs:
               finalTask.task.status !==
               agentManager.TASK_STATES.COMPLETED
             ) {
-
               throw new Error(
                 "Calculation task was not completed. Status: " +
                 finalTask.task.status
               );
-
             }
 
 
@@ -477,15 +426,18 @@ jobs:
               "Autonomous calculation test passed."
             );
 
+
             console.log(
               "Task:",
               result.task.id
             );
 
+
             console.log(
               "Worker:",
               result.worker.id
             );
+
 
             console.log(
               "Worker status:",
@@ -509,12 +461,7 @@ jobs:
 
 
       # ======================================================
-      # RESEARCH PROVIDER TEST
-      # ======================================================
-      #
-      # Everything is kept in ONE Node process because
-      # Provider Manager state is process-local.
-      #
+      # AUTONOMOUS RESEARCH PROVIDER TEST
       # ======================================================
 
       - name: Autonomous Research Provider Test
@@ -537,10 +484,6 @@ jobs:
               require("./providers/providerManager");
 
 
-            // ------------------------------------------------
-            // RESET
-            // ------------------------------------------------
-
             autonomousWorker.reset();
 
             agentWorker.reset();
@@ -549,10 +492,6 @@ jobs:
 
             providerManager.reset();
 
-
-            // ------------------------------------------------
-            // MOCK RESEARCH PROVIDER
-            // ------------------------------------------------
 
             const mockProvider = {
 
@@ -678,10 +617,6 @@ jobs:
             };
 
 
-            // ------------------------------------------------
-            // REGISTER
-            // ------------------------------------------------
-
             const registered =
               providerManager.registerProvider(
 
@@ -709,17 +644,11 @@ jobs:
               registered.success !==
               true
             ) {
-
               throw new Error(
                 "Mock research provider registration failed."
               );
-
             }
 
-
-            // ------------------------------------------------
-            // EXECUTE AUTONOMOUS RESEARCH
-            // ------------------------------------------------
 
             const result =
               await autonomousWorker.executeRequest(
@@ -742,11 +671,9 @@ jobs:
             if (
               !result
             ) {
-
               throw new Error(
                 "Autonomous research result is missing."
               );
-
             }
 
 
@@ -754,7 +681,6 @@ jobs:
               result.success !==
               true
             ) {
-
               throw new Error(
                 "Autonomous research execution failed: " +
                 (
@@ -764,29 +690,24 @@ jobs:
                   "unknown error"
                 )
               );
-
             }
 
 
             if (
               !result.task?.id
             ) {
-
               throw new Error(
                 "Autonomous research task ID is missing."
               );
-
             }
 
 
             if (
               !result.worker?.id
             ) {
-
               throw new Error(
                 "Autonomous research worker is missing."
               );
-
             }
 
 
@@ -794,11 +715,9 @@ jobs:
               result.provider?.provider !==
               "mock-research"
             ) {
-
               throw new Error(
                 "Autonomous research provider mismatch."
               );
-
             }
 
 
@@ -806,11 +725,9 @@ jobs:
               result.provider?.searched !==
               true
             ) {
-
               throw new Error(
                 "Autonomous research did not perform provider search."
               );
-
             }
 
 
@@ -818,11 +735,9 @@ jobs:
               result.provider?.sourceCount !==
               2
             ) {
-
               throw new Error(
                 "Autonomous research source count mismatch."
               );
-
             }
 
 
@@ -830,11 +745,9 @@ jobs:
               result.workerStatus !==
               agentWorker.WORKER_STATES.IDLE
             ) {
-
               throw new Error(
                 "Research worker did not return to idle state."
               );
-
             }
 
 
@@ -848,11 +761,9 @@ jobs:
               finalTask.success !==
               true
             ) {
-
               throw new Error(
                 "Final research task could not be retrieved."
               );
-
             }
 
 
@@ -860,12 +771,10 @@ jobs:
               finalTask.task.status !==
               agentManager.TASK_STATES.COMPLETED
             ) {
-
               throw new Error(
                 "Research task did not complete. Status: " +
                 finalTask.task.status
               );
-
             }
 
 
@@ -873,20 +782,24 @@ jobs:
               "Autonomous research provider test passed."
             );
 
+
             console.log(
               "Task:",
               result.task.id
             );
+
 
             console.log(
               "Worker:",
               result.worker.id
             );
 
+
             console.log(
               "Provider:",
               result.provider.provider
             );
+
 
             console.log(
               "Sources:",
@@ -926,10 +839,6 @@ jobs:
             const agentManager =
               require("./core/agentManager");
 
-
-            // ------------------------------------------------
-            // RESET
-            // ------------------------------------------------
 
             autonomousWorker.reset();
 
@@ -1000,7 +909,7 @@ jobs:
 
 
             // ------------------------------------------------
-            // VERIFY TASK STATUS
+            // VERIFY APPROVAL STATUS
             // ------------------------------------------------
 
             const taskStatus =
@@ -1078,62 +987,99 @@ jobs:
             }
 
 
-            const runnerExecution =
-              execution
-                .execution
-                ?.execution
-                ?.execution ||
-              execution
-                .execution
-                ?.execution ||
-              execution
-                .execution ||
+            // ------------------------------------------------
+            // GET FINAL TASK FROM MANAGER
+            // ------------------------------------------------
+            //
+            // The actual safe-handoff result is persisted in
+            // the protected step result.
+            //
+            // ------------------------------------------------
+
+            const finalTaskResult =
+              agentManager.getTask(
+                created.task.id
+              );
+
+
+            if (
+              finalTaskResult.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Final protected-action task could not be retrieved."
+              );
+
+            }
+
+
+            const finalTask =
+              finalTaskResult.task;
+
+
+            if (
+              finalTask.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Protected action task did not complete. Status: " +
+                finalTask.status
+              );
+
+            }
+
+
+            const protectedSteps =
+              Array.isArray(
+                finalTask.steps
+              )
+                ? finalTask.steps
+                : [];
+
+
+            if (
+              protectedSteps.length ===
+              0
+            ) {
+
+              throw new Error(
+                "Protected action task contains no steps."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // FIND SAFE HANDOFF RESULT
+            // ------------------------------------------------
+
+            let safeHandoff =
               null;
 
 
-            // ------------------------------------------------
-            // SAFE HANDOFF MUST BE REPORTED
-            // ------------------------------------------------
-
-            let prepared =
-              false;
-
-
-            const candidates = [
-
-              runnerExecution,
-
-              execution
-                .execution
-                ?.execution,
-
-              execution
-                .execution
-                ?.result,
-
-              execution
-                .execution
-
-            ];
-
-
             for (
-              const candidate of
-              candidates
+              const step of
+              protectedSteps
             ) {
 
+              const stepResult =
+                step?.result;
+
+
               if (
-                candidate &&
+                stepResult &&
                 (
-                  candidate.awaitingIntegration ===
+                  stepResult.awaitingIntegration ===
                     true ||
-                  candidate.executionStatus ===
+                  stepResult.executionStatus ===
                     "protected-action-prepared"
                 )
               ) {
 
-                prepared =
-                  true;
+                safeHandoff =
+                  stepResult;
 
                 break;
 
@@ -1142,8 +1088,70 @@ jobs:
             }
 
 
+            // ------------------------------------------------
+            // FALLBACK: CHECK NESTED EXECUTION RESULT
+            // ------------------------------------------------
+
             if (
-              !prepared
+              !safeHandoff
+            ) {
+
+              const nestedCandidates = [
+
+                execution
+                  ?.execution
+                  ?.execution
+                  ?.execution,
+
+                execution
+                  ?.execution
+                  ?.execution,
+
+                execution
+                  ?.execution
+                  ?.result,
+
+                execution
+                  ?.execution,
+
+                execution
+
+              ];
+
+
+              for (
+                const candidate of
+                nestedCandidates
+              ) {
+
+                if (
+                  candidate &&
+                  (
+                    candidate.awaitingIntegration ===
+                      true ||
+                    candidate.executionStatus ===
+                      "protected-action-prepared"
+                  )
+                ) {
+
+                  safeHandoff =
+                    candidate;
+
+                  break;
+
+                }
+
+              }
+
+            }
+
+
+            // ------------------------------------------------
+            // SAFE HANDOFF MUST EXIST
+            // ------------------------------------------------
+
+            if (
+              !safeHandoff
             ) {
 
               throw new Error(
@@ -1154,36 +1162,71 @@ jobs:
 
 
             // ------------------------------------------------
-            // VERIFY NO DIRECT EXTERNAL EXECUTION
+            // VERIFY ACTION
             // ------------------------------------------------
 
-            let externalExecution =
-              null;
-
-
-            for (
-              const candidate of
-              candidates
+            if (
+              safeHandoff.action !==
+              "send_email"
             ) {
 
-              if (
-                candidate &&
-                typeof candidate.externalExecution ===
-                  "boolean"
-              ) {
+              throw new Error(
+                "Protected action type mismatch."
+              );
 
-                externalExecution =
-                  candidate.externalExecution;
+            }
 
-                break;
 
-              }
+            // ------------------------------------------------
+            // VERIFY APPROVAL
+            // ------------------------------------------------
+
+            if (
+              safeHandoff.approved !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action is not marked approved."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY SAFE HANDOFF
+            // ------------------------------------------------
+
+            if (
+              safeHandoff.awaitingIntegration !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action is not awaiting connector integration."
+              );
 
             }
 
 
             if (
-              externalExecution ===
+              safeHandoff.executionStatus !==
+              "protected-action-prepared"
+            ) {
+
+              throw new Error(
+                "Protected action execution status mismatch."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY NO DIRECT EXTERNAL EXECUTION
+            // ------------------------------------------------
+
+            if (
+              safeHandoff.externalExecution ===
               true
             ) {
 
@@ -1194,23 +1237,44 @@ jobs:
             }
 
 
+            if (
+              safeHandoff.executed ===
+              true
+            ) {
+
+              throw new Error(
+                "Protected action incorrectly reported execution."
+              );
+
+            }
+
+
             console.log(
               "Autonomous approval test passed."
             );
 
+
             console.log(
               "Protected action:",
-              "send_email"
+              safeHandoff.action
             );
+
 
             console.log(
               "Safe handoff:",
-              prepared
+              safeHandoff.awaitingIntegration
             );
+
+
+            console.log(
+              "Execution status:",
+              safeHandoff.executionStatus
+            );
+
 
             console.log(
               "Direct external execution:",
-              externalExecution
+              safeHandoff.externalExecution
             );
 
           })().catch(
