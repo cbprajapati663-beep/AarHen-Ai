@@ -1,0 +1,112 @@
+name: AarHen Worker Cancel Task Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/agentWorker.js"
+      - ".github/workflows/worker-cancel-task-test.yml"
+
+jobs:
+  worker-cancel-task-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify active worker task cancellation
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          (async () => {
+            const workerApi = require("./core/agentWorker");
+            const manager = require("./core/agentManager");
+
+            workerApi.reset();
+
+            const workerResult = workerApi.createWorker({
+              id: "cancel-test-worker",
+              name: "Cancel Test Worker"
+            });
+            if (workerResult.success !== true) throw new Error("Worker creation failed.");
+
+            const agentResult = manager.createAgent({
+              id: "cancel-test-agent",
+              name: "Cancel Test Agent"
+            });
+            if (agentResult.success !== true) throw new Error("Agent creation failed.");
+
+            const taskResult = manager.createTask(agentResult.agent.id, {
+              request: "Verify cancellation of an active worker task"
+            });
+            if (taskResult.success !== true) throw new Error("Task creation failed.");
+
+            const stepResult = manager.addStep(taskResult.task.id, {
+              description: "Run cancellable task",
+              action: "calculate",
+              requiresApproval: false,
+              approved: true,
+              input: { value: 1 }
+            });
+            if (stepResult.success !== true) {
+              throw new Error("Step creation failed: " + (stepResult.error || "unknown error"));
+            }
+
+            const assigned = workerApi.assignTask(workerResult.worker.id, taskResult.task.id);
+            if (assigned.success !== true) {
+              throw new Error("Task assignment failed: " + (assigned.error || "unknown error"));
+            }
+
+            let markStarted;
+            let releaseRunner;
+            const started = new Promise(resolve => { markStarted = resolve; });
+            const runnerGate = new Promise(resolve => { releaseRunner = resolve; });
+
+            const running = workerApi.runAssignedTask(workerResult.worker.id, {
+              runner: async () => {
+                markStarted();
+                await runnerGate;
+                return { success: true, output: "runner released after cancellation" };
+              }
+            });
+
+            await started;
+
+            const cancelled = workerApi.cancelWorkerTask(workerResult.worker.id);
+            if (cancelled.success !== true) {
+              throw new Error("Active task cancellation failed: " + (cancelled.error || "unknown error"));
+            }
+            if (cancelled.worker?.activeTaskId !== null) {
+              throw new Error("Worker retained activeTaskId after cancellation.");
+            }
+            if (cancelled.worker?.status !== workerApi.WORKER_STATES.IDLE) {
+              throw new Error("Worker did not return to idle after cancellation.");
+            }
+            if (cancelled.task?.status && !String(cancelled.task.status).toLowerCase().includes("cancel")) {
+              throw new Error("Task status does not indicate cancellation: " + cancelled.task.status);
+            }
+
+            const queue = workerApi.getQueue(workerResult.worker.id);
+            if (queue.success !== true || queue.queue.includes(taskResult.task.id)) {
+              throw new Error("Cancelled task remained in worker queue.");
+            }
+
+            releaseRunner();
+            await running;
+
+            console.log("Worker active task cancellation test passed.");
+            console.log(JSON.stringify({
+              cancellationSucceeded: cancelled.success,
+              workerStatusAfterCancel: cancelled.worker.status,
+              activeTaskCleared: cancelled.worker.activeTaskId === null,
+              taskRemovedFromQueue: !queue.queue.includes(taskResult.task.id)
+            }, null, 2));
+          })().catch(error => {
+            console.error(error);
+            process.exitCode = 1;
+          });
+          NODE
