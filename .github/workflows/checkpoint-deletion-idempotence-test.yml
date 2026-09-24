@@ -1,0 +1,79 @@
+name: AarHen Checkpoint Deletion Idempotence Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-deletion-idempotence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify repeated and invalid deletion behavior
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "delete-idempotence-agent",
+            name: "Checkpoint deletion idempotence test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "delete-idempotence-agent",
+            "Checkpoint deletion idempotence",
+            { id: "delete-idempotence-task" }
+          );
+          assert(created.success, "Task creation failed.");
+          assert(manager.startTask("delete-idempotence-task").success,
+            "Task start failed.");
+
+          assert(bridge.saveTaskCheckpoint("delete-idempotence-task", {
+            id: "delete-idempotence-checkpoint"
+          }).success, "Checkpoint save failed.");
+
+          const first = bridge.deleteTaskCheckpoints("delete-idempotence-task");
+          assert(first.success && first.deleted === 1,
+            "First deletion should remove exactly one checkpoint.");
+
+          const second = bridge.deleteTaskCheckpoints("delete-idempotence-task");
+          assert(second.success && second.deleted === 0,
+            "Repeated deletion should succeed without deleting anything.");
+
+          const remaining = bridge.listCheckpoints("delete-idempotence-task");
+          assert(remaining.success && remaining.count === 0,
+            "Checkpoint unexpectedly remains after repeated deletion.");
+
+          const invalid = bridge.deleteTaskCheckpoints("   ");
+          assert(invalid.success === false && invalid.error === "Task ID is required.",
+            "Blank task ID should be rejected.");
+
+          const task = manager.getTask("delete-idempotence-task");
+          assert(task.success && task.task.status === "running",
+            "Checkpoint deletion changed the live task state.");
+
+          console.log("Checkpoint deletion idempotence tests passed.");
+          console.log(JSON.stringify({
+            firstDeleted: first.deleted,
+            secondDeleted: second.deleted,
+            remainingCheckpoints: remaining.count,
+            blankTaskIdRejected: !invalid.success,
+            liveTaskStatus: task.task.status
+          }, null, 2));
+          NODE
