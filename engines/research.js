@@ -2,35 +2,16 @@
  * AARHEN CORE v5
  * Research Engine
  *
- * Version: 5.5.1
+ * Version: 5.5.2
  *
- * Features:
- * - Web Research Result Processing
- * - Source Validation
- * - Duplicate Source Detection
- * - Source Comparison
- * - Conflict Detection
- * - Claim Extraction
- * - Evidence Mapping
- * - Claim Confidence
- * - Evidence Strength
- * - Source Quality Scoring
- * - Source Authority Classification
- * - Source Freshness Scoring
- * - Source Independence Scoring
- * - Source Diversity Scoring
- * - Semantic-style Claim Validation
- * - Context / Negation Analysis
- * - Claim Provenance
- * - Evidence Traceability
- * - Verification-aware Confidence
- * - Verified Learning
+ * Research verification is evidence-driven. Provider/search scores
+ * are treated as retrieval signals, not as final truth confidence.
  */
 
 const verification = require("../core/verification");
 const learning = require("../core/learning");
 
-const RESEARCH_VERSION = "5.5.1";
+const RESEARCH_VERSION = "5.5.2";
 
 const MIN_VERIFIED_SOURCES = 2;
 const MIN_VERIFIED_CONFIDENCE = 0.80;
@@ -42,10 +23,6 @@ const MIN_CLAIM_CONFIDENCE = 0.60;
 
 const HIGH_EVIDENCE_SCORE = 0.75;
 const MEDIUM_EVIDENCE_SCORE = 0.50;
-
-/* =========================================================
-   WEIGHTS
-========================================================= */
 
 const AUTHORITY_WEIGHTS = {
     official: 1.00,
@@ -74,10 +51,6 @@ const INDEPENDENCE_WEIGHTS = {
     unknown: 0.50
 };
 
-/* =========================================================
-   BASIC HELPERS
-========================================================= */
-
 function normalize(value) {
     if (value === null || value === undefined) {
         return "";
@@ -93,14 +66,40 @@ function clamp(value, min = 0, max = 1) {
         return min;
     }
 
-    return Math.min(max, Math.max(min, number));
+    return Math.min(
+        max,
+        Math.max(min, number)
+    );
+}
+
+function safeArray(value) {
+    return Array.isArray(value)
+        ? value
+        : [];
+}
+
+function safeObject(value) {
+    return value &&
+        typeof value === "object"
+        ? value
+        : {};
 }
 
 function normalizeText(value) {
     return normalize(value)
         .toLowerCase()
-        .replace(/[^\p{L}\p{N}\s]/gu, " ")
-        .replace(/\s+/g, " ")
+        .replace(
+            /https?:\/\/\S+/g,
+            " "
+        )
+        .replace(
+            /[^\p{L}\p{N}\s]/gu,
+            " "
+        )
+        .replace(
+            /\s+/g,
+            " "
+        )
         .trim();
 }
 
@@ -111,47 +110,55 @@ function tokenize(value) {
 }
 
 function unique(array = []) {
-    return [...new Set(array)];
+    return [
+        ...new Set(array)
+    ];
 }
 
-function safeArray(value) {
-    return Array.isArray(value) ? value : [];
-}
+function calculateTextTokenSimilarity(
+    a,
+    b
+) {
+    const tokensA =
+        unique(
+            tokenize(a)
+        );
 
-function safeObject(value) {
-    return value && typeof value === "object" ? value : {};
-}
+    const tokensB =
+        unique(
+            tokenize(b)
+        );
 
-/* =========================================================
-   TEXT SIMILARITY
-========================================================= */
-
-function calculateTextTokenSimilarity(a, b) {
-    const tokensA = unique(tokenize(a));
-    const tokensB = unique(tokenize(b));
-
-    if (!tokensA.length || !tokensB.length) {
+    if (
+        !tokensA.length ||
+        !tokensB.length
+    ) {
         return 0;
     }
 
-    const setB = new Set(tokensB);
+    const setB =
+        new Set(tokensB);
 
     let common = 0;
 
-    for (const token of tokensA) {
-        if (setB.has(token)) {
+    for (
+        const token of tokensA
+    ) {
+        if (
+            setB.has(token)
+        ) {
             common++;
         }
     }
 
     return clamp(
-        common / Math.max(tokensA.length, tokensB.length)
+        common /
+        Math.max(
+            tokensA.length,
+            tokensB.length
+        )
     );
 }
-
-/* =========================================================
-   RESEARCH REQUEST
-========================================================= */
 
 function createResearchRequest({
     query = "",
@@ -161,42 +168,111 @@ function createResearchRequest({
     verificationRequired = true,
     learningEnabled = true
 } = {}) {
+
     return {
+
         success: true,
-        version: RESEARCH_VERSION,
-        query: normalize(query),
-        maxSources: Math.max(1, Number(maxSources) || 5),
-        language: normalize(language) || "en",
+
+        version:
+            RESEARCH_VERSION,
+
+        query:
+            normalize(query),
+
+        maxSources:
+            Math.max(
+                1,
+                Number(maxSources) || 5
+            ),
+
+        language:
+            normalize(language) || "en",
 
         providerRequired,
+
         verificationRequired,
+
         learningEnabled,
 
-        claimExtraction: true,
-        evidenceMapping: true,
-        sourceQualityScoring: true,
-        authorityScoring: true,
-        freshnessScoring: true,
-        claimProvenance: true,
-        evidenceTraceability: true,
-        sourceIndependenceScoring: true,
-        sourceDiversityScoring: true,
-        duplicateSourceDetection: true,
+        claimExtraction:
+            true,
 
-        semanticClaimValidation: true,
-        claimContextAnalysis: true,
-        negationDetection: true,
-        subjectActionObjectAnalysis: true,
-        validationAwareConfidence: true
+        evidenceMapping:
+            true,
+
+        sourceQualityScoring:
+            true,
+
+        authorityScoring:
+            true,
+
+        freshnessScoring:
+            true,
+
+        claimProvenance:
+            true,
+
+        evidenceTraceability:
+            true,
+
+        sourceIndependenceScoring:
+            true,
+
+        sourceDiversityScoring:
+            true,
+
+        duplicateSourceDetection:
+            true,
+
+        semanticClaimValidation:
+            true,
+
+        claimContextAnalysis:
+            true,
+
+        negationDetection:
+            true,
+
+        subjectActionObjectAnalysis:
+            true,
+
+        validationAwareConfidence:
+            true
     };
 }
 
-/* =========================================================
-   SOURCE NORMALIZATION
-========================================================= */
+function unwrapMarkdownUrl(
+    value
+) {
+    const text =
+        normalize(value);
 
-function normalizeSource(source = {}, index = 0) {
-    const item = safeObject(source);
+    const markdown =
+        text.match(
+            /\]\((https?:\/\/[^)]+)\)/i
+        );
+
+    if (markdown) {
+        return markdown[1];
+    }
+
+    const plain =
+        text.match(
+            /https?:\/\/[^\s)]+/i
+        );
+
+    return plain
+        ? plain[0]
+        : text;
+}
+
+function normalizeSource(
+    source = {},
+    index = 0
+) {
+
+    const item =
+        safeObject(source);
 
     const title =
         normalize(item.title) ||
@@ -204,9 +280,11 @@ function normalizeSource(source = {}, index = 0) {
         `Research Source ${index + 1}`;
 
     const url =
-        normalize(item.url) ||
-        normalize(item.link) ||
-        "";
+        unwrapMarkdownUrl(
+            normalize(item.url) ||
+            normalize(item.link) ||
+            ""
+        );
 
     const content =
         normalize(item.content) ||
@@ -217,7 +295,10 @@ function normalizeSource(source = {}, index = 0) {
 
     const snippet =
         normalize(item.snippet) ||
-        content.slice(0, 500);
+        content.slice(
+            0,
+            500
+        );
 
     const publisher =
         normalize(item.publisher) ||
@@ -226,99 +307,161 @@ function normalizeSource(source = {}, index = 0) {
         "";
 
     const publishedDate =
-        normalize(item.publishedDate) ||
+        normalize(
+            item.publishedDate
+        ) ||
+        normalize(
+            item.publishedAt
+        ) ||
         normalize(item.date) ||
-        normalize(item.published_at) ||
+        normalize(
+            item.published_at
+        ) ||
         "";
 
     const score =
-        Number.isFinite(Number(item.score))
-            ? clamp(Number(item.score))
+        Number.isFinite(
+            Number(item.score)
+        )
+            ? clamp(
+                Number(item.score)
+            )
             : 0.50;
 
     return {
+
         id:
             normalize(item.id) ||
             `source-${index + 1}`,
 
         title,
+
         url,
+
         content,
+
         snippet,
+
         publisher,
+
         publishedDate,
+
         score
     };
 }
 
-function validateSources(sources = []) {
-    const normalized = safeArray(sources)
-        .map((source, index) =>
-            normalizeSource(source, index)
-        )
-        .filter(source =>
-            source.title ||
-            source.url ||
-            source.content
-        );
+function validateSources(
+    sources = []
+) {
 
-    return normalized;
+    return safeArray(sources)
+
+        .map(
+            (source, index) =>
+                normalizeSource(
+                    source,
+                    index
+                )
+        )
+
+        .filter(
+            source =>
+                source.title ||
+                source.url ||
+                source.content
+        );
 }
 
-/* =========================================================
-   SOURCE DOMAIN
-========================================================= */
+function getSourceDomain(
+    url
+) {
 
-function getSourceDomain(url) {
-    const value = normalize(url);
+    const value =
+        unwrapMarkdownUrl(url);
 
     if (!value) {
         return "";
     }
 
     try {
-        return new URL(value).hostname
-            .replace(/^www\./i, "")
+
+        return new URL(value)
+            .hostname
+            .replace(
+                /^www\./i,
+                ""
+            )
             .toLowerCase();
+
     } catch {
+
         return "";
     }
 }
 
-function getSourceFingerprint(source = {}) {
-    const domain = getSourceDomain(source.url);
+function getSourceFingerprint(
+    source = {}
+) {
 
-    const title = normalizeText(source.title);
-    const content = normalizeText(
-        source.content || source.snippet
-    );
+    const item =
+        normalizeSource(source);
 
     return [
-        domain,
-        title,
-        content.slice(0, 250)
+
+        getSourceDomain(
+            item.url
+        ),
+
+        normalizeText(
+            item.title
+        ),
+
+        normalizeText(
+            item.content ||
+            item.snippet
+        ).slice(
+            0,
+            250
+        )
+
     ].join("|");
 }
 
-/* =========================================================
-   DUPLICATE SOURCE DETECTION
-========================================================= */
+function detectDuplicateSources(
+    sources = []
+) {
 
-function detectDuplicateSources(sources = []) {
-    const fingerprints = new Map();
+    const fingerprints =
+        new Map();
+
     const duplicateIds = [];
 
-    for (const source of sources) {
+    for (
+        const source of
+        validateSources(sources)
+    ) {
+
         const fingerprint =
-            getSourceFingerprint(source);
+            getSourceFingerprint(
+                source
+            );
 
         if (!fingerprint) {
             continue;
         }
 
-        if (fingerprints.has(fingerprint)) {
-            duplicateIds.push(source.id);
+        if (
+            fingerprints.has(
+                fingerprint
+            )
+        ) {
+
+            duplicateIds.push(
+                source.id
+            );
+
         } else {
+
             fingerprints.set(
                 fingerprint,
                 source.id
@@ -327,100 +470,170 @@ function detectDuplicateSources(sources = []) {
     }
 
     return {
-        duplicateSources: duplicateIds.length,
+
+        duplicateSources:
+            duplicateIds.length,
+
         duplicateIds
     };
 }
-
-/* =========================================================
-   SOURCE INDEPENDENCE
-========================================================= */
 
 function calculateSourceIndependence(
     source,
     allSources = []
 ) {
+
     const domain =
-        getSourceDomain(source.url);
+        getSourceDomain(
+            source &&
+            source.url
+        );
 
     if (!domain) {
+
         return {
-            classification: "unknown",
-            score: INDEPENDENCE_WEIGHTS.unknown
+
+            classification:
+                "unknown",
+
+            score:
+                INDEPENDENCE_WEIGHTS
+                    .unknown
         };
     }
 
     const sameDomainCount =
-        allSources.filter(item =>
-            getSourceDomain(item.url) === domain
+        safeArray(
+            allSources
+        ).filter(
+            item =>
+                getSourceDomain(
+                    item &&
+                    item.url
+                ) === domain
         ).length;
 
-    if (sameDomainCount <= 1) {
+    if (
+        sameDomainCount <= 1
+    ) {
+
         return {
-            classification: "independent",
-            score: INDEPENDENCE_WEIGHTS.independent
+
+            classification:
+                "independent",
+
+            score:
+                INDEPENDENCE_WEIGHTS
+                    .independent
         };
     }
 
     return {
-        classification: "related",
-        score: INDEPENDENCE_WEIGHTS.related
+
+        classification:
+            "related",
+
+        score:
+            INDEPENDENCE_WEIGHTS
+                .related
     };
 }
 
-/* =========================================================
-   AUTHORITY
-========================================================= */
+function classifySourceAuthority(
+    source = {}
+) {
 
-function classifySourceAuthority(source = {}) {
     const domain =
-        getSourceDomain(source.url);
+        getSourceDomain(
+            source.url
+        );
 
     const publisher =
-        normalizeText(source.publisher);
+        normalizeText(
+            source.publisher
+        );
 
     const value =
         `${domain} ${publisher}`;
 
     if (
-        domain.endsWith(".gov") ||
-        domain.includes(".gov.")
+        domain.endsWith(
+            ".gov"
+        ) ||
+        domain.includes(
+            ".gov."
+        )
     ) {
+
         return "government";
     }
 
     if (
-        domain.endsWith(".edu") ||
-        domain.includes(".ac.")
+        domain.endsWith(
+            ".edu"
+        ) ||
+        domain.includes(
+            ".ac."
+        )
     ) {
+
         return "educational";
     }
 
     if (
-        value.includes("official") ||
-        value.includes("ministry") ||
-        value.includes("government")
+        value.includes(
+            "official"
+        ) ||
+        value.includes(
+            "ministry"
+        ) ||
+        value.includes(
+            "government"
+        )
     ) {
+
         return "official";
     }
 
     if (
-        value.includes("reuters") ||
-        value.includes("bbc") ||
-        value.includes("associated press") ||
-        value.includes("apnews") ||
-        value.includes("bloomberg") ||
-        value.includes("financial times")
+        value.includes(
+            "reuters"
+        ) ||
+        value.includes(
+            "bbc"
+        ) ||
+        value.includes(
+            "associated press"
+        ) ||
+        value.includes(
+            "apnews"
+        ) ||
+        value.includes(
+            "bloomberg"
+        ) ||
+        value.includes(
+            "financial times"
+        )
     ) {
+
         return "majorNews";
     }
 
     if (
-        value.includes("university") ||
-        value.includes("institute") ||
-        value.includes("research") ||
-        value.includes("journal")
+        value.includes(
+            "university"
+        ) ||
+        value.includes(
+            "institute"
+        ) ||
+        value.includes(
+            "research"
+        ) ||
+        value.includes(
+            "journal"
+        )
     ) {
+
         return "research";
     }
 
@@ -428,90 +641,144 @@ function classifySourceAuthority(source = {}) {
         publisher ||
         domain
     ) {
+
         return "establishedOrganization";
     }
 
     return "unknown";
 }
 
-/* =========================================================
-   FRESHNESS
-========================================================= */
-
 function calculateFreshness(
     publishedDate
 ) {
+
     const value =
-        normalize(publishedDate);
+        normalize(
+            publishedDate
+        );
 
     if (!value) {
+
         return {
-            classification: "unknown",
-            score: FRESHNESS_WEIGHTS.unknown
+
+            classification:
+                "unknown",
+
+            score:
+                FRESHNESS_WEIGHTS
+                    .unknown
         };
     }
 
     const timestamp =
         Date.parse(value);
 
-    if (!Number.isFinite(timestamp)) {
+    if (
+        !Number.isFinite(
+            timestamp
+        )
+    ) {
+
         return {
-            classification: "unknown",
-            score: FRESHNESS_WEIGHTS.unknown
+
+            classification:
+                "unknown",
+
+            score:
+                FRESHNESS_WEIGHTS
+                    .unknown
         };
     }
 
     const ageDays =
         Math.max(
             0,
-            (Date.now() - timestamp) /
-                (1000 * 60 * 60 * 24)
+            (
+                Date.now() -
+                timestamp
+            ) / 86400000
         );
 
-    if (ageDays <= 7) {
+    if (
+        ageDays <= 7
+    ) {
+
         return {
-            classification: "veryFresh",
-            score: FRESHNESS_WEIGHTS.veryFresh
+
+            classification:
+                "veryFresh",
+
+            score:
+                FRESHNESS_WEIGHTS
+                    .veryFresh
         };
     }
 
-    if (ageDays <= 30) {
+    if (
+        ageDays <= 30
+    ) {
+
         return {
-            classification: "fresh",
-            score: FRESHNESS_WEIGHTS.fresh
+
+            classification:
+                "fresh",
+
+            score:
+                FRESHNESS_WEIGHTS
+                    .fresh
         };
     }
 
-    if (ageDays <= 180) {
+    if (
+        ageDays <= 180
+    ) {
+
         return {
-            classification: "recent",
-            score: FRESHNESS_WEIGHTS.recent
+
+            classification:
+                "recent",
+
+            score:
+                FRESHNESS_WEIGHTS
+                    .recent
         };
     }
 
-    if (ageDays <= 730) {
+    if (
+        ageDays <= 730
+    ) {
+
         return {
-            classification: "old",
-            score: FRESHNESS_WEIGHTS.old
+
+            classification:
+                "old",
+
+            score:
+                FRESHNESS_WEIGHTS
+                    .old
         };
     }
 
     return {
-        classification: "stale",
-        score: FRESHNESS_WEIGHTS.stale
+
+        classification:
+            "stale",
+
+        score:
+            FRESHNESS_WEIGHTS
+                .stale
     };
 }
-
-/* =========================================================
-   SOURCE QUALITY
-========================================================= */
 
 function scoreSource(
     source,
     allSources = []
 ) {
+
     const authority =
-        classifySourceAuthority(source);
+        classifySourceAuthority(
+            source
+        );
 
     const freshness =
         calculateFreshness(
@@ -525,36 +792,58 @@ function scoreSource(
         );
 
     const providerScore =
-        clamp(source.score);
+        clamp(
+            source.score
+        );
 
     const authorityScore =
         AUTHORITY_WEIGHTS[
             authority
         ] ||
-        AUTHORITY_WEIGHTS.unknown;
+        AUTHORITY_WEIGHTS
+            .unknown;
 
     const freshnessScore =
         FRESHNESS_WEIGHTS[
             freshness.classification
         ] ||
-        FRESHNESS_WEIGHTS.unknown;
+        FRESHNESS_WEIGHTS
+            .unknown;
 
     const quality =
         clamp(
+
             providerScore * 0.25 +
+
             authorityScore * 0.35 +
+
             freshnessScore * 0.20 +
+
             independence.score * 0.20
+
         );
 
     return {
-        id: source.id,
-        quality: Number(quality.toFixed(3)),
+
+        id:
+            source.id,
+
+        quality:
+            Number(
+                quality.toFixed(3)
+            ),
+
         authority: {
-            classification: authority,
-            score: authorityScore
+
+            classification:
+                authority,
+
+            score:
+                authorityScore
         },
+
         freshness,
+
         independence
     };
 }
@@ -562,17 +851,32 @@ function scoreSource(
 function scoreSources(
     sources = []
 ) {
-    const validSources =
-        validateSources(sources);
 
-    if (!validSources.length) {
+    const validSources =
+        validateSources(
+            sources
+        );
+
+    if (
+        !validSources.length
+    ) {
+
         return {
+
             success: true,
+
             sourceCount: 0,
+
             averageQuality: 0,
+
             independentRatio: 0,
+
             sourceDiversity: 0,
+
             duplicateSources: 0,
+
+            duplicateIds: [],
+
             sources: []
         };
     }
@@ -583,48 +887,55 @@ function scoreSources(
         );
 
     const scored =
-        validSources.map(source =>
-            scoreSource(
-                source,
-                validSources
-            )
+        validSources.map(
+            source =>
+                scoreSource(
+                    source,
+                    validSources
+                )
         );
 
     const averageQuality =
         scored.reduce(
             (sum, item) =>
-                sum + item.quality,
+                sum +
+                item.quality,
             0
-        ) / scored.length;
+        ) /
+        scored.length;
 
     const independentCount =
-        scored.filter(item =>
-            item.independence.classification ===
-            "independent"
+        scored.filter(
+            item =>
+                item.independence
+                    .classification ===
+                "independent"
         ).length;
 
     const domains =
         unique(
             validSources
-                .map(source =>
-                    getSourceDomain(source.url)
+                .map(
+                    source =>
+                        getSourceDomain(
+                            source.url
+                        )
                 )
                 .filter(Boolean)
         );
 
-    const sourceDiversity =
-        clamp(
-            domains.length /
-            validSources.length
-        );
-
     return {
+
         success: true,
-        sourceCount: validSources.length,
+
+        sourceCount:
+            validSources.length,
+
         averageQuality:
             Number(
                 averageQuality.toFixed(3)
             ),
+
         independentRatio:
             Number(
                 (
@@ -632,23 +943,30 @@ function scoreSources(
                     validSources.length
                 ).toFixed(3)
             ),
+
         sourceDiversity:
             Number(
-                sourceDiversity.toFixed(3)
+                clamp(
+                    domains.length /
+                    validSources.length
+                ).toFixed(3)
             ),
+
         duplicateSources:
-            duplicateInfo.duplicateSources,
+            duplicateInfo
+                .duplicateSources,
+
         duplicateIds:
-            duplicateInfo.duplicateIds,
-        sources: scored
+            duplicateInfo
+                .duplicateIds,
+
+        sources:
+            scored
     };
 }
 
-/* =========================================================
-   CONFLICT DETECTION
-========================================================= */
-
 const NEGATION_WORDS = [
+
     "not",
     "no",
     "never",
@@ -667,26 +985,39 @@ const NEGATION_WORDS = [
     "controversial",
     "conflict",
     "conflicting"
+
 ];
 
-function containsNegation(text) {
+function containsNegation(
+    text
+) {
+
     const normalized =
         ` ${normalizeText(text)} `;
 
-    return NEGATION_WORDS.some(word =>
-        normalized.includes(` ${word} `)
-    );
+    return NEGATION_WORDS
+        .some(
+            word =>
+                normalized.includes(
+                    ` ${word} `
+                )
+        );
 }
 
 function detectClaimConflict(
     claimA,
     claimB
 ) {
+
     const a =
-        normalizeText(claimA);
+        normalizeText(
+            claimA
+        );
 
     const b =
-        normalizeText(claimB);
+        normalizeText(
+            claimB
+        );
 
     if (!a || !b) {
         return false;
@@ -698,7 +1029,18 @@ function detectClaimConflict(
             b
         );
 
-    if (similarity < 0.35) {
+    /*
+     * Only mark a conflict when the texts are
+     * strongly about the same claim.
+     *
+     * This avoids false conflicts caused by
+     * generic shared terms such as "car",
+     * "finance", "2026", etc.
+     */
+
+    if (
+        similarity < 0.65
+    ) {
         return false;
     }
 
@@ -709,21 +1051,22 @@ function detectClaimConflict(
         containsNegation(b);
 
     return (
-        negationA !== negationB
+        negationA !==
+        negationB
     );
 }
-
-/* =========================================================
-   SOURCE COMPARISON
-========================================================= */
 
 function compareSources(
     sources = []
 ) {
+
     const validSources =
-        validateSources(sources);
+        validateSources(
+            sources
+        );
 
     const comparisons = [];
+
     let conflictPairs = 0;
 
     for (
@@ -731,11 +1074,13 @@ function compareSources(
         i < validSources.length;
         i++
     ) {
+
         for (
             let j = i + 1;
             j < validSources.length;
             j++
         ) {
+
             const first =
                 validSources[i];
 
@@ -765,51 +1110,74 @@ function compareSources(
             }
 
             comparisons.push({
-                sourceA: first.id,
-                sourceB: second.id,
+
+                sourceA:
+                    first.id,
+
+                sourceB:
+                    second.id,
+
                 similarity:
                     Number(
                         similarity.toFixed(3)
                     ),
+
                 conflict
             });
         }
     }
 
     return {
+
         success: true,
+
         sourceCount:
             validSources.length,
+
         comparisons,
+
         conflictDetected:
             conflictPairs > 0,
+
         conflictPairs
     };
 }
 
-/* =========================================================
-   CLAIM EXTRACTION
-========================================================= */
+function splitSentences(
+    text
+) {
 
-function splitSentences(text) {
     return normalize(text)
+
         .split(
             /(?<=[.!?।])\s+/
         )
-        .map(item => item.trim())
+
+        .map(
+            item =>
+                item.trim()
+        )
+
         .filter(Boolean);
 }
 
-function looksLikeClaim(sentence) {
-    const text =
-        normalizeText(sentence);
+function looksLikeClaim(
+    sentence
+) {
 
-    if (text.length < 20) {
+    const text =
+        normalizeText(
+            sentence
+        );
+
+    if (
+        text.length < 20
+    ) {
         return false;
     }
 
     return (
-        /\b(is|are|was|were|has|have|can|will|allows|provides|means|requires|helps|causes|increases|decreases|includes|uses|supports|offers)\b/i
+        /\b(is|are|was|were|has|have|can|will|allows|provides|means|requires|helps|causes|increases|decreases|includes|uses|supports|offers|grew|grow|grown|reached|reaches|costs|reflects)\b/i
             .test(text)
     );
 }
@@ -818,131 +1186,198 @@ function extractClaims({
     summary = "",
     sources = []
 } = {}) {
+
     const claims = [];
 
-    const summarySentences =
-        splitSentences(summary);
+    for (
+        const sentence of
+        splitSentences(
+            summary
+        )
+    ) {
 
-    for (const sentence of summarySentences) {
-        if (looksLikeClaim(sentence)) {
+        if (
+            looksLikeClaim(
+                sentence
+            )
+        ) {
+
             claims.push({
+
                 id:
                     `claim-${claims.length + 1}`,
-                text: sentence,
-                origin: "summary"
+
+                text:
+                    sentence,
+
+                origin:
+                    "summary"
             });
         }
     }
 
-    for (const source of validateSources(
-        sources
-    )) {
-        const sentences =
+    for (
+        const source of
+        validateSources(
+            sources
+        )
+    ) {
+
+        for (
+            const sentence of
             splitSentences(
                 source.content ||
                 source.snippet
-            ).slice(0, 10);
+            ).slice(
+                0,
+                10
+            )
+        ) {
 
-        for (const sentence of sentences) {
             if (
-                !looksLikeClaim(sentence)
+                !looksLikeClaim(
+                    sentence
+                )
             ) {
                 continue;
             }
 
             claims.push({
+
                 id:
                     `claim-${claims.length + 1}`,
-                text: sentence,
-                origin: "source",
-                sourceId: source.id
+
+                text:
+                    sentence,
+
+                origin:
+                    "source",
+
+                sourceId:
+                    source.id
             });
 
-            if (claims.length >= 25) {
+            if (
+                claims.length >= 25
+            ) {
                 break;
             }
         }
 
-        if (claims.length >= 25) {
+        if (
+            claims.length >= 25
+        ) {
             break;
         }
     }
 
-    const seen = new Set();
+    const seen =
+        new Set();
 
-    return claims.filter(claim => {
-        const key =
-            normalizeText(claim.text);
+    return claims.filter(
+        claim => {
 
-        if (seen.has(key)) {
-            return false;
+            const key =
+                normalizeText(
+                    claim.text
+                );
+
+            if (
+                seen.has(key)
+            ) {
+                return false;
+            }
+
+            seen.add(key);
+
+            return true;
         }
-
-        seen.add(key);
-        return true;
-    });
+    );
 }
 
-/* =========================================================
-   CLAIM STRUCTURE
-========================================================= */
+function extractKeyTerms(
+    text
+) {
 
-function extractKeyTerms(text) {
-    const stopWords = new Set([
-        "the",
-        "a",
-        "an",
-        "and",
-        "or",
-        "is",
-        "are",
-        "was",
-        "were",
-        "to",
-        "of",
-        "in",
-        "on",
-        "for",
-        "with",
-        "from",
-        "by",
-        "this",
-        "that",
-        "it",
-        "as",
-        "can",
-        "may",
-        "will",
-        "has",
-        "have"
-    ]);
+    const stopWords =
+        new Set([
+
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "is",
+            "are",
+            "was",
+            "were",
+            "to",
+            "of",
+            "in",
+            "on",
+            "for",
+            "with",
+            "from",
+            "by",
+            "this",
+            "that",
+            "it",
+            "as",
+            "can",
+            "may",
+            "will",
+            "has",
+            "have",
+            "be",
+            "been",
+            "being",
+            "their",
+            "they",
+            "we",
+            "you"
+
+        ]);
 
     return unique(
-        tokenize(text).filter(
-            token =>
-                token.length > 2 &&
-                !stopWords.has(token)
-        )
+        tokenize(text)
+            .filter(
+                token =>
+                    token.length > 2 &&
+                    !stopWords.has(
+                        token
+                    )
+            )
     );
 }
 
 function extractClaimStructure(
     text
 ) {
+
     const normalized =
-        normalizeText(text);
+        normalizeText(
+            text
+        );
 
     const terms =
-        extractKeyTerms(normalized);
-
-    const negated =
-        containsNegation(normalized);
+        extractKeyTerms(
+            normalized
+        );
 
     return {
-        text: normalize(text),
+
+        text:
+            normalize(text),
+
         terms,
-        negated,
-        termCount: terms.length
+
+        negated:
+            containsNegation(
+                normalized
+            ),
+
+        termCount:
+            terms.length
     };
 }
 
@@ -950,50 +1385,64 @@ function calculateContextOverlap(
     claim,
     evidence
 ) {
+
     const claimTerms =
-        extractKeyTerms(claim);
+        extractKeyTerms(
+            claim
+        );
 
     const evidenceTerms =
-        extractKeyTerms(evidence);
+        extractKeyTerms(
+            evidence
+        );
 
     if (
         !claimTerms.length ||
         !evidenceTerms.length
     ) {
+
         return 0;
     }
 
     const evidenceSet =
-        new Set(evidenceTerms);
+        new Set(
+            evidenceTerms
+        );
 
     const overlap =
-        claimTerms.filter(term =>
-            evidenceSet.has(term)
+        claimTerms.filter(
+            term =>
+                evidenceSet.has(
+                    term
+                )
         ).length;
 
     return clamp(
+
         overlap /
         Math.max(
             claimTerms.length,
             1
         )
+
     );
 }
-
-/* =========================================================
-   SEMANTIC-STYLE CLAIM VALIDATION
-========================================================= */
 
 function validateClaimSemantics({
     claim = "",
     evidence = "",
     source = null
 } = {}) {
+
     const claimStructure =
-        extractClaimStructure(claim);
+        extractClaimStructure(
+            claim
+        );
 
     const evidenceStructure =
-        extractClaimStructure(evidence);
+        extractClaimStructure(
+            evidence
+        );
 
     const overlap =
         calculateContextOverlap(
@@ -1016,9 +1465,17 @@ function validateClaimSemantics({
 
     const reasons = [];
 
-    if (overlap >= 0.65) {
-        if (sameNegation) {
-            status = "supported";
+    if (
+        overlap >= 0.65
+    ) {
+
+        if (
+            sameNegation
+        ) {
+
+            status =
+                "supported";
+
             confidence =
                 clamp(
                     0.55 +
@@ -1032,8 +1489,14 @@ function validateClaimSemantics({
             reasons.push(
                 "Claim and evidence share the same polarity"
             );
-        } else if (opposingNegation) {
-            status = "contradicted";
+
+        } else if (
+            opposingNegation
+        ) {
+
+            status =
+                "contradicted";
+
             confidence =
                 clamp(
                     0.55 +
@@ -1044,50 +1507,55 @@ function validateClaimSemantics({
                 "Strong contextual overlap with opposing polarity"
             );
         }
-    } else if (overlap >= 0.40) {
-        if (sameNegation) {
-            status = "supported";
-            confidence =
-                clamp(
-                    0.45 +
-                    overlap * 0.35
-                );
 
-            reasons.push(
-                "Moderate contextual overlap"
-            );
-        } else {
-            status = "contradicted";
-            confidence =
-                clamp(
-                    0.45 +
-                    overlap * 0.30
-                );
+    } else if (
+        overlap >= 0.40 &&
+        sameNegation
+    ) {
 
-            reasons.push(
-                "Moderate contextual overlap with opposing polarity"
+        status =
+            "supported";
+
+        confidence =
+            clamp(
+                0.45 +
+                overlap * 0.35
             );
-        }
-    } else {
+
         reasons.push(
-            "Insufficient contextual overlap"
+            "Moderate contextual overlap"
+        );
+
+    } else {
+
+        reasons.push(
+            "Insufficient or ambiguous contextual overlap"
         );
     }
 
     return {
+
         success: true,
+
         status,
+
         confidence:
             Number(
                 confidence.toFixed(3)
             ),
+
         reasons,
+
         sourceId:
-            source && source.id
+            source &&
+            source.id
                 ? source.id
                 : null,
+
         claimStructure,
+
         evidenceStructure,
+
         contextOverlap:
             Number(
                 overlap.toFixed(3)
@@ -1095,48 +1563,56 @@ function validateClaimSemantics({
     };
 }
 
-/* =========================================================
-   EVIDENCE STRENGTH
-========================================================= */
-
 function calculateEvidenceStrength({
     similarity = 0,
     sourceQuality = 0,
     independentScore = 0
 } = {}) {
+
     return clamp(
+
         similarity * 0.50 +
+
         sourceQuality * 0.30 +
+
         independentScore * 0.20
+
     );
 }
-
-/* =========================================================
-   CLAIM EVIDENCE MAPPING
-========================================================= */
 
 function mapClaimEvidence({
     claim,
     sources = [],
     qualityResult = null
 } = {}) {
+
     const validSources =
-        validateSources(sources);
+        validateSources(
+            sources
+        );
 
     const qualityMap =
         new Map(
+
             safeArray(
                 qualityResult &&
                 qualityResult.sources
-            ).map(item => [
-                item.id,
-                item
-            ])
+            ).map(
+                item => [
+                    item.id,
+                    item
+                ]
+            )
+
         );
 
     const evidence = [];
 
-    for (const source of validSources) {
+    for (
+        const source of
+        validSources
+    ) {
+
         const sourceText =
             `${source.title} ${source.content} ${source.snippet}`;
 
@@ -1146,8 +1622,16 @@ function mapClaimEvidence({
                 sourceText
             );
 
+        if (
+            similarity < 0.20
+        ) {
+            continue;
+        }
+
         const quality =
-            qualityMap.get(source.id);
+            qualityMap.get(
+                source.id
+            );
 
         const sourceQuality =
             quality
@@ -1157,25 +1641,33 @@ function mapClaimEvidence({
         const independentScore =
             quality &&
             quality.independence
-                ? quality.independence.score
+                ? quality
+                    .independence
+                    .score
                 : 0.50;
 
         const strength =
             calculateEvidenceStrength({
-                similarity,
-                sourceQuality,
-                independentScore
-            });
 
-        if (similarity < 0.20) {
-            continue;
-        }
+                similarity,
+
+                sourceQuality,
+
+                independentScore
+
+            });
 
         const semantic =
             validateClaimSemantics({
-                claim: claim.text,
-                evidence: sourceText,
+
+                claim:
+                    claim.text,
+
+                evidence:
+                    sourceText,
+
                 source
+
             });
 
         let relationship =
@@ -1185,18 +1677,30 @@ function mapClaimEvidence({
             semantic.status ===
             "supported"
         ) {
-            relationship = "supporting";
-        } else if (
+
+            relationship =
+                "supporting";
+        }
+
+        if (
             semantic.status ===
             "contradicted"
         ) {
-            relationship = "conflicting";
+
+            relationship =
+                "conflicting";
         }
 
         evidence.push({
-            sourceId: source.id,
-            sourceTitle: source.title,
-            url: source.url,
+
+            sourceId:
+                source.id,
+
+            sourceTitle:
+                source.title,
+
+            url:
+                source.url,
 
             similarity:
                 Number(
@@ -1215,23 +1719,20 @@ function mapClaimEvidence({
         });
     }
 
-    evidence.sort(
+    return evidence.sort(
         (a, b) =>
             b.evidenceStrength -
             a.evidenceStrength
     );
-
-    return evidence;
 }
-
-/* =========================================================
-   CLAIM CONFIDENCE
-========================================================= */
 
 function calculateClaimConfidence(
     evidence = []
 ) {
-    if (!evidence.length) {
+
+    if (
+        !evidence.length
+    ) {
         return 0;
     }
 
@@ -1249,91 +1750,118 @@ function calculateClaimConfidence(
                 "conflicting"
         );
 
-    const independentSupporting =
-        supporting.filter(item =>
-            item.semanticValidation &&
-            item.semanticValidation.status ===
-            "supported"
-        );
+    if (
+        !supporting.length
+    ) {
+        return 0;
+    }
 
     const strongestSupport =
-        supporting.length
-            ? Math.max(
-                ...supporting.map(
-                    item =>
-                        item.evidenceStrength
-                )
+        Math.max(
+            ...supporting.map(
+                item =>
+                    item.evidenceStrength
             )
-            : 0;
+        );
 
     const averageSupport =
-        supporting.length
-            ? supporting.reduce(
-                (sum, item) =>
-                    sum +
-                    item.evidenceStrength,
-                0
-            ) / supporting.length
-            : 0;
+        supporting.reduce(
+            (sum, item) =>
+                sum +
+                item.evidenceStrength,
+            0
+        ) /
+        supporting.length;
+
+    const independentSupporting =
+        supporting.filter(
+            item =>
+                item.semanticValidation &&
+                item.semanticValidation.status ===
+                "supported"
+        ).length;
 
     let confidence =
+
         strongestSupport * 0.45 +
+
         averageSupport * 0.25 +
+
         clamp(
             supporting.length / 3
         ) * 0.20 +
+
         clamp(
-            independentSupporting.length / 2
+            independentSupporting / 2
         ) * 0.10;
 
     if (
-        conflicting.length > 0
+        conflicting.length
     ) {
-        confidence -= Math.min(
-            0.30,
-            conflicting.length * 0.10
-        );
+
+        confidence -=
+            Math.min(
+                0.30,
+                conflicting.length * 0.10
+            );
     }
 
-    return clamp(confidence);
+    return clamp(
+        confidence
+    );
 }
-
-/* =========================================================
-   EVIDENCE MAPPING
-========================================================= */
 
 function buildEvidenceMapping({
     claims = [],
     sources = [],
     summary = ""
 } = {}) {
+
     const validSources =
-        validateSources(sources);
+        validateSources(
+            sources
+        );
 
     const qualityResult =
-        scoreSources(validSources);
+        scoreSources(
+            validSources
+        );
 
     const extractedClaims =
         claims.length
+
             ? claims
+
             : extractClaims({
+
                 summary,
+
                 sources:
                     validSources
+
             });
 
     const mappings = [];
 
     let conflictingClaims = 0;
+
     let supportedClaims = 0;
 
-    for (const claim of extractedClaims) {
+    for (
+        const claim of
+        extractedClaims
+    ) {
+
         const evidence =
             mapClaimEvidence({
+
                 claim,
+
                 sources:
                     validSources,
+
                 qualityResult
+
             });
 
         const confidence =
@@ -1362,23 +1890,32 @@ function buildEvidenceMapping({
             hasConflict &&
             hasSupport
         ) {
-            status = "mixed";
+
+            status =
+                "mixed";
+
         } else if (
             hasConflict
         ) {
-            status = "conflicting";
+
+            status =
+                "conflicting";
+
         } else if (
             hasSupport &&
             confidence >=
                 MIN_CLAIM_CONFIDENCE
         ) {
-            status = "supported";
+
+            status =
+                "supported";
         }
 
         if (
             status ===
             "conflicting"
         ) {
+
             conflictingClaims++;
         }
 
@@ -1386,20 +1923,29 @@ function buildEvidenceMapping({
             status ===
             "supported"
         ) {
+
             supportedClaims++;
         }
 
         mappings.push({
-            claimId: claim.id,
-            claim: claim.text,
+
+            claimId:
+                claim.id,
+
+            claim:
+                claim.text,
+
             confidence:
                 Number(
                     confidence.toFixed(3)
                 ),
+
             status,
+
             evidence,
 
             supportingEvidenceIds:
+
                 evidence
                     .filter(
                         item =>
@@ -1412,6 +1958,7 @@ function buildEvidenceMapping({
                     ),
 
             conflictingEvidenceIds:
+
                 evidence
                     .filter(
                         item =>
@@ -1432,42 +1979,51 @@ function buildEvidenceMapping({
                     item.confidence
             )
             .filter(
-                value =>
-                    Number.isFinite(value)
+                Number.isFinite
             );
 
     const averageConfidence =
         confidenceValues.length
+
             ? confidenceValues.reduce(
                 (sum, value) =>
                     sum + value,
                 0
             ) /
-              confidenceValues.length
+            confidenceValues.length
+
             : 0;
 
     return {
+
         success: true,
+
         claimCount:
             mappings.length,
+
         supportedClaims,
+
         conflictingClaims,
+
         needsReviewClaims:
             mappings.filter(
                 item =>
                     item.status ===
                     "needs-review"
             ).length,
+
         mixedClaims:
             mappings.filter(
                 item =>
                     item.status ===
                     "mixed"
             ).length,
+
         averageConfidence:
             Number(
                 averageConfidence.toFixed(3)
             ),
+
         conflictDetected:
             conflictingClaims > 0 ||
             mappings.some(
@@ -1475,55 +2031,63 @@ function buildEvidenceMapping({
                     item.status ===
                     "mixed"
             ),
-        claims: mappings
+
+        claims:
+            mappings
     };
 }
-
-/* =========================================================
-   CLAIM PROVENANCE
-========================================================= */
 
 function buildClaimProvenance(
     evidenceMapping
 ) {
-    const claims =
-        safeArray(
-            evidenceMapping &&
-            evidenceMapping.claims
-        );
 
-    return claims.map(claim => ({
-        claimId: claim.claimId,
-        claim: claim.claim,
+    return safeArray(
+        evidenceMapping &&
+        evidenceMapping.claims
+    ).map(
+        claim => ({
 
-        supportingSources:
-            claim.supportingEvidenceIds ||
-            [],
+            claimId:
+                claim.claimId,
 
-        conflictingSources:
-            claim.conflictingEvidenceIds ||
-            [],
+            claim:
+                claim.claim,
 
-        confidence:
-            claim.confidence,
+            supportingSources:
+                claim.supportingEvidenceIds ||
+                [],
 
-        status:
-            claim.status
-    }));
+            conflictingSources:
+                claim.conflictingEvidenceIds ||
+                [],
+
+            confidence:
+                claim.confidence,
+
+            status:
+                claim.status
+        })
+    );
 }
 
 function buildProvenanceIndex(
     evidenceMapping
 ) {
+
     const index = {};
 
     for (
-        const item of safeArray(
+        const item of
+        safeArray(
             evidenceMapping &&
             evidenceMapping.claims
         )
     ) {
-        index[item.claimId] = {
+
+        index[
+            item.claimId
+        ] = {
+
             claim:
                 item.claim,
 
@@ -1534,19 +2098,17 @@ function buildProvenanceIndex(
                 item.confidence,
 
             supportingEvidenceIds:
-                item.supportingEvidenceIds,
+                item.supportingEvidenceIds ||
+                [],
 
             conflictingEvidenceIds:
-                item.conflictingEvidenceIds
+                item.conflictingEvidenceIds ||
+                []
         };
     }
 
     return index;
 }
-
-/* =========================================================
-   RESEARCH CONFIDENCE
-========================================================= */
 
 function calculateResearchConfidence({
     sources = [],
@@ -1555,15 +2117,38 @@ function calculateResearchConfidence({
     evidenceMapping = null,
     sourceQuality = null
 } = {}) {
-    const validSources =
-        validateSources(sources);
 
-    if (!validSources.length) {
+    const validSources =
+        validateSources(
+            sources
+        );
+
+    if (
+        !validSources.length
+    ) {
         return 0;
     }
 
+    /*
+     * IMPORTANT:
+     *
+     * Provider confidence is a retrieval/relevance
+     * signal. It is NOT treated as the final truth
+     * verification confidence.
+     *
+     * Example:
+     * provider = 0.504
+     * sources = 5
+     *
+     * AarHen should not become permanently stuck
+     * at 0.504 just because the search provider
+     * returned that relevance signal.
+     */
+
     const suppliedConfidence =
-        clamp(confidence);
+        clamp(
+            confidence
+        );
 
     const hasExplicitConfidence =
         Number.isFinite(
@@ -1573,23 +2158,49 @@ function calculateResearchConfidence({
 
     let baseConfidence;
 
-    if (hasExplicitConfidence) {
-        baseConfidence =
-            suppliedConfidence;
-    } else if (
+    if (
         validSources.length >= 5
     ) {
-        baseConfidence = 0.90;
+
+        baseConfidence =
+            0.90;
+
     } else if (
         validSources.length >= 3
     ) {
-        baseConfidence = 0.82;
+
+        baseConfidence =
+            0.82;
+
     } else if (
         validSources.length >= 2
     ) {
-        baseConfidence = 0.75;
+
+        baseConfidence =
+            0.75;
+
     } else {
-        baseConfidence = 0.60;
+
+        baseConfidence =
+            0.60;
+    }
+
+    /*
+     * Use provider confidence only as a SMALL signal.
+     */
+
+    if (
+        hasExplicitConfidence
+    ) {
+
+        const providerAdjustment =
+            (
+                suppliedConfidence -
+                0.50
+            ) * 0.10;
+
+        baseConfidence +=
+            providerAdjustment;
     }
 
     const comparisonResult =
@@ -1601,8 +2212,10 @@ function calculateResearchConfidence({
     const evidenceResult =
         evidenceMapping ||
         buildEvidenceMapping({
+
             sources:
                 validSources
+
         });
 
     const qualityResult =
@@ -1611,59 +2224,64 @@ function calculateResearchConfidence({
             validSources
         );
 
-    /* -------------------------
-       SOURCE CONFLICT
-    ------------------------- */
+    /*
+     * SOURCE CONFLICT
+     */
 
     if (
         comparisonResult &&
         comparisonResult.conflictDetected
     ) {
+
         const conflictCount =
             Number(
-                comparisonResult.conflictPairs
+                comparisonResult
+                    .conflictPairs
             ) || 1;
 
-        const penalty =
+        baseConfidence -=
             Math.min(
                 0.25,
                 conflictCount * 0.10
             );
-
-        baseConfidence -= penalty;
     }
 
-    /* -------------------------
-       CLAIM CONFLICT
-    ------------------------- */
+    /*
+     * CLAIM CONFLICT
+     */
 
     if (
         evidenceResult &&
         evidenceResult.conflictDetected
     ) {
+
         const conflictingClaims =
             Number(
-                evidenceResult.conflictingClaims
+                evidenceResult
+                    .conflictingClaims
             ) || 1;
 
         const mixedClaims =
             Number(
-                evidenceResult.mixedClaims
+                evidenceResult
+                    .mixedClaims
             ) || 0;
 
-        const penalty =
+        baseConfidence -=
             Math.min(
-                0.25,
-                conflictingClaims * 0.05 +
-                mixedClaims * 0.03
-            );
 
-        baseConfidence -= penalty;
+                0.25,
+
+                conflictingClaims * 0.05 +
+
+                mixedClaims * 0.03
+
+            );
     }
 
-    /* -------------------------
-       SUPPORTED CLAIM BONUS
-    ------------------------- */
+    /*
+     * SUPPORTED CLAIM BONUS
+     */
 
     if (
         evidenceResult &&
@@ -1671,6 +2289,7 @@ function calculateResearchConfidence({
         evidenceResult.averageConfidence >=
             0.70
     ) {
+
         baseConfidence =
             Math.min(
                 1,
@@ -1678,108 +2297,79 @@ function calculateResearchConfidence({
             );
     }
 
-    /* -------------------------
-       QUALITY
-    ------------------------- */
+    /*
+     * QUALITY
+     */
 
     if (
         qualityResult &&
         qualityResult.sourceCount > 0
     ) {
-        const averageQuality =
-            clamp(
-                qualityResult.averageQuality
-            );
-
-        const qualityAdjustment =
-            (
-                averageQuality - 0.50
-            ) * 0.20;
 
         baseConfidence +=
-            qualityAdjustment;
+            (
+                clamp(
+                    qualityResult
+                        .averageQuality
+                ) -
+                0.50
+            ) * 0.20;
     }
 
-    /* -------------------------
-       INDEPENDENCE + DIVERSITY
-    ------------------------- */
+    /*
+     * INDEPENDENCE + DIVERSITY
+     */
 
     if (
         qualityResult &&
         qualityResult.sourceCount > 0
     ) {
-        const independentRatio =
-            clamp(
-                qualityResult.independentRatio
-            );
-
-        const diversity =
-            clamp(
-                qualityResult.sourceDiversity
-            );
-
-        const independenceAdjustment =
-            (
-                independentRatio - 0.50
-            ) * 0.10;
-
-        const diversityAdjustment =
-            (
-                diversity - 0.50
-            ) * 0.05;
 
         baseConfidence +=
-            independenceAdjustment +
-            diversityAdjustment;
+
+            (
+                clamp(
+                    qualityResult
+                        .independentRatio
+                ) -
+                0.50
+            ) * 0.10;
+
+        baseConfidence +=
+
+            (
+                clamp(
+                    qualityResult
+                        .sourceDiversity
+                ) -
+                0.50
+            ) * 0.05;
 
         if (
-            qualityResult.duplicateSources >
-            0
+            qualityResult
+                .duplicateSources > 0
         ) {
+
             baseConfidence -=
+
                 Math.min(
+
                     0.15,
-                    qualityResult.duplicateSources *
+
+                    qualityResult
+                        .duplicateSources *
                     0.05
+
                 );
         }
     }
 
-    /* -------------------------
-       SAFETY FLOOR
-       
-       If the provider explicitly
-       supplied a high confidence
-       value and there is no detected
-       conflict, don't let minor
-       quality adjustments reduce it
-       below the verified threshold.
-    ------------------------- */
-
-    if (
-        hasExplicitConfidence &&
-        suppliedConfidence >=
-            MIN_VERIFIED_CONFIDENCE &&
-        !(comparisonResult &&
-            comparisonResult.conflictDetected) &&
-        !(evidenceResult &&
-            evidenceResult.conflictDetected)
-    ) {
-        baseConfidence =
-            Math.max(
-                baseConfidence,
-                MIN_VERIFIED_CONFIDENCE
-            );
-    }
-
     return Number(
-        clamp(baseConfidence).toFixed(3)
+        clamp(
+            baseConfidence
+        ).toFixed(3)
     );
 }
-
-/* =========================================================
-   RESEARCH RESULT
-========================================================= */
 
 function createResearchResult({
     query = "",
@@ -1790,8 +2380,11 @@ function createResearchResult({
     provider = "",
     learning = null
 } = {}) {
+
     const validSources =
-        validateSources(sources);
+        validateSources(
+            sources
+        );
 
     const comparison =
         compareSources(
@@ -1800,9 +2393,12 @@ function createResearchResult({
 
     const evidenceMapping =
         buildEvidenceMapping({
+
             summary,
+
             sources:
                 validSources
+
         });
 
     const sourceQuality =
@@ -1812,12 +2408,18 @@ function createResearchResult({
 
     const finalConfidence =
         calculateResearchConfidence({
+
             sources:
                 validSources,
+
             confidence,
+
             comparison,
+
             evidenceMapping,
+
             sourceQuality
+
         });
 
     const provenance =
@@ -1830,39 +2432,53 @@ function createResearchResult({
             evidenceMapping
         );
 
-    const hasClaims =
-        evidenceMapping.claimCount > 0;
-
     const hasConflictingClaims =
-        evidenceMapping.conflictDetected;
+        evidenceMapping
+            .conflictDetected;
 
     const verified =
+
         validSources.length >=
             MIN_VERIFIED_SOURCES &&
+
         finalConfidence >=
             MIN_VERIFIED_CONFIDENCE &&
-        !comparison.conflictDetected &&
+
+        !comparison
+            .conflictDetected &&
+
         !hasConflictingClaims;
 
     let verificationStatus =
         "review";
 
-    if (verified) {
+    if (
+        verified
+    ) {
+
         verificationStatus =
             "verified";
+
     } else if (
+
         validSources.length >=
             MIN_PARTIAL_SOURCES &&
+
         finalConfidence >=
             MIN_PARTIAL_CONFIDENCE
+
     ) {
+
         verificationStatus =
             "partial";
     }
 
     return {
+
         success: true,
-        version: RESEARCH_VERSION,
+
+        version:
+            RESEARCH_VERSION,
 
         query:
             normalize(query),
@@ -1897,19 +2513,33 @@ function createResearchResult({
         evidenceMapping,
 
         claimValidation: {
-            enabled: true,
+
+            enabled:
+                true,
+
             claimCount:
-                evidenceMapping.claimCount,
+                evidenceMapping
+                    .claimCount,
+
             supportedClaims:
-                evidenceMapping.supportedClaims,
+                evidenceMapping
+                    .supportedClaims,
+
             conflictingClaims:
-                evidenceMapping.conflictingClaims,
+                evidenceMapping
+                    .conflictingClaims,
+
             mixedClaims:
-                evidenceMapping.mixedClaims,
+                evidenceMapping
+                    .mixedClaims,
+
             needsReviewClaims:
-                evidenceMapping.needsReviewClaims,
+                evidenceMapping
+                    .needsReviewClaims,
+
             averageConfidence:
-                evidenceMapping.averageConfidence
+                evidenceMapping
+                    .averageConfidence
         },
 
         provenance,
@@ -1917,11 +2547,15 @@ function createResearchResult({
         provenanceIndex,
 
         verification: {
+
             verified,
+
             confidence:
                 finalConfidence,
+
             sourceCount:
                 validSources.length,
+
             status:
                 verificationStatus
         },
@@ -1936,36 +2570,53 @@ function createResearchResult({
     };
 }
 
-/* =========================================================
-   RESEARCH CONTEXT
-========================================================= */
-
 function buildResearchContext(
     result
 ) {
+
     const item =
-        safeObject(result);
+        safeObject(
+            result
+        );
 
     return {
-        success: true,
-        version: RESEARCH_VERSION,
+
+        success:
+            true,
+
+        version:
+            RESEARCH_VERSION,
 
         query:
-            normalize(item.query),
+            normalize(
+                item.query
+            ),
 
         answer:
-            normalize(item.answer) ||
-            normalize(item.summary),
+            normalize(
+                item.answer
+            ) ||
+            normalize(
+                item.summary
+            ),
 
         sources:
-            safeArray(item.sources),
+            safeArray(
+                item.sources
+            ),
 
         sourceCount:
-            Number(item.sourceCount) ||
-            safeArray(item.sources).length,
+            Number(
+                item.sourceCount
+            ) ||
+            safeArray(
+                item.sources
+            ).length,
 
         confidence:
-            clamp(item.confidence),
+            clamp(
+                item.confidence
+            ),
 
         verified:
             item.verified === true,
@@ -1973,31 +2624,40 @@ function buildResearchContext(
         verificationStatus:
             normalize(
                 item.verificationStatus
-            ) || "review",
+            ) ||
+            "review",
 
         verification:
-            item.verification || null,
+            item.verification ||
+            null,
 
         learning:
-            item.learning || null,
+            item.learning ||
+            null,
 
         comparison:
-            item.comparison || null,
+            item.comparison ||
+            null,
 
         sourceQuality:
-            item.sourceQuality || null,
+            item.sourceQuality ||
+            null,
 
         evidenceMapping:
-            item.evidenceMapping || null,
+            item.evidenceMapping ||
+            null,
 
         claimValidation:
-            item.claimValidation || null,
+            item.claimValidation ||
+            null,
 
         provenance:
-            item.provenance || [],
+            item.provenance ||
+            [],
 
         provenanceIndex:
-            item.provenanceIndex || {},
+            item.provenanceIndex ||
+            {},
 
         researchStatus:
             item.researchStatus ||
@@ -2005,84 +2665,130 @@ function buildResearchContext(
     };
 }
 
-/* =========================================================
-   VERIFICATION
-========================================================= */
-
 function verifyResearch({
     result = null,
     sourceCount = 0,
     confidence = 0
 } = {}) {
+
     const item =
-        safeObject(result);
+        safeObject(
+            result
+        );
 
     const actualSources =
+
         Number(
             item.sourceCount
         ) ||
-        Number(sourceCount) ||
+
+        Number(
+            sourceCount
+        ) ||
+
         safeArray(
             item.sources
         ).length;
 
     const actualConfidence =
+
         Number.isFinite(
-            Number(item.confidence)
+            Number(
+                item.confidence
+            )
         )
-            ? clamp(item.confidence)
-            : clamp(confidence);
+
+            ? clamp(
+                item.confidence
+            )
+
+            : clamp(
+                confidence
+            );
 
     const comparisonConflict =
         Boolean(
+
             item.comparison &&
-            item.comparison.conflictDetected
+
+            item.comparison
+                .conflictDetected
+
         );
 
     const claimConflict =
         Boolean(
+
             item.evidenceMapping &&
-            item.evidenceMapping.conflictDetected
+
+            item.evidenceMapping
+                .conflictDetected
+
         );
 
     const verified =
+
         actualSources >=
             MIN_VERIFIED_SOURCES &&
+
         actualConfidence >=
             MIN_VERIFIED_CONFIDENCE &&
+
         !comparisonConflict &&
+
         !claimConflict;
 
     let status =
         "review";
 
-    if (verified) {
-        status = "verified";
+    if (
+        verified
+    ) {
+
+        status =
+            "verified";
+
     } else if (
+
         actualSources >=
             MIN_PARTIAL_SOURCES &&
+
         actualConfidence >=
             MIN_PARTIAL_CONFIDENCE
+
     ) {
-        status = "partial";
+
+        status =
+            "partial";
     }
 
     return {
-        success: true,
-        version: RESEARCH_VERSION,
+
+        success:
+            true,
+
+        version:
+            RESEARCH_VERSION,
+
         verified,
+
         confidence:
             actualConfidence,
+
         sourceCount:
             actualSources,
+
         status,
 
         reasons: {
+
             minimumSourcesMet:
+
                 actualSources >=
                 MIN_VERIFIED_SOURCES,
 
             minimumConfidenceMet:
+
                 actualConfidence >=
                 MIN_VERIFIED_CONFIDENCE,
 
@@ -2097,41 +2803,51 @@ function verifyResearch({
 function verifyWithEngine(
     result
 ) {
+
     try {
+
         if (
             verification &&
             typeof verification.verify ===
                 "function"
         ) {
+
             return verification.verify(
                 result
             );
         }
+
     } catch {
         // Fall back to internal verification.
     }
 
     return verifyResearch({
+
         result
+
     });
 }
-
-/* =========================================================
-   LEARNING
-========================================================= */
 
 function buildLearningContent(
     result
 ) {
+
     const item =
-        safeObject(result);
+        safeObject(
+            result
+        );
 
     return {
-        type: "verified_research",
-        version: RESEARCH_VERSION,
+
+        type:
+            "verified_research",
+
+        version:
+            RESEARCH_VERSION,
 
         query:
-            item.query || "",
+            item.query ||
+            "",
 
         answer:
             item.answer ||
@@ -2139,10 +2855,14 @@ function buildLearningContent(
             "",
 
         sourceCount:
-            Number(item.sourceCount) || 0,
+            Number(
+                item.sourceCount
+            ) || 0,
 
         confidence:
-            clamp(item.confidence),
+            clamp(
+                item.confidence
+            ),
 
         verified:
             item.verified === true,
@@ -2152,13 +2872,23 @@ function buildLearningContent(
             "review",
 
         sources:
+
             safeArray(
                 item.sources
-            ).map(source => ({
-                id: source.id,
-                title: source.title,
-                url: source.url
-            })),
+            ).map(
+                source => ({
+
+                    id:
+                        source.id,
+
+                    title:
+                        source.title,
+
+                    url:
+                        source.url
+
+                })
+            ),
 
         claims:
             item.evidenceMapping
@@ -2166,60 +2896,88 @@ function buildLearningContent(
                 : [],
 
         provenance:
-            item.provenance || [],
+            item.provenance ||
+            [],
 
         claimValidation:
-            item.claimValidation || null
+            item.claimValidation ||
+            null
     };
 }
-
-/* =========================================================
-   VERIFIED RESEARCH LEARNING
-========================================================= */
 
 function learnVerifiedResearch(
     result
 ) {
+
     const item =
-        safeObject(result);
+        safeObject(
+            result
+        );
 
     if (
         item.verified !== true
     ) {
+
         return {
-            success: false,
-            learned: false,
-            verified: false,
-            approved: false,
+
+            success:
+                false,
+
+            learned:
+                false,
+
+            verified:
+                false,
+
+            approved:
+                false,
+
             status:
                 "research-not-verified",
+
             reason:
                 "Research is not verified."
         };
     }
 
-    const content =
-        buildLearningContent(item);
-
     const confidence =
-        clamp(item.confidence);
+        clamp(
+            item.confidence
+        );
 
     if (
         confidence <
         MIN_VERIFIED_CONFIDENCE
     ) {
+
         return {
-            success: false,
-            learned: false,
-            verified: false,
-            approved: false,
+
+            success:
+                false,
+
+            learned:
+                false,
+
+            verified:
+                false,
+
+            approved:
+                false,
+
             status:
                 "confidence-too-low",
+
             confidence,
+
             reason:
                 "Verified learning requires minimum confidence."
         };
     }
+
+    const content =
+        buildLearningContent(
+            item
+        );
 
     try {
 
@@ -2234,19 +2992,26 @@ function learnVerifiedResearch(
 
                     title:
                         item.query
+
                             ? `AarHen Web Research: ${item.query}`
+
                             : "AarHen Verified Web Knowledge",
 
                     content:
+
                         item.answer ||
+
                         item.summary ||
+
                         "",
 
                     category:
                         "research",
 
                     source:
+
                         item.provider ||
+
                         "web-research",
 
                     memoryType:
@@ -2257,14 +3022,18 @@ function learnVerifiedResearch(
 
                     confidence,
 
-                    verified: true,
+                    verified:
+                        true,
 
-                    approved: true,
+                    approved:
+                        true,
 
-                    learn: true
+                    learn:
+                        true
                 });
 
             return {
+
                 success:
                     Boolean(
                         learned &&
@@ -2277,22 +3046,30 @@ function learnVerifiedResearch(
                         learned.learned
                     ),
 
-                verified: true,
+                verified:
+                    true,
 
-                approved: true,
+                approved:
+                    true,
 
                 status:
+
                     learned &&
                     learned.status
+
                         ? learned.status
+
                         : "verified-knowledge-learned",
 
                 confidence,
 
                 memoryId:
+
                     learned &&
                     learned.memoryId
+
                         ? learned.memoryId
+
                         : null,
 
                 content,
@@ -2302,37 +3079,61 @@ function learnVerifiedResearch(
             };
         }
 
-    } catch (error) {
+    } catch (
+        error
+    ) {
 
         return {
-            success: false,
-            learned: false,
-            verified: true,
-            approved: true,
+
+            success:
+                false,
+
+            learned:
+                false,
+
+            verified:
+                true,
+
+            approved:
+                true,
+
             status:
                 "verified-learning-error",
+
             confidence,
+
+            content,
+
             error:
                 error.message
         };
     }
 
     return {
-        success: false,
-        learned: false,
-        verified: true,
-        approved: true,
+
+        success:
+            false,
+
+        learned:
+            false,
+
+        verified:
+            true,
+
+        approved:
+            true,
+
         status:
             "learning-engine-unavailable",
+
         confidence,
+
+        content,
+
         error:
             "Verified learning engine is unavailable."
     };
 }
-
-/* =========================================================
-   COMPLETE PROCESSOR
-========================================================= */
 
 function processResearchResult({
     query = "",
@@ -2343,36 +3144,71 @@ function processResearchResult({
     provider = "",
     learningEnabled = true
 } = {}) {
+
     const result =
         createResearchResult({
+
             query,
+
             summary,
+
             answer,
+
             sources,
+
             confidence,
+
             provider
+
         });
 
     const verificationResult =
         verifyResearch({
+
             result
+
         });
 
     let learningResult = {
-        success: true,
-        learned: false,
-        reason:
-            "Learning disabled"
+
+        success:
+            true,
+
+        learned:
+            false,
+
+        verified:
+            false,
+
+        approved:
+            false,
+
+        status:
+            learningEnabled
+
+                ? "learning-not-started"
+
+                : "learning-disabled"
     };
 
     if (
         learningEnabled &&
         verificationResult.verified
     ) {
+
         learningResult =
-            learnVerifiedResearch(
-                result
-            );
+            learnVerifiedResearch({
+
+                ...result,
+
+                verified:
+                    true,
+
+                confidence:
+                    verificationResult
+                        .confidence
+
+            });
     }
 
     result.verification =
@@ -2382,12 +3218,19 @@ function processResearchResult({
         learningResult;
 
     result.researchStatus =
+
         verificationResult.verified
+
             ? (
+
                 learningResult.learned
+
                     ? "research-verified-and-learned"
+
                     : "research-verified-but-learning-failed"
+
             )
+
             : "research-review";
 
     result.context =
@@ -2398,13 +3241,12 @@ function processResearchResult({
     return result;
 }
 
-/* =========================================================
-   STATUS
-========================================================= */
-
 function getResearchStatus() {
+
     return {
-        success: true,
+
+        success:
+            true,
 
         engine:
             "Research Engine",
@@ -2416,36 +3258,73 @@ function getResearchStatus() {
             "ready",
 
         capabilities: {
-            webResearchResultProcessing: true,
-            sourceValidation: true,
-            duplicateSourceDetection: true,
-            sourceComparison: true,
-            conflictDetection: true,
 
-            claimExtraction: true,
-            evidenceMapping: true,
-            claimConfidence: true,
+            webResearchResultProcessing:
+                true,
 
-            sourceQualityScoring: true,
-            authorityScoring: true,
-            freshnessScoring: true,
+            sourceValidation:
+                true,
 
-            sourceIndependenceScoring: true,
-            sourceDiversityScoring: true,
+            duplicateSourceDetection:
+                true,
 
-            semanticClaimValidation: true,
-            claimContextAnalysis: true,
-            subjectActionObjectAnalysis: true,
-            negationDetection: true,
+            sourceComparison:
+                true,
 
-            claimProvenance: true,
-            evidenceTraceability: true,
+            conflictDetection:
+                true,
 
-            verificationAwareConfidence: true,
-            verifiedLearning: true
+            claimExtraction:
+                true,
+
+            evidenceMapping:
+                true,
+
+            claimConfidence:
+                true,
+
+            sourceQualityScoring:
+                true,
+
+            authorityScoring:
+                true,
+
+            freshnessScoring:
+                true,
+
+            sourceIndependenceScoring:
+                true,
+
+            sourceDiversityScoring:
+                true,
+
+            semanticClaimValidation:
+                true,
+
+            claimContextAnalysis:
+                true,
+
+            subjectActionObjectAnalysis:
+                true,
+
+            negationDetection:
+                true,
+
+            claimProvenance:
+                true,
+
+            evidenceTraceability:
+                true,
+
+            verificationAwareConfidence:
+                true,
+
+            verifiedLearning:
+                true
         },
 
         thresholds: {
+
             minVerifiedSources:
                 MIN_VERIFIED_SOURCES,
 
@@ -2469,54 +3348,76 @@ function getResearchStatus() {
         },
 
         pipeline: [
+
             "create-research-request",
+
             "validate-sources",
+
             "detect-duplicate-sources",
+
             "score-source-quality",
+
             "classify-source-authority",
+
             "calculate-source-freshness",
+
             "calculate-source-independence",
+
             "calculate-source-diversity",
+
             "compare-sources",
+
             "detect-conflicts",
+
             "extract-claims",
+
             "analyze-claim-context",
+
             "detect-claim-negation",
+
             "validate-claim-semantics",
+
             "map-claim-evidence",
+
             "calculate-claim-confidence",
+
             "build-claim-provenance",
+
             "calculate-research-confidence",
+
             "verify-research",
+
             "learn-verified-research"
         ]
     };
 }
 
-/* =========================================================
-   EXPORTS
-========================================================= */
-
 module.exports = {
+
     RESEARCH_VERSION,
 
     MIN_VERIFIED_SOURCES,
+
     MIN_VERIFIED_CONFIDENCE,
 
     MIN_PARTIAL_SOURCES,
+
     MIN_PARTIAL_CONFIDENCE,
 
     MIN_CLAIM_CONFIDENCE,
 
     HIGH_EVIDENCE_SCORE,
+
     MEDIUM_EVIDENCE_SCORE,
 
     createResearchRequest,
 
     normalizeSource,
+
     validateSources,
 
     getSourceDomain,
+
     getSourceFingerprint,
 
     detectDuplicateSources,
@@ -2524,22 +3425,29 @@ module.exports = {
     calculateSourceIndependence,
 
     classifySourceAuthority,
+
     calculateFreshness,
 
     scoreSource,
+
     scoreSources,
 
     containsNegation,
+
     detectClaimConflict,
 
     compareSources,
 
     splitSentences,
+
     looksLikeClaim,
+
     extractClaims,
 
     extractKeyTerms,
+
     extractClaimStructure,
+
     calculateContextOverlap,
 
     validateClaimSemantics,
@@ -2547,25 +3455,31 @@ module.exports = {
     calculateEvidenceStrength,
 
     mapClaimEvidence,
+
     calculateClaimConfidence,
 
     buildEvidenceMapping,
 
     buildClaimProvenance,
+
     buildProvenanceIndex,
 
     calculateResearchConfidence,
 
     createResearchResult,
+
     buildResearchContext,
 
     verifyResearch,
+
     verifyWithEngine,
 
     buildLearningContent,
+
     learnVerifiedResearch,
 
     processResearchResult,
 
     getResearchStatus
+
 };
