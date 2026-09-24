@@ -1,0 +1,60 @@
+name: AarHen Recovery Plan Safety Flags Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  recovery-plan-safety-flags:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify safety flags in recovery plan
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          engine.reset();
+
+          const saved = engine.saveCheckpoint({
+            id: "safety-flags-task",
+            status: "running",
+            currentStepIndex: 0,
+            currentStepId: "step-1",
+            retries: 1,
+            approvalRequired: true,
+            approved: false,
+            pauseRequested: true,
+            stopRequested: false,
+            steps: [
+              { id: "step-1", status: "pending" },
+              { id: "step-2", status: "pending" }
+            ]
+          }, { id: "safety-flags-checkpoint" });
+
+          assert(saved.success, "Checkpoint save should succeed.");
+
+          const result = engine.buildRecoveryPlan("safety-flags-task");
+          assert(result.success && result.recoverable, "Expected a recoverable plan.");
+
+          const task = saved.checkpoint.task;
+          const plan = result.plan;
+
+          assert(plan.approvalRequired === task.approvalRequired,
+            "Approval-required flag must match checkpoint.");
+          assert(plan.paused === (task.pauseRequested === true),
+            "Paused flag must reflect pause request.");
+          assert(plan.stopRequested === (task.stopRequested === true),
+            "Stop-requested flag must match checkpoint.");
+
+          console.log("Recovery plan safety flag tests passed.");
+          NODE
