@@ -1,0 +1,96 @@
+name: AarHen Checkpoint History Lifecycle Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-history-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify checkpoint history and deletion lifecycle
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "checkpoint-history-agent",
+            name: "Checkpoint history lifecycle test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "checkpoint-history-agent",
+            "Verify checkpoint history lifecycle",
+            { id: "checkpoint-history-task" }
+          );
+          assert(created.success, "Task creation failed.");
+
+          const added = manager.addStep("checkpoint-history-task", {
+            id: "checkpoint-history-step",
+            name: "Pending work",
+            description: "Checkpoint history test",
+            action: "calculate",
+            input: { expression: "3 + 4" }
+          });
+          assert(added.success, "Step creation failed.");
+
+          assert(manager.startTask("checkpoint-history-task").success, "Task start failed.");
+
+          const first = bridge.saveTaskCheckpoint("checkpoint-history-task", {
+            reason: "first history entry",
+            id: "checkpoint-history-first"
+          });
+          assert(first.success, "First checkpoint save failed.");
+
+          const second = bridge.saveTaskCheckpoint("checkpoint-history-task", {
+            reason: "second history entry",
+            id: "checkpoint-history-second"
+          });
+          assert(second.success, "Second checkpoint save failed.");
+
+          const history = bridge.listCheckpoints("checkpoint-history-task");
+          assert(history.success && history.count === 2, "Expected two checkpoint history entries.");
+          assert(history.checkpoints[0].id === "checkpoint-history-first", "First checkpoint order was not preserved.");
+          assert(history.checkpoints[1].id === "checkpoint-history-second", "Second checkpoint order was not preserved.");
+
+          const latest = bridge.getLatestCheckpoint("checkpoint-history-task");
+          assert(latest.success && latest.checkpoint.id === "checkpoint-history-second", "Latest checkpoint did not point to newest entry.");
+
+          const removed = bridge.deleteCheckpoint("checkpoint-history-first");
+          assert(removed.success, "Deleting older checkpoint failed.");
+
+          const afterDelete = bridge.listCheckpoints("checkpoint-history-task");
+          assert(afterDelete.success && afterDelete.count === 1, "Older checkpoint deletion did not update history.");
+          assert(afterDelete.checkpoints[0].id === "checkpoint-history-second", "Deleting older checkpoint removed the wrong entry.");
+
+          const latestAfterDelete = bridge.getLatestCheckpoint("checkpoint-history-task");
+          assert(latestAfterDelete.success && latestAfterDelete.checkpoint.id === "checkpoint-history-second", "Latest checkpoint changed unexpectedly after deleting older entry.");
+
+          const task = manager.getTask("checkpoint-history-task");
+          assert(task.success && task.task.status === "running", "Checkpoint deletion modified the live task.");
+
+          console.log("Checkpoint history lifecycle tests passed.");
+          console.log(JSON.stringify({
+            initialHistoryCount: history.count,
+            remainingHistoryCount: afterDelete.count,
+            latestCheckpointId: latestAfterDelete.checkpoint.id,
+            liveTaskStatus: task.task.status
+          }, null, 2));
+          NODE
