@@ -1,0 +1,85 @@
+name: AarHen Latest Checkpoint Fallback After Deletion Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  latest-checkpoint-fallback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify latest checkpoint fallback
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "latest-fallback-agent",
+            name: "Latest checkpoint fallback test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "latest-fallback-agent",
+            "Latest checkpoint fallback",
+            { id: "latest-fallback-task" }
+          );
+          assert(created.success, "Task creation failed.");
+          assert(manager.startTask("latest-fallback-task").success,
+            "Task start failed.");
+
+          assert(bridge.saveTaskCheckpoint("latest-fallback-task", {
+            id: "fallback-checkpoint-older"
+          }).success, "Older checkpoint save failed.");
+
+          assert(bridge.saveTaskCheckpoint("latest-fallback-task", {
+            id: "fallback-checkpoint-newer"
+          }).success, "Newer checkpoint save failed.");
+
+          const before = bridge.getLatestCheckpoint("latest-fallback-task");
+          assert(before.success &&
+            before.checkpoint.id === "fallback-checkpoint-newer",
+            "Newest checkpoint was not selected before deletion.");
+
+          const deleted = bridge.deleteCheckpoint("fallback-checkpoint-newer");
+          assert(deleted.success, "Deleting newest checkpoint failed.");
+
+          const after = bridge.getLatestCheckpoint("latest-fallback-task");
+          assert(after.success &&
+            after.checkpoint.id === "fallback-checkpoint-older",
+            "Latest checkpoint did not fall back to the remaining older checkpoint.");
+
+          const candidate = bridge.getRecoveryCandidate("latest-fallback-task");
+          assert(candidate.success &&
+            candidate.checkpoint.id === "fallback-checkpoint-older",
+            "Recovery candidate did not follow the updated latest checkpoint.");
+
+          const task = manager.getTask("latest-fallback-task");
+          assert(task.success && task.task.status === "running",
+            "Checkpoint deletion changed the live task state.");
+
+          console.log("Latest checkpoint fallback tests passed.");
+          console.log(JSON.stringify({
+            latestBeforeDeletion: before.checkpoint.id,
+            deletedCheckpoint: deleted.checkpointId,
+            latestAfterDeletion: after.checkpoint.id,
+            recoveryCandidateCheckpoint: candidate.checkpoint.id,
+            liveTaskStatus: task.task.status
+          }, null, 2));
+          NODE
