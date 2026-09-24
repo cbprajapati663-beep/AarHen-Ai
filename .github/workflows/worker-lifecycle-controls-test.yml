@@ -25,6 +25,7 @@ jobs:
           const workerApi = require("./core/agentWorker");
           const manager = require("./core/agentManager");
 
+          (async () => {
           workerApi.reset();
 
           const created = workerApi.createWorker({
@@ -43,7 +44,7 @@ jobs:
             throw new Error("Pause control failed: " + (paused.error || "unexpected status"));
           }
 
-          const blockedWhilePaused = workerApi.runAssignedTask(workerId);
+          const blockedWhilePaused = await workerApi.runAssignedTask(workerId);
           if (blockedWhilePaused.success !== false || blockedWhilePaused.paused !== true) {
             throw new Error("Paused worker did not reject execution.");
           }
@@ -58,7 +59,7 @@ jobs:
             throw new Error("Stop control failed: " + (stopped.error || "unexpected status"));
           }
 
-          const blockedAfterStop = workerApi.runAssignedTask(workerId);
+          const blockedAfterStop = await workerApi.runAssignedTask(workerId);
           if (blockedAfterStop.success !== false || blockedAfterStop.stopped !== true) {
             throw new Error("Stopped worker did not reject execution.");
           }
@@ -99,4 +100,8 @@ jobs:
             stoppedExecutionBlocked: true,
             stoppedAssignmentBlocked: true
           }, null, 2));
+          })().catch(error => {
+            console.error(error);
+            process.exitCode = 1;
+          });
           NODE
