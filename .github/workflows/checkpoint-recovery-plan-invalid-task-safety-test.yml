@@ -1,0 +1,47 @@
+name: AarHen Recovery Plan Invalid Task Safety Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  invalid-task-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify invalid task IDs fail safely
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          engine.reset();
+
+          for (const taskId of [undefined, null, "", "   "]) {
+            const candidate = engine.getRecoveryCandidate(taskId);
+            assert(candidate.success === false,
+              "Invalid task ID must not produce a successful candidate.");
+            assert(candidate.recoverable === false,
+              "Invalid task ID must never be recoverable.");
+
+            const plan = engine.buildRecoveryPlan(taskId);
+            assert(plan.success === false,
+              "Invalid task ID must not produce a successful plan.");
+            assert(plan.plan === null,
+              "Invalid task ID must not produce a recovery plan.");
+          }
+
+          const status = engine.getStatus();
+          assert(status.checkpointCount === 0,
+            "Invalid lookups must not create checkpoints.");
+
+          console.log("Invalid task recovery safety tests passed.");
+          NODE
