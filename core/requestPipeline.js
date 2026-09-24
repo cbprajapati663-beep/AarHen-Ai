@@ -2,10 +2,12 @@
 // AARHEN CORE V5
 // UNIFIED REQUEST PIPELINE
 // ============================================================
+// Version: 5.7.4
+//
 // Purpose:
-// Connect Document Knowledge Context with the existing
-// AarHen Master Orchestrator without modifying the
-// large orchestrator file yet.
+// Connect Document Knowledge with the existing AarHen
+// Master Orchestrator while preserving document-aware
+// knowledge through the request context.
 //
 // Flow:
 //
@@ -14,6 +16,8 @@
 // DOCUMENT KNOWLEDGE
 //      ↓
 // CONTEXT AUGMENTATION
+//      ↓
+// BRAIN-AWARE CONTEXT
 //      ↓
 // MASTER ORCHESTRATOR
 //      ↓
@@ -29,7 +33,7 @@ const knowledgeContext =
     require("./knowledgeContext");
 
 const REQUEST_PIPELINE_VERSION =
-    "5.7.3";
+    "5.7.4";
 
 
 // ============================================================
@@ -40,6 +44,7 @@ function safeString(value) {
     return String(value ?? "").trim();
 }
 
+
 function safeObject(value) {
     return (
         value &&
@@ -49,11 +54,13 @@ function safeObject(value) {
         : {};
 }
 
+
 function safeArray(value) {
     return Array.isArray(value)
         ? value
         : [];
 }
+
 
 function normalizeLimit(
     value,
@@ -74,6 +81,96 @@ function normalizeLimit(
         Math.floor(number),
         maximum
     );
+}
+
+
+// ============================================================
+// DOCUMENT KNOWLEDGE BLOCK
+// ============================================================
+
+function buildDocumentKnowledgeBlock(
+    documentContext = {}
+) {
+    const unifiedKnowledge =
+        safeObject(
+            documentContext.unifiedKnowledge
+        );
+
+    const documents =
+        safeObject(
+            unifiedKnowledge.documents
+        );
+
+    const rag =
+        safeObject(
+            unifiedKnowledge.rag
+        );
+
+    const knowledge =
+        safeObject(
+            unifiedKnowledge.knowledge
+        );
+
+    const documentKnowledge =
+        safeArray(
+            knowledge.documentKnowledge
+        );
+
+    const documentResults =
+        safeArray(
+            documents.results
+        );
+
+    return {
+
+        unified:
+            unifiedKnowledge,
+
+        rag,
+
+        documents: {
+
+            ...documents,
+
+            results:
+                documentResults,
+
+            count:
+                Number(
+                    documents.count
+                ) ||
+                documentResults.length,
+
+            available:
+                Boolean(
+                    documents.available
+                )
+        },
+
+        documentKnowledge,
+
+        answerContext:
+            safeString(
+                documentContext.answerContext
+            ),
+
+        knowledgeContext:
+            documentContext.knowledgeContext ||
+            null,
+
+        available:
+            Boolean(
+                unifiedKnowledge
+                    ?.availability
+                    ?.anyKnowledge
+            ),
+
+        documentDetected:
+            Boolean(
+                documentResults.length > 0 ||
+                documentKnowledge.length > 0
+            )
+    };
 }
 
 
@@ -112,8 +209,9 @@ function buildRequestContext(
         };
     }
 
+
     // --------------------------------------------------------
-    // Document knowledge can be disabled explicitly.
+    // DOCUMENT KNOWLEDGE DISABLE
     // --------------------------------------------------------
 
     if (
@@ -126,18 +224,30 @@ function buildRequestContext(
             success: true,
 
             context: {
+
                 ...existingContext,
 
                 documentKnowledgeEnabled:
                     false
             },
 
-            documentKnowledge: null,
+            documentKnowledge:
+                null,
+
+            answerContext:
+                "",
+
+            documentKnowledgeAvailable:
+                false,
+
+            documentCount:
+                0,
 
             status:
                 "document-knowledge-disabled"
         };
     }
+
 
     const limit =
         normalizeLimit(
@@ -147,7 +257,12 @@ function buildRequestContext(
             10
         );
 
+
     try {
+
+        // ----------------------------------------------------
+        // BUILD UNIFIED KNOWLEDGE
+        // ----------------------------------------------------
 
         const documentContext =
             knowledgeContext.augmentBrainResult(
@@ -174,14 +289,113 @@ function buildRequestContext(
                 }
             );
 
+
         // ----------------------------------------------------
-        // Preserve every existing context field.
-        // Add document-aware context alongside it.
+        // NORMALIZE DOCUMENT KNOWLEDGE
+        // ----------------------------------------------------
+
+        const documentKnowledgeBlock =
+            buildDocumentKnowledgeBlock(
+                documentContext
+            );
+
+
+        // ----------------------------------------------------
+        // PRESERVE EXISTING BRAIN
+        // ----------------------------------------------------
+
+        const existingBrain =
+            safeObject(
+                existingContext.brain
+            );
+
+
+        const existingBrainKnowledge =
+            safeObject(
+                existingBrain.knowledge
+            );
+
+
+        // ----------------------------------------------------
+        // MERGE DOCUMENT KNOWLEDGE INTO BRAIN KNOWLEDGE
+        // ----------------------------------------------------
+        //
+        // Existing knowledge is preserved.
+        // Document knowledge is added as an additional
+        // knowledge layer.
+        //
+        // This gives downstream Brain-aware components a
+        // predictable place to find document knowledge.
+        // ----------------------------------------------------
+
+        const mergedBrainKnowledge = {
+
+            ...existingBrainKnowledge,
+
+            documentKnowledge:
+                documentKnowledgeBlock
+                    .documentKnowledge,
+
+            documentDocuments:
+                documentKnowledgeBlock
+                    .documents,
+
+            documentRag:
+                documentKnowledgeBlock
+                    .rag,
+
+            documentUnifiedKnowledge:
+                documentKnowledgeBlock
+                    .unified,
+
+            documentAnswerContext:
+                documentKnowledgeBlock
+                    .answerContext,
+
+            documentKnowledgeContext:
+                documentKnowledgeBlock
+                    .knowledgeContext,
+
+            documentKnowledgeAvailable:
+                documentKnowledgeBlock
+                    .available,
+
+            documentDetected:
+                documentKnowledgeBlock
+                    .documentDetected
+        };
+
+
+        // ----------------------------------------------------
+        // BRAIN CONTEXT
+        // ----------------------------------------------------
+
+        const augmentedBrain = {
+
+            ...existingBrain,
+
+            knowledge:
+                mergedBrainKnowledge,
+
+            documentKnowledge:
+                documentKnowledgeBlock,
+
+            documentAware:
+                true
+        };
+
+
+        // ----------------------------------------------------
+        // COMPLETE AUGMENTED CONTEXT
         // ----------------------------------------------------
 
         const augmentedContext = {
 
             ...existingContext,
+
+            // ------------------------------------------------
+            // MAIN FLAGS
+            // ------------------------------------------------
 
             documentKnowledgeEnabled:
                 true,
@@ -189,38 +403,47 @@ function buildRequestContext(
             documentKnowledgeLimit:
                 limit,
 
+            documentAware:
+                true,
+
+
+            // ------------------------------------------------
+            // BRAIN-AWARE CONTEXT
+            // ------------------------------------------------
+
+            brain:
+                augmentedBrain,
+
+
+            // ------------------------------------------------
+            // DOCUMENT CONTEXT
+            // ------------------------------------------------
+
             documentContext:
-                documentContext.unifiedKnowledge ||
-                null,
+                documentKnowledgeBlock
+                    .unified,
 
             documentRag:
-                documentContext.unifiedKnowledge
-                    ?.rag ||
-                null,
+                documentKnowledgeBlock
+                    .rag,
 
             documentDocuments:
-                documentContext.unifiedKnowledge
-                    ?.documents ||
-                {
-                    results: [],
-                    count: 0,
-                    available: false
-                },
+                documentKnowledgeBlock
+                    .documents,
 
             documentKnowledge:
-                documentContext.unifiedKnowledge
-                    ?.knowledge
-                    ?.documentKnowledge ||
-                [],
+                documentKnowledgeBlock
+                    .documentKnowledge,
 
             answerContext:
-                documentContext.answerContext ||
-                "",
+                documentKnowledgeBlock
+                    .answerContext,
 
             knowledgeContext:
-                documentContext.knowledgeContext ||
-                null
+                documentKnowledgeBlock
+                    .knowledgeContext
         };
+
 
         return {
 
@@ -230,28 +453,27 @@ function buildRequestContext(
                 augmentedContext,
 
             documentKnowledge:
-                documentContext.unifiedKnowledge ||
-                null,
+                documentKnowledgeBlock
+                    .unified,
 
             answerContext:
-                documentContext.answerContext ||
-                "",
+                documentKnowledgeBlock
+                    .answerContext,
 
             documentKnowledgeAvailable:
-                Boolean(
-                    documentContext
-                        .unifiedKnowledge
-                        ?.availability
-                        ?.anyKnowledge
-                ),
+                documentKnowledgeBlock
+                    .available,
 
             documentCount:
                 Number(
-                    documentContext
-                        .unifiedKnowledge
-                        ?.documents
-                        ?.count
+                    documentKnowledgeBlock
+                        .documents
+                        .count
                 ) || 0,
+
+            documentDetected:
+                documentKnowledgeBlock
+                    .documentDetected,
 
             status:
                 "request-context-ready"
@@ -260,9 +482,10 @@ function buildRequestContext(
     } catch (error) {
 
         // ----------------------------------------------------
-        // Safe fallback:
-        // Existing context must survive even when document
-        // retrieval fails.
+        // SAFE FALLBACK
+        // ----------------------------------------------------
+        //
+        // Existing context is never destroyed.
         // ----------------------------------------------------
 
         return {
@@ -275,6 +498,9 @@ function buildRequestContext(
 
                 documentKnowledgeEnabled:
                     true,
+
+                documentAware:
+                    false,
 
                 documentKnowledgeError:
                     error.message
@@ -291,6 +517,9 @@ function buildRequestContext(
 
             documentCount:
                 0,
+
+            documentDetected:
+                false,
 
             status:
                 "document-context-fallback",
@@ -328,6 +557,7 @@ async function processRequest(
         };
     }
 
+
     const requestContext =
         buildRequestContext(
             cleanRequest,
@@ -335,11 +565,14 @@ async function processRequest(
             options
         );
 
+
     if (!requestContext.success) {
         return requestContext;
     }
 
+
     let orchestrationResult;
+
 
     try {
 
@@ -389,6 +622,11 @@ async function processRequest(
             ) ||
             cleanRequest,
 
+
+        // ----------------------------------------------------
+        // PIPELINE METADATA
+        // ----------------------------------------------------
+
         pipeline: {
 
             name:
@@ -405,10 +643,21 @@ async function processRequest(
                     .context
                     ?.documentKnowledgeEnabled !== false,
 
+            documentAware:
+                requestContext
+                    .context
+                    ?.documentAware === true,
+
             documentKnowledgeAvailable:
                 Boolean(
                     requestContext
                         .documentKnowledgeAvailable
+                ),
+
+            documentDetected:
+                Boolean(
+                    requestContext
+                        .documentDetected
                 ),
 
             documentCount:
@@ -420,6 +669,11 @@ async function processRequest(
                 )
         },
 
+
+        // ----------------------------------------------------
+        // DOCUMENT KNOWLEDGE
+        // ----------------------------------------------------
+
         documentKnowledge:
             requestContext.documentKnowledge,
 
@@ -429,6 +683,11 @@ async function processRequest(
         requestContext:
             requestContext.context,
 
+
+        // ----------------------------------------------------
+        // FINAL STATUS
+        // ----------------------------------------------------
+
         status:
             orchestrationResult?.status ||
             "completed"
@@ -437,7 +696,7 @@ async function processRequest(
 
 
 // ============================================================
-// SIMPLE ORCHESTRATE ALIAS
+// ORCHESTRATE ALIAS
 // ============================================================
 
 async function orchestrate(
@@ -455,9 +714,6 @@ async function orchestrate(
 
 // ============================================================
 // DOCUMENT KNOWLEDGE ONLY
-// ============================================================
-// Useful for UI/API callers that need local knowledge without
-// executing the full request.
 // ============================================================
 
 function getDocumentContext(
@@ -480,6 +736,7 @@ function getDocumentContext(
                 "Request is required."
         };
     }
+
 
     try {
 
@@ -524,6 +781,11 @@ function health() {
     let knowledgeStatus =
         null;
 
+
+    // --------------------------------------------------------
+    // ORCHESTRATOR
+    // --------------------------------------------------------
+
     try {
 
         if (
@@ -547,6 +809,10 @@ function health() {
         };
     }
 
+
+    // --------------------------------------------------------
+    // KNOWLEDGE
+    // --------------------------------------------------------
 
     try {
 
@@ -585,6 +851,7 @@ function health() {
         status:
             "active",
 
+
         connectedSystems: {
 
             masterOrchestrator:
@@ -600,14 +867,20 @@ function health() {
             documentKnowledge:
                 Boolean(
                     knowledgeContext
-                )
+                ),
+
+            brainKnowledgeBridge:
+                true
         },
+
 
         orchestrator:
             orchestratorStatus,
 
+
         knowledge:
             knowledgeStatus,
+
 
         pipeline: [
 
@@ -616,6 +889,10 @@ function health() {
             "request-validation",
 
             "document-knowledge-retrieval",
+
+            "knowledge-normalization",
+
+            "brain-knowledge-augmentation",
 
             "context-augmentation",
 
@@ -656,11 +933,14 @@ function getStatus() {
         status:
             "active",
 
+
         capabilities: [
 
             "unified-request-processing",
 
             "document-knowledge-injection",
+
+            "brain-knowledge-augmentation",
 
             "document-rag-context",
 
@@ -675,6 +955,7 @@ function getStatus() {
             "pipeline-health"
         ],
 
+
         connectedSystems: [
 
             "AarHen Master Orchestrator",
@@ -683,8 +964,11 @@ function getStatus() {
 
             "AarHen Document Knowledge Manager",
 
-            "AarHen Document Context Adapter"
+            "AarHen Document Context Adapter",
+
+            "AarHen Brain Knowledge Bridge"
         ],
+
 
         pipeline: [
 
@@ -693,6 +977,10 @@ function getStatus() {
             "Input Validation",
 
             "Document Knowledge Retrieval",
+
+            "Knowledge Normalization",
+
+            "Brain Knowledge Augmentation",
 
             "Context Augmentation",
 
@@ -727,6 +1015,8 @@ module.exports = {
     safeArray,
 
     normalizeLimit,
+
+    buildDocumentKnowledgeBlock,
 
     buildRequestContext,
 
