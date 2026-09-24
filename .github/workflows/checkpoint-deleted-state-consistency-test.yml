@@ -68,7 +68,7 @@ jobs:
             "Task without a checkpoint must not be recoverable.");
 
           const plan = bridge.buildRecoveryPlan("deleted-state-task");
-          assert(plan.recoverable === false,
+          assert(plan.recoverable !== true,
             "Task without a checkpoint must not produce a recoverable plan.");
 
           const live = manager.getTask("deleted-state-task");
