@@ -1,0 +1,91 @@
+name: AarHen Checkpoint Drift Detection Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-drift-detection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify task/checkpoint drift detection
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "drift-test-agent",
+            name: "Checkpoint drift detection test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "drift-test-agent",
+            "Detect task changes since checkpoint",
+            { id: "drift-test-task" }
+          );
+          assert(created.success, "Task creation failed.");
+
+          const added = manager.addStep("drift-test-task", {
+            id: "drift-test-step",
+            name: "Pending work",
+            description: "Drift detection test step",
+            action: "calculate",
+            input: { expression: "5 + 6" }
+          });
+          assert(added.success, "Step creation failed.");
+
+          assert(manager.startTask("drift-test-task").success, "Task start failed.");
+
+          const saved = bridge.saveTaskCheckpoint("drift-test-task", {
+            id: "drift-test-checkpoint",
+            reason: "Baseline before pause"
+          });
+          assert(saved.success, "Checkpoint save failed.");
+
+          const baseline = bridge.compareWithCheckpoint("drift-test-task");
+          assert(baseline.success, "Baseline comparison failed.");
+          assert(baseline.checkpointExists === true, "Baseline checkpoint was not found.");
+          assert(baseline.changed === false, "Fresh checkpoint should have no detected drift.");
+
+          assert(manager.pauseTask("drift-test-task", "Drift detection test").success, "Task pause failed.");
+
+          const changed = bridge.compareWithCheckpoint("drift-test-task");
+          assert(changed.success, "Post-change comparison failed.");
+          assert(changed.changed === true, "Task changes were not detected.");
+          const fields = changed.differences.map(item => item.field);
+          assert(fields.includes("status"), "Status drift was not reported.");
+          assert(fields.includes("pauseRequested"), "Pause flag drift was not reported.");
+
+          const checkpoint = bridge.getLatestCheckpoint("drift-test-task");
+          assert(checkpoint.success, "Saved checkpoint disappeared.");
+          assert(checkpoint.checkpoint.task.status === "running", "Comparison modified checkpoint snapshot.");
+
+          const liveTask = manager.getTask("drift-test-task");
+          assert(liveTask.success && liveTask.task.status === "paused", "Comparison modified live task state.");
+
+          console.log("Checkpoint drift detection tests passed.");
+          console.log(JSON.stringify({
+            baselineChanged: baseline.changed,
+            driftDetected: changed.changed,
+            differingFields: fields,
+            checkpointStatus: checkpoint.checkpoint.task.status,
+            liveTaskStatus: liveTask.task.status
+          }, null, 2));
+          NODE
