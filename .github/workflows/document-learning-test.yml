@@ -1,0 +1,315 @@
+name: AarHen Document Learning Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "engines/documentLearning.js"
+      - "package.json"
+      - ".github/workflows/document-learning-test.yml"
+
+jobs:
+  document-learning-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # --------------------------------------------------------
+      # NODE
+      # --------------------------------------------------------
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # --------------------------------------------------------
+      # NPM CACHE
+      # --------------------------------------------------------
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node20-aarhen-document-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node20-aarhen-document-
+
+
+      # --------------------------------------------------------
+      # INSTALL
+      # --------------------------------------------------------
+
+      - name: Install dependencies
+        run: npm install --prefer-offline
+
+
+      # --------------------------------------------------------
+      # PACKAGE CHECK
+      # --------------------------------------------------------
+
+      - name: Verify document dependencies
+        run: |
+          node - <<'NODE'
+          const pdfParse = require("pdf-parse");
+          const mammoth = require("mammoth");
+
+          console.log("pdf-parse: OK");
+          console.log("mammoth: OK");
+
+          if (typeof pdfParse !== "function") {
+            throw new Error("pdf-parse module is not callable");
+          }
+
+          if (!mammoth || typeof mammoth.extractRawText !== "function") {
+            throw new Error("mammoth extractRawText is unavailable");
+          }
+
+          console.log("Document dependencies verified.");
+          NODE
+
+
+      # --------------------------------------------------------
+      # ENGINE LOAD
+      # --------------------------------------------------------
+
+      - name: Verify Document Learning Engine
+        run: |
+          node - <<'NODE'
+          const engine = require("./engines/documentLearning");
+
+          if (!engine) {
+            throw new Error("Document Learning Engine could not be loaded.");
+          }
+
+          if (engine.DOCUMENT_ENGINE_VERSION !== "5.6.0") {
+            throw new Error(
+              `Unexpected document engine version: ${engine.DOCUMENT_ENGINE_VERSION}`
+            );
+          }
+
+          if (typeof engine.processDocument !== "function") {
+            throw new Error("processDocument() is missing.");
+          }
+
+          if (typeof engine.extractText !== "function") {
+            throw new Error("extractText() is missing.");
+          }
+
+          if (typeof engine.splitTextIntoChunks !== "function") {
+            throw new Error("splitTextIntoChunks() is missing.");
+          }
+
+          console.log(
+            `Document Learning Engine v${engine.DOCUMENT_ENGINE_VERSION}: OK`
+          );
+          NODE
+
+
+      # --------------------------------------------------------
+      # STATUS TEST
+      # --------------------------------------------------------
+
+      - name: Test engine status
+        run: |
+          node - <<'NODE'
+          const engine = require("./engines/documentLearning");
+
+          const status = engine.getStatus();
+
+          if (!status || status.success !== true) {
+            throw new Error("Document engine status failed.");
+          }
+
+          if (status.status !== "active") {
+            throw new Error(
+              `Unexpected engine status: ${status.status}`
+            );
+          }
+
+          console.log(JSON.stringify(status, null, 2));
+          console.log("Status test: PASS");
+          NODE
+
+
+      # --------------------------------------------------------
+      # CREATE TEST DOCUMENT
+      # --------------------------------------------------------
+
+      - name: Create test TXT document
+        run: |
+          mkdir -p test-fixtures
+
+          cat > test-fixtures/aarhen-test.txt <<'EOF'
+          AarHen is a personal and business AI system.
+
+          The system contains a reasoning brain, research engine,
+          knowledge engine, memory system, skill system,
+          verification system, and continuous learning system.
+
+          This document is used to test document extraction,
+          normalization, chunking, metadata generation,
+          RAG-ready output, and memory-ready output.
+          EOF
+
+          echo "Test document created."
+
+
+      # --------------------------------------------------------
+      # TXT PROCESSING
+      # --------------------------------------------------------
+
+      - name: Test TXT document processing
+        run: |
+          node - <<'NODE'
+          const engine = require("./engines/documentLearning");
+
+          (async () => {
+
+            const result =
+              await engine.processDocument(
+                "./test-fixtures/aarhen-test.txt"
+              );
+
+            if (!result.success) {
+              throw new Error(
+                result.error || "TXT processing failed."
+              );
+            }
+
+            if (result.status !== "document-processed") {
+              throw new Error(
+                `Unexpected status: ${result.status}`
+              );
+            }
+
+            if (!result.learningReady) {
+              throw new Error(
+                "Learning-ready output is not available."
+              );
+            }
+
+            if (!result.memoryReady) {
+              throw new Error(
+                "Memory-ready output is not available."
+              );
+            }
+
+            if (!result.ragReady) {
+              throw new Error(
+                "RAG-ready output is not available."
+              );
+            }
+
+            if (!Array.isArray(result.chunks)) {
+              throw new Error(
+                "Document chunks are not an array."
+              );
+            }
+
+            if (result.chunks.length === 0) {
+              throw new Error(
+                "Document produced zero chunks."
+              );
+            }
+
+            console.log(
+              JSON.stringify(
+                {
+                  fileName: result.fileName,
+                  extension: result.extension,
+                  characterCount: result.characterCount,
+                  wordCount: result.wordCount,
+                  chunkCount: result.chunkCount,
+                  parser: result.parser,
+                  learningReady: result.learningReady,
+                  memoryReady: result.memoryReady,
+                  ragReady: result.ragReady
+                },
+                null,
+                2
+              )
+            );
+
+            console.log("TXT processing test: PASS");
+
+          })().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+
+      # --------------------------------------------------------
+      # CHUNKING TEST
+      # --------------------------------------------------------
+
+      - name: Test document chunking
+        run: |
+          node - <<'NODE'
+          const engine = require("./engines/documentLearning");
+
+          const text = `
+          AarHen Core contains multiple independent engines.
+          These engines process research, memory, knowledge,
+          verification, learning, business information,
+          and document information.
+          `;
+
+          const chunks =
+            engine.splitTextIntoChunks(
+              text,
+              {
+                chunkSize: 300,
+                chunkOverlap: 50
+              }
+            );
+
+          if (!Array.isArray(chunks)) {
+            throw new Error("Chunking did not return an array.");
+          }
+
+          if (chunks.length === 0) {
+            throw new Error("Chunking produced no chunks.");
+          }
+
+          console.log(
+            `Chunk count: ${chunks.length}`
+          );
+
+          console.log("Chunking test: PASS");
+          NODE
+
+
+      # --------------------------------------------------------
+      # FINAL SUMMARY
+      # --------------------------------------------------------
+
+      - name: Final document learning summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN DOCUMENT LEARNING TEST SUMMARY"
+          echo "=============================================="
+          echo "pdf-parse dependency      : PASS"
+          echo "mammoth dependency        : PASS"
+          echo "Document engine load      : PASS"
+          echo "Engine status             : PASS"
+          echo "TXT extraction            : PASS"
+          echo "Document chunking         : PASS"
+          echo "Learning-ready output     : PASS"
+          echo "Memory-ready output       : PASS"
+          echo "RAG-ready output          : PASS"
+          echo "=============================================="
+          echo " DOCUMENT LEARNING ENGINE : GREEN"
+          echo "=============================================="
