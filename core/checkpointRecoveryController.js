@@ -16,37 +16,12 @@
 // - Preserve Agent Runner
 // - Preserve Autonomous Safety Guard
 //
-// Architecture:
-//
-// User Request
-//      ↓
-// Checkpoint Recovery Controller
-//      ↓
-// Autonomous Worker
-//      ↓
-// Agent Worker
-//      ↓
-// Checkpoint Before Execution
-//      ↓
-// Recovery-aware Runner
-//      ↓
-// Agent Runner
-//      ↓
-// Autonomous Safety Guard
-//      ↓
-// Permission
-//      ↓
-// Controlled Executor
-//      ↓
-// Checkpoint After Execution
-//
 // IMPORTANT:
 // - Does NOT bypass Autonomous Worker.
 // - Does NOT bypass Recovery system.
 // - Does NOT bypass Agent Runner.
 // - Does NOT bypass Autonomous Guard.
 // - Does NOT execute arbitrary code itself.
-// - Checkpoints are still managed by Checkpoint Engine.
 // - Checkpoint storage is currently in-memory.
 // ============================================================
 
@@ -137,6 +112,71 @@ function clone(
 
 
 // ============================================================
+// NORMALIZE EXECUTION METADATA
+// ============================================================
+//
+// Autonomous Worker commonly returns:
+//
+// {
+//     success: true,
+//     stage: "worker-execution"
+// }
+//
+// Some lower layers may instead expose:
+//
+// {
+//     status: "completed"
+// }
+//
+// The checkpoint layer should preserve both when available.
+//
+// ============================================================
+
+function buildCheckpointExecutionResult(
+    executionResult
+) {
+
+    const execution =
+        safeObject(
+            executionResult
+        );
+
+
+    const stage =
+        safeString(
+            execution.stage
+        );
+
+
+    const status =
+        safeString(
+            execution.status
+        );
+
+
+    return {
+
+        ...execution,
+
+        // Preserve original status when available.
+        // Otherwise use execution stage as the execution status.
+        status:
+            status ||
+            stage ||
+            null,
+
+        // Explicitly preserve the execution stage.
+        stage:
+            stage ||
+            status ||
+            null
+
+    };
+
+}
+
+
+// ============================================================
 // GET CURRENT TASK
 // ============================================================
 
@@ -202,10 +242,6 @@ function getTask(
 // ============================================================
 // BUILD EXECUTION OPTIONS
 // ============================================================
-//
-// Autonomous Recovery creates the recovery-aware runner.
-//
-// ============================================================
 
 function buildExecutionOptions(
     options = {}
@@ -250,6 +286,12 @@ function saveBeforeExecution(
     options = {}
 ) {
 
+    const config =
+        safeObject(
+            options
+        );
+
+
     return checkpointBridge
         .saveBeforeExecution(
 
@@ -257,12 +299,10 @@ function saveBeforeExecution(
 
             {
 
-                ...safeObject(
-                    options
-                ),
+                ...config,
 
                 source:
-                    options.source ||
+                    config.source ||
                     "checkpoint-recovery-controller"
 
             }
@@ -282,21 +322,31 @@ function saveAfterExecution(
     options = {}
 ) {
 
+    const config =
+        safeObject(
+            options
+        );
+
+
+    const normalizedExecution =
+        buildCheckpointExecutionResult(
+            executionResult
+        );
+
+
     return checkpointBridge
         .saveAfterExecution(
 
             taskId,
 
-            executionResult,
+            normalizedExecution,
 
             {
 
-                ...safeObject(
-                    options
-                ),
+                ...config,
 
                 source:
-                    options.source ||
+                    config.source ||
                     "checkpoint-recovery-controller"
 
             }
@@ -308,10 +358,6 @@ function saveAfterExecution(
 
 // ============================================================
 // EXECUTE ASSIGNED TASK
-// ============================================================
-//
-// Existing task already exists and is assigned.
-//
 // ============================================================
 
 async function executeAssignedTask(
@@ -585,6 +631,9 @@ async function executeAssignedTask(
             stage:
                 "autonomous-execution",
 
+            status:
+                "autonomous-execution",
+
             error:
                 error?.message ||
                 "Autonomous execution failed.",
@@ -755,13 +804,6 @@ async function executeAssignedTask(
 
 // ============================================================
 // EXECUTE REQUEST
-// ============================================================
-//
-// Main high-level controller.
-//
-// Creates + assigns task first so that a checkpoint can be
-// saved before the execution actually begins.
-//
 // ============================================================
 
 async function executeRequest(
@@ -1071,6 +1113,9 @@ async function executeRequest(
             stage:
                 "autonomous-execution",
 
+            status:
+                "autonomous-execution",
+
             error:
                 error?.message ||
                 "Autonomous execution failed.",
@@ -1246,12 +1291,6 @@ async function executeRequest(
 // ============================================================
 // APPROVE + EXECUTE
 // ============================================================
-//
-// Uses existing Autonomous Worker approval flow.
-//
-// A checkpoint is saved after approval/execution.
-//
-// ============================================================
 
 async function approveAndExecute(
     taskId,
@@ -1366,7 +1405,6 @@ async function approveAndExecute(
                 "Unable to save approval execution checkpoint.",
 
             task:
-
                 task,
 
             checkpointSave:
@@ -1405,6 +1443,9 @@ async function approveAndExecute(
                 false,
 
             stage:
+                "approved-execution",
+
+            status:
                 "approved-execution",
 
             error:
@@ -1468,6 +1509,12 @@ async function approveAndExecute(
         );
 
 
+    const normalizedRecoveryResult =
+        buildCheckpointExecutionResult(
+            result
+        );
+
+
     return {
 
         success:
@@ -1504,6 +1551,14 @@ async function approveAndExecute(
                 ?.result
                 ?.recovery ||
             null,
+
+        executionStatus:
+            normalizedRecoveryResult
+                .status,
+
+        executionStage:
+            normalizedRecoveryResult
+                .stage,
 
         beforeCheckpoint:
             beforeCheckpoint
@@ -1728,6 +1783,12 @@ function getStatus() {
             checkpointAfterExecution:
                 true,
 
+            executionStageTracking:
+                true,
+
+            executionStatusTracking:
+                true,
+
             recoveryAwareExecution:
                 true,
 
@@ -1774,12 +1835,6 @@ function getStatus() {
 
 // ============================================================
 // RESET
-// ============================================================
-//
-// Controller itself has no independent mutable task state.
-//
-// Checkpoints remain managed by Checkpoint Bridge / Engine.
-//
 // ============================================================
 
 function reset() {
