@@ -1,0 +1,80 @@
+name: AarHen Checkpoint Read Isolation Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-read-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify checkpoint reads are isolated copies
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "read-isolation-agent",
+            name: "Checkpoint read isolation test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "read-isolation-agent",
+            "Checkpoint read isolation",
+            { id: "read-isolation-task" }
+          );
+          assert(created.success, "Task creation failed.");
+          assert(manager.startTask("read-isolation-task").success,
+            "Task start failed.");
+
+          assert(bridge.saveTaskCheckpoint("read-isolation-task", {
+            id: "read-isolation-checkpoint",
+            metadata: { nested: { label: "original" }, tags: ["one", "two"] }
+          }).success, "Checkpoint save failed.");
+
+          const direct = bridge.getCheckpoint("read-isolation-checkpoint");
+          assert(direct.success, "Direct checkpoint read failed.");
+          direct.checkpoint.metadata.nested.label = "tampered-direct";
+          direct.checkpoint.metadata.tags.push("tampered");
+
+          const latest = bridge.getLatestCheckpoint("read-isolation-task");
+          assert(latest.success, "Latest checkpoint read failed.");
+          latest.checkpoint.metadata.nested.label = "tampered-latest";
+
+          const listed = bridge.listCheckpoints("read-isolation-task");
+          assert(listed.success && listed.count === 1, "Checkpoint listing failed.");
+          listed.checkpoints[0].metadata.nested.label = "tampered-list";
+          listed.checkpoints[0].metadata.tags[0] = "tampered-list";
+
+          const stored = bridge.getCheckpoint("read-isolation-checkpoint");
+          assert(stored.success, "Stored checkpoint could not be read again.");
+          assert(stored.checkpoint.metadata.nested.label === "original",
+            "Mutating a returned checkpoint changed stored nested metadata.");
+          assert(stored.checkpoint.metadata.tags.length === 2 &&
+            stored.checkpoint.metadata.tags[0] === "one",
+            "Mutating returned arrays changed stored checkpoint data.");
+
+          console.log("Checkpoint read isolation tests passed.");
+          console.log(JSON.stringify({
+            storedNestedLabel: stored.checkpoint.metadata.nested.label,
+            storedTags: stored.checkpoint.metadata.tags,
+            checkpointCount: listed.count
+          }, null, 2));
+          NODE
