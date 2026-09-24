@@ -8,6 +8,7 @@ on:
       - "core/researchApi.js"
       - "core/autonomousWorker.js"
       - "core/checkpointRecoveryController.js"
+      - "core/autonomousRecovery.js"
       - "core/autonomousAgent.js"
       - "core/agentPlanner.js"
       - "core/agentManager.js"
