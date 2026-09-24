@@ -29,7 +29,13 @@ try {
     if (!result.success) throw new Error(result.error);
     if (result.checkpoint.taskId !== "task-restart-check") throw new Error("Wrong task checkpoint");
     if (engine.getStatus().checkpointCount !== 1) throw new Error("Checkpoint index was not restored");
-    console.log("Checkpoint engine restart persistence test passed.");
+    const plan = engine.buildRecoveryPlan("task-restart-check");
+    if (!plan.success || plan.recoverable !== true) throw new Error("Persisted checkpoint was not recognized as recoverable");
+    if (plan.plan.action !== "resume-from-checkpoint") throw new Error("Unexpected recovery plan action");
+    if (plan.plan.executable !== false || plan.plan.executionMode !== "inspection-only") {
+      throw new Error("Recovery plan must remain inspection-only");
+    }
+    console.log("Checkpoint engine restart persistence and safe recovery-plan test passed.");
   `], { cwd: process.cwd(), env, encoding: "utf8" });
   assert.match(output, /passed/);
   console.log(output.trim());
