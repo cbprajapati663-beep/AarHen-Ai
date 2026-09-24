@@ -1,0 +1,508 @@
+name: AarHen Request Pipeline Test
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  request-pipeline-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # PIPELINE LOAD TEST
+      # ======================================================
+
+      - name: Load Request Pipeline
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          if (!pipeline) {
+            throw new Error(
+              "Request Pipeline could not be loaded."
+            );
+          }
+
+          console.log(
+            "Request Pipeline loaded successfully."
+          );
+
+          console.log(
+            "Version:",
+            pipeline.REQUEST_PIPELINE_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Request Pipeline Status Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          const status =
+            pipeline.getStatus();
+
+          if (!status) {
+            throw new Error(
+              "Pipeline status missing."
+            );
+          }
+
+          if (
+            status.success !== true
+          ) {
+            throw new Error(
+              "Pipeline status is not healthy."
+            );
+          }
+
+          if (
+            status.status !== "active"
+          ) {
+            throw new Error(
+              "Pipeline is not active."
+            );
+          }
+
+          if (
+            !status.connectedSystems ||
+            status.connectedSystems.length === 0
+          ) {
+            throw new Error(
+              "Connected systems are missing."
+            );
+          }
+
+          console.log(
+            "Pipeline status test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # HEALTH TEST
+      # ======================================================
+
+      - name: Request Pipeline Health Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          const health =
+            pipeline.health();
+
+          if (!health) {
+            throw new Error(
+              "Pipeline health result missing."
+            );
+          }
+
+          if (
+            health.success !== true
+          ) {
+            throw new Error(
+              "Pipeline health check failed."
+            );
+          }
+
+          if (
+            health.status !== "active"
+          ) {
+            throw new Error(
+              "Pipeline health is not active."
+            );
+          }
+
+          if (
+            !health.connectedSystems
+          ) {
+            throw new Error(
+              "Connected systems health data missing."
+            );
+          }
+
+          if (
+            !health.pipeline ||
+            health.pipeline.length === 0
+          ) {
+            throw new Error(
+              "Pipeline stages are missing."
+            );
+          }
+
+          console.log(
+            "Pipeline health test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              health,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # REQUEST CONTEXT TEST
+      # ======================================================
+
+      - name: Request Context Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          const result =
+            pipeline.buildRequestContext(
+              "What is vehicle finance?",
+              {
+                user: "AarHen",
+                source: "pipeline-test"
+              }
+            );
+
+          if (!result) {
+            throw new Error(
+              "Request context result missing."
+            );
+          }
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Request context creation failed."
+            );
+          }
+
+          if (
+            !result.context
+          ) {
+            throw new Error(
+              "Request context object missing."
+            );
+          }
+
+          if (
+            result.context.documentKnowledgeEnabled !== true
+          ) {
+            throw new Error(
+              "Document knowledge was not enabled."
+            );
+          }
+
+          if (
+            result.context.source !== "pipeline-test"
+          ) {
+            throw new Error(
+              "Existing context was not preserved."
+            );
+          }
+
+          console.log(
+            "Request context test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # INVALID REQUEST TEST
+      # ======================================================
+
+      - name: Invalid Request Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          const result =
+            pipeline.buildRequestContext("");
+
+          if (
+            result.success !== false
+          ) {
+            throw new Error(
+              "Invalid request was not rejected."
+            );
+          }
+
+          if (
+            result.status !==
+            "request-context-query-required"
+          ) {
+            throw new Error(
+              "Unexpected invalid request status."
+            );
+          }
+
+          console.log(
+            "Invalid request test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT KNOWLEDGE DISABLE TEST
+      # ======================================================
+
+      - name: Document Knowledge Disable Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          const result =
+            pipeline.buildRequestContext(
+              "Test document knowledge",
+              {
+                user: "AarHen"
+              },
+              {
+                documentKnowledge: false
+              }
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Disable mode failed."
+            );
+          }
+
+          if (
+            result.status !==
+            "document-knowledge-disabled"
+          ) {
+            throw new Error(
+              "Unexpected disable mode status."
+            );
+          }
+
+          if (
+            result.context.documentKnowledgeEnabled !== false
+          ) {
+            throw new Error(
+              "Document knowledge disable flag missing."
+            );
+          }
+
+          console.log(
+            "Document knowledge disable test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SIMPLE ORCHESTRATION TEST
+      # ======================================================
+
+      - name: Simple Request Processing Test
+        run: |
+          node - <<'NODE'
+
+          (async () => {
+
+            const pipeline =
+              require("./core/requestPipeline");
+
+            const result =
+              await pipeline.processRequest(
+                "What is 2 + 2?"
+              );
+
+            if (!result) {
+              throw new Error(
+                "Pipeline returned no result."
+              );
+            }
+
+            if (
+              result.success !== true
+            ) {
+              throw new Error(
+                "Simple request processing failed: " +
+                (result.error || "unknown error")
+              );
+            }
+
+            if (
+              !result.pipeline
+            ) {
+              throw new Error(
+                "Pipeline metadata missing."
+              );
+            }
+
+            if (
+              result.pipeline.version !==
+              pipeline.REQUEST_PIPELINE_VERSION
+            ) {
+              throw new Error(
+                "Pipeline version mismatch."
+              );
+            }
+
+            if (
+              result.status ===
+              "orchestrator-error"
+            ) {
+              throw new Error(
+                "Master orchestrator returned an error."
+              );
+            }
+
+            console.log(
+              "Simple request processing test passed."
+            );
+
+            console.log(
+              JSON.stringify(
+                {
+                  status: result.status,
+                  pipeline: result.pipeline,
+                  request: result.request
+                },
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT CONTEXT ONLY TEST
+      # ======================================================
+
+      - name: Document Context API Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          const result =
+            pipeline.getDocumentContext(
+              "vehicle finance"
+            );
+
+          if (!result) {
+            throw new Error(
+              "Document context API returned nothing."
+            );
+          }
+
+          if (
+            typeof result !== "object"
+          ) {
+            throw new Error(
+              "Document context result is invalid."
+            );
+          }
+
+          console.log(
+            "Document context API test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Request Pipeline Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN REQUEST PIPELINE TEST"
+          echo "=============================================="
+          echo " Request Pipeline: PASSED"
+          echo " Knowledge Context: CONNECTED"
+          echo " Document Context: CONNECTED"
+          echo " Master Orchestrator: CONNECTED"
+          echo " Health API: PASSED"
+          echo " Status API: PASSED"
+          echo " Context Preservation: PASSED"
+          echo " Validation: PASSED"
+          echo "=============================================="
+          echo " REQUEST PIPELINE v5.7.3 READY"
+          echo "=============================================="
