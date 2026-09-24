@@ -2,12 +2,13 @@
 // AARHEN CORE V5
 // AGENT RUNNER
 // ============================================================
-// Version: 5.8.3
+// Version: 5.8.4
 //
 // Purpose:
 // - Execute Agent Manager tasks through controlled runners
 // - Connect Agent Manager with existing Skill Executor
 // - Re-check permissions before every action
+// - Connect Autonomous Safety Guard before every action
 // - Convert planned Agent steps into controlled execution
 // - Preserve task context
 // - Prevent uncontrolled arbitrary execution
@@ -21,6 +22,7 @@
 // AarHen returns a controlled handoff result instead of
 // pretending that the external action was actually performed.
 // ============================================================
+
 
 const agentManager =
     require("./agentManager");
@@ -38,15 +40,25 @@ const intent =
     require("./intent");
 
 
+const autonomousGuard =
+    require("./autonomousGuard");
+
+
+// ============================================================
+// VERSION
+// ============================================================
+
 const AGENT_RUNNER_VERSION =
-    "5.8.3";
+    "5.8.4";
 
 
 // ============================================================
 // HELPERS
 // ============================================================
 
-function safeObject(value) {
+function safeObject(
+    value
+) {
 
     return (
         value &&
@@ -54,34 +66,44 @@ function safeObject(value) {
     )
         ? value
         : {};
+
 }
 
 
-function safeArray(value) {
+function safeArray(
+    value
+) {
 
     return Array.isArray(
         value
     )
         ? value
         : [];
+
 }
 
 
-function safeString(value) {
+function safeString(
+    value
+) {
 
     return String(
         value ?? ""
     ).trim();
+
 }
 
 
-function clone(value) {
+function clone(
+    value
+) {
 
     if (
         value === undefined
     ) {
 
         return undefined;
+
     }
 
 
@@ -96,7 +118,9 @@ function clone(value) {
     } catch {
 
         return value;
+
     }
+
 }
 
 
@@ -111,99 +135,100 @@ function clone(value) {
 // a real email / messaging / file system connector.
 // ============================================================
 
-const ACTION_MAP = Object.freeze({
+const ACTION_MAP =
+    Object.freeze({
 
-    calculate: {
+        calculate: {
 
-        category:
-            "calculation",
+            category:
+                "calculation",
 
-        intent:
-            "calculate"
+            intent:
+                "calculate"
 
-    },
+        },
 
-    search_knowledge: {
+        search_knowledge: {
 
-        category:
-            "knowledge",
+            category:
+                "knowledge",
 
-        intent:
-            "knowledge_search"
+            intent:
+                "knowledge_search"
 
-    },
+        },
 
-    read_public_information: {
+        read_public_information: {
 
-        category:
-            "research",
+            category:
+                "research",
 
-        intent:
-            "web_research"
+            intent:
+                "web_research"
 
-    },
+        },
 
-    execute_external_code: {
+        execute_external_code: {
 
-        category:
-            "coding",
+            category:
+                "coding",
 
-        intent:
-            "coding"
+            intent:
+                "coding"
 
-    },
+        },
 
-    security_testing_against_external_target: {
+        security_testing_against_external_target: {
 
-        category:
-            "security",
+            category:
+                "security",
 
-        intent:
-            "security_request"
+            intent:
+                "security_request"
 
-    },
+        },
 
-    send_message: {
+        send_message: {
 
-        category:
-            "external-action",
+            category:
+                "external-action",
 
-        intent:
-            "send_message"
+            intent:
+                "send_message"
 
-    },
+        },
 
-    send_email: {
+        send_email: {
 
-        category:
-            "external-action",
+            category:
+                "external-action",
 
-        intent:
-            "send_email"
+            intent:
+                "send_email"
 
-    },
+        },
 
-    write_file: {
+        write_file: {
 
-        category:
-            "external-action",
+            category:
+                "external-action",
 
-        intent:
-            "write_file"
+            intent:
+                "write_file"
 
-    },
+        },
 
-    delete_file: {
+        delete_file: {
 
-        category:
-            "external-action",
+            category:
+                "external-action",
 
-        intent:
-            "delete_file"
+            intent:
+                "delete_file"
 
-    }
+        }
 
-});
+    });
 
 
 // ============================================================
@@ -259,6 +284,7 @@ function registerAction(
                 "Action name is required."
 
         };
+
     }
 
 
@@ -276,6 +302,7 @@ function registerAction(
                 "Action handler must be a function."
 
         };
+
     }
 
 
@@ -331,6 +358,7 @@ function registerAction(
             permission.requiresApproval
 
     };
+
 }
 
 
@@ -363,6 +391,7 @@ function unregisterAction(
                 "Action is not registered."
 
         };
+
     }
 
 
@@ -380,6 +409,7 @@ function unregisterAction(
             name
 
     };
+
 }
 
 
@@ -432,6 +462,7 @@ function listActions() {
                                 )
 
                     };
+
                 }
             );
 
@@ -482,6 +513,7 @@ function listActions() {
             custom.length
 
     };
+
 }
 
 
@@ -503,6 +535,7 @@ function resolvePermission(
     return permissions.check(
         action
     );
+
 }
 
 
@@ -529,6 +562,7 @@ function verifyApproval(
                 false
 
         };
+
     }
 
 
@@ -542,6 +576,7 @@ function verifyApproval(
             true
 
     };
+
 }
 
 
@@ -581,6 +616,7 @@ function buildExecutorIntent(
                 null
 
         };
+
     }
 
 
@@ -671,6 +707,7 @@ function buildExecutorIntent(
         intentData
 
     };
+
 }
 
 
@@ -728,6 +765,7 @@ async function executeProtectedAction(
                 "invalid-protected-action"
 
         };
+
     }
 
 
@@ -750,6 +788,7 @@ async function executeProtectedAction(
                 "permission-policy-error"
 
         };
+
     }
 
 
@@ -775,6 +814,7 @@ async function executeProtectedAction(
                 "approval-required"
 
         };
+
     }
 
 
@@ -800,6 +840,7 @@ async function executeProtectedAction(
                 "task-stopped"
 
         };
+
     }
 
 
@@ -825,6 +866,7 @@ async function executeProtectedAction(
                 "task-paused"
 
         };
+
     }
 
 
@@ -887,6 +929,98 @@ async function executeProtectedAction(
             "protected-action-prepared"
 
     };
+
+}
+
+
+// ============================================================
+// AUTONOMOUS GUARD CHECK
+// ============================================================
+//
+// Central safety gate before any action execution.
+//
+// The Guard does not execute the action.
+// It only decides whether execution may continue.
+//
+// ============================================================
+
+function checkAutonomousGuard(
+    task,
+    step
+) {
+
+    const action =
+        safeString(
+            step?.action
+        );
+
+
+    if (
+        !autonomousGuard ||
+        typeof autonomousGuard.canExecute !==
+        "function"
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            allowed:
+                false,
+
+            blocked:
+                true,
+
+            action,
+
+            error:
+                "Autonomous Safety Guard is unavailable."
+
+        };
+
+    }
+
+
+    try {
+
+        return autonomousGuard.canExecute(
+
+            action,
+
+            {
+
+                approved:
+                    step?.approved ===
+                    true
+
+            }
+
+        );
+
+    } catch (error) {
+
+        return {
+
+            success:
+                false,
+
+            allowed:
+                false,
+
+            blocked:
+                true,
+
+            action,
+
+            error:
+                error.message ||
+                "Autonomous Safety Guard check failed."
+
+        };
+
+    }
+
 }
 
 
@@ -917,6 +1051,7 @@ async function executeBuiltIn(
     ) {
 
         return executorIntent;
+
     }
 
 
@@ -954,6 +1089,7 @@ async function executeBuiltIn(
             permission
 
         );
+
     }
 
 
@@ -998,7 +1134,9 @@ async function executeBuiltIn(
                     "research-context-required"
 
             };
+
         }
+
     }
 
 
@@ -1046,7 +1184,9 @@ async function executeBuiltIn(
                 "executor-error"
 
         };
+
     }
+
 }
 
 
@@ -1076,6 +1216,7 @@ async function executeCustomAction(
                 "Custom action handler is not available."
 
         };
+
     }
 
 
@@ -1142,7 +1283,9 @@ async function executeCustomAction(
                 "custom-action-error"
 
         };
+
     }
+
 }
 
 
@@ -1176,6 +1319,173 @@ function createRunner(
             );
 
 
+        // ----------------------------------------------------
+        // AUTONOMOUS SAFETY GUARD
+        // ----------------------------------------------------
+        //
+        // This check is performed immediately before action
+        // execution.
+        //
+        // It protects every action path:
+        // - built-in
+        // - protected external
+        // - custom
+        //
+        // ----------------------------------------------------
+
+        const guard =
+            checkAutonomousGuard(
+                task,
+                step
+            );
+
+
+        if (
+            guard.success !==
+            true
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                action:
+                    step.action,
+
+                blocked:
+                    true,
+
+                safetyGuard:
+                    guard,
+
+                error:
+                    guard.error ||
+                    "Autonomous Safety Guard blocked execution.",
+
+                executionStatus:
+                    "autonomous-guard-error"
+
+            };
+
+        }
+
+
+        if (
+            guard.allowed !==
+            true
+        ) {
+
+            // ------------------------------------------------
+            // Emergency STOP
+            // ------------------------------------------------
+
+            if (
+                guard.stopActive ===
+                true
+            ) {
+
+                return {
+
+                    success:
+                        false,
+
+                    action:
+                        step.action,
+
+                    stopped:
+                        true,
+
+                    blocked:
+                        true,
+
+                    safetyGuard:
+                        guard,
+
+                    error:
+                        guard.reason ||
+                        "Autonomous execution was blocked by emergency STOP.",
+
+                    executionStatus:
+                        "autonomous-stop"
+
+                };
+
+            }
+
+
+            // ------------------------------------------------
+            // Approval required
+            // ------------------------------------------------
+
+            if (
+                guard.requiresApproval ===
+                true
+            ) {
+
+                return {
+
+                    success:
+                        false,
+
+                    action:
+                        step.action,
+
+                    requiresApproval:
+                        true,
+
+                    blocked:
+                        true,
+
+                    safetyGuard:
+                        guard,
+
+                    error:
+                        guard.reason ||
+                        "Action requires approval before execution.",
+
+                    executionStatus:
+                        "approval-required"
+
+                };
+
+            }
+
+
+            // ------------------------------------------------
+            // Generic safety block
+            // ------------------------------------------------
+
+            return {
+
+                success:
+                    false,
+
+                action:
+                    step.action,
+
+                blocked:
+                    true,
+
+                safetyGuard:
+                    guard,
+
+                error:
+                    guard.reason ||
+                    "Autonomous Safety Guard blocked execution.",
+
+                executionStatus:
+                    "autonomous-guard-blocked"
+
+            };
+
+        }
+
+
+        // ----------------------------------------------------
+        // EXISTING PERMISSION CHECK
+        // ----------------------------------------------------
+
         if (
             effectivePermission.policy ===
             "ASK" &&
@@ -1201,6 +1511,7 @@ function createRunner(
                     "approval-required"
 
             };
+
         }
 
 
@@ -1228,6 +1539,7 @@ function createRunner(
                     "task-stopped"
 
             };
+
         }
 
 
@@ -1255,6 +1567,7 @@ function createRunner(
                     "task-paused"
 
             };
+
         }
 
 
@@ -1293,6 +1606,7 @@ function createRunner(
                 )
 
             );
+
         }
 
 
@@ -1327,6 +1641,7 @@ function createRunner(
                 }
 
             );
+
         }
 
 
@@ -1349,7 +1664,9 @@ function createRunner(
                 "unknown-action"
 
         };
+
     };
+
 }
 
 
@@ -1418,6 +1735,7 @@ async function runTask(
             null
 
     };
+
 }
 
 
@@ -1447,6 +1765,7 @@ async function createAndRunTask(
                 "A valid Agent Planner is required."
 
         };
+
     }
 
 
@@ -1481,6 +1800,7 @@ async function createAndRunTask(
             planned
 
         };
+
     }
 
 
@@ -1504,6 +1824,7 @@ async function createAndRunTask(
             planned
 
         };
+
     }
 
 
@@ -1531,6 +1852,7 @@ async function createAndRunTask(
                 planned.plan
 
         };
+
     }
 
 
@@ -1563,6 +1885,7 @@ async function createAndRunTask(
             planned.task
 
     };
+
 }
 
 
@@ -1585,6 +1908,7 @@ function getTaskStatus(
     ) {
 
         return result;
+
     }
 
 
@@ -1673,6 +1997,7 @@ function getTaskStatus(
             task.pauseRequested
 
     };
+
 }
 
 
@@ -1741,6 +2066,33 @@ function getStatus() {
 
         },
 
+        autonomousSafetyGuard: {
+
+            connected:
+                Boolean(
+                    autonomousGuard &&
+                    typeof autonomousGuard.canExecute ===
+                    "function"
+                ),
+
+            version:
+                autonomousGuard
+                    ?.AUTONOMOUS_GUARD_VERSION ||
+                null,
+
+            status:
+                typeof autonomousGuard.getStatus ===
+                "function"
+
+                    ? autonomousGuard
+                        .getStatus()
+                        ?.status ||
+                    null
+
+                    : null
+
+        },
+
         protectedExternalActions: {
 
             count:
@@ -1767,6 +2119,7 @@ function getStatus() {
             customActions.size
 
     };
+
 }
 
 
@@ -1785,9 +2138,13 @@ function reset() {
             true,
 
         status:
-            "agent-runner-reset"
+            "agent-runner-reset",
+
+        version:
+            AGENT_RUNNER_VERSION
 
     };
+
 }
 
 
@@ -1816,6 +2173,8 @@ module.exports = {
     buildExecutorIntent,
 
     executeProtectedAction,
+
+    checkAutonomousGuard,
 
     createRunner,
 
