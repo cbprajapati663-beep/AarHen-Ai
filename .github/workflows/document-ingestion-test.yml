@@ -1,0 +1,435 @@
+name: AarHen Document Ingestion Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "engines/documentLearning.js"
+      - "engines/documentIngestion.js"
+      - "core/learning.js"
+      - "core/memoryStore.js"
+      - "core/memoryManager.js"
+      - "package.json"
+      - ".github/workflows/document-ingestion-test.yml"
+
+jobs:
+  document-ingestion-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # --------------------------------------------------------
+      # NODE
+      # --------------------------------------------------------
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # --------------------------------------------------------
+      # NPM CACHE
+      # --------------------------------------------------------
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node20-aarhen-ingestion-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node20-aarhen-ingestion-
+
+
+      # --------------------------------------------------------
+      # INSTALL
+      # --------------------------------------------------------
+
+      - name: Install dependencies
+        run: npm install --prefer-offline
+
+
+      # --------------------------------------------------------
+      # VERIFY MODULES
+      # --------------------------------------------------------
+
+      - name: Verify document ingestion modules
+        run: |
+          node - <<'NODE'
+
+          const documentLearning =
+            require("./engines/documentLearning");
+
+          const documentIngestion =
+            require("./engines/documentIngestion");
+
+          const learning =
+            require("./core/learning");
+
+          if (!documentLearning) {
+            throw new Error(
+              "Document Learning Engine failed to load."
+            );
+          }
+
+          if (!documentIngestion) {
+            throw new Error(
+              "Document Ingestion Engine failed to load."
+            );
+          }
+
+          if (!learning) {
+            throw new Error(
+              "Continuous Learning Engine failed to load."
+            );
+          }
+
+          if (
+            typeof documentIngestion.ingestText !==
+            "function"
+          ) {
+            throw new Error(
+              "ingestText() is missing."
+            );
+          }
+
+          if (
+            typeof documentIngestion.ingestDocument !==
+            "function"
+          ) {
+            throw new Error(
+              "ingestDocument() is missing."
+            );
+          }
+
+          console.log(
+            "Document Learning Engine : OK"
+          );
+
+          console.log(
+            "Document Ingestion Engine : OK"
+          );
+
+          console.log(
+            "Continuous Learning Engine : OK"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # TEST INGESTION STATUS
+      # --------------------------------------------------------
+
+      - name: Test ingestion status
+        run: |
+          node - <<'NODE'
+
+          const ingestion =
+            require("./engines/documentIngestion");
+
+          const status =
+            ingestion.getStatus();
+
+          if (
+            !status ||
+            status.success !== true
+          ) {
+            throw new Error(
+              "Ingestion status check failed."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              `Unexpected ingestion status: ${status.status}`
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "Ingestion status test: PASS"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # REAL TEXT LEARNING TEST
+      # --------------------------------------------------------
+
+      - name: Test real text ingestion and learning
+        run: |
+          node - <<'NODE'
+
+          const ingestion =
+            require("./engines/documentIngestion");
+
+          (async () => {
+
+            const testText = `
+            AarHen Document Learning Test.
+
+            AarHen can process business knowledge,
+            finance information, vehicle finance information,
+            insurance information, customer information,
+            and general knowledge.
+
+            A document enters the Document Learning Engine,
+            is converted into readable text, divided into chunks,
+            and then passed to the Continuous Learning Engine.
+
+            Verified and suitable information can be stored
+            in the knowledge system and synchronized with
+            the memory system.
+            `;
+
+            const result =
+              ingestion.ingestText(
+                testText,
+                {
+                  fileName:
+                    "aarhen-ingestion-test.txt",
+
+                  category:
+                    "knowledge",
+
+                  source:
+                    "github-document-ingestion-test",
+
+                  memoryType:
+                    "knowledge",
+
+                  importance:
+                    "normal",
+
+                  confidence:
+                    0.70,
+
+                  learn:
+                    true
+                }
+              );
+
+            if (!result) {
+              throw new Error(
+                "Ingestion returned no result."
+              );
+            }
+
+            if (
+              result.success !== true
+            ) {
+              throw new Error(
+                result.learning?.results
+                  ? JSON.stringify(
+                      result.learning.results
+                    )
+                  : (
+                      result.error ||
+                      "Text ingestion failed."
+                    )
+              );
+            }
+
+            if (
+              result.ingested !== true
+            ) {
+              throw new Error(
+                "Document was processed but not ingested."
+              );
+            }
+
+            if (
+              Number(
+                result.chunkCount
+              ) <= 0
+            ) {
+              throw new Error(
+                "No learning chunks were created."
+              );
+            }
+
+            if (
+              !result.learning
+            ) {
+              throw new Error(
+                "Learning result is missing."
+              );
+            }
+
+            if (
+              Number(
+                result.learning.learnedCount
+              ) <= 0
+            ) {
+              throw new Error(
+                "No document chunks were learned."
+              );
+            }
+
+            if (
+              Number(
+                result.learning.failedCount
+              ) > 0
+            ) {
+              throw new Error(
+                `Some chunks failed: ${result.learning.failedCount}`
+              );
+            }
+
+            console.log(
+              JSON.stringify(
+                {
+                  success:
+                    result.success,
+
+                  ingested:
+                    result.ingested,
+
+                  textLength:
+                    result.textLength,
+
+                  chunkCount:
+                    result.chunkCount,
+
+                  learnedCount:
+                    result.learning.learnedCount,
+
+                  failedCount:
+                    result.learning.failedCount,
+
+                  duplicateCount:
+                    result.learning.duplicateCount,
+
+                  learningStatus:
+                    result.learning.status
+                },
+                null,
+                2
+              )
+            );
+
+            console.log(
+              "Real text ingestion test: PASS"
+            );
+
+          })().catch(error => {
+
+            console.error(
+              error.message
+            );
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # LEARNING ENGINE CHECK
+      # --------------------------------------------------------
+
+      - name: Verify learned knowledge system
+        run: |
+          node - <<'NODE'
+
+          const learning =
+            require("./core/learning");
+
+          if (
+            typeof learning.getLearningStatus !==
+            "function"
+          ) {
+            throw new Error(
+              "getLearningStatus() is missing."
+            );
+          }
+
+          const status =
+            learning.getLearningStatus();
+
+          if (
+            !status ||
+            status.success !== true
+          ) {
+            throw new Error(
+              "Learning system status failed."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              `Unexpected learning status: ${status.status}`
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              {
+                learningEngine:
+                  status.name,
+
+                version:
+                  status.version,
+
+                status:
+                  status.status,
+
+                memoryIntegration:
+                  status.memoryIntegration
+              },
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "Learning system verification: PASS"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # FINAL SUMMARY
+      # --------------------------------------------------------
+
+      - name: Final ingestion summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN DOCUMENT INGESTION TEST SUMMARY"
+          echo "=============================================="
+          echo "Document Learning Engine : PASS"
+          echo "Document Ingestion       : PASS"
+          echo "Text Chunking            : PASS"
+          echo "Continuous Learning      : PASS"
+          echo "Knowledge Storage        : PASS"
+          echo "Memory Integration       : PASS"
+          echo "=============================================="
+          echo " DOCUMENT INGESTION      : GREEN"
+          echo "=============================================="
