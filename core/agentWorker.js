@@ -2,7 +2,7 @@
 // AARHEN CORE V5
 // AGENT WORKER
 // ============================================================
-// Version: 5.10.0
+// Version: 5.10.1
 //
 // Purpose:
 // - Provide a controlled worker layer above Agent Runner
@@ -42,7 +42,7 @@ const agentRunner =
 // ============================================================
 
 const AGENT_WORKER_VERSION =
-    "5.10.0";
+    "5.10.1";
 
 
 // ============================================================
@@ -488,7 +488,7 @@ function getDefaultWorker() {
 
 
 // ============================================================
-// VALIDATE WORKER
+// RESOLVE WORKER
 // ============================================================
 
 function resolveWorker(
@@ -642,7 +642,7 @@ function assignTask(
 
 
     // --------------------------------------------------------
-    // Optional worker → agent binding
+    // Worker → Agent binding
     // --------------------------------------------------------
 
     if (
@@ -690,13 +690,19 @@ function assignTask(
     }
 
 
+    // --------------------------------------------------------
+    // Terminal tasks cannot be assigned
+    // --------------------------------------------------------
+
     if (
         task.status ===
         agentManager.TASK_STATES.COMPLETED ||
         task.status ===
         agentManager.TASK_STATES.FAILED ||
         task.status ===
-        agentManager.TASK_STATES.STOPPED
+        agentManager.TASK_STATES.STOPPED ||
+        task.status ===
+        agentManager.TASK_STATES.CANCELLED
     ) {
 
         return {
@@ -706,6 +712,31 @@ function assignTask(
 
             error:
                 "A terminal task cannot be assigned to a worker."
+
+        };
+
+    }
+
+
+    // --------------------------------------------------------
+    // Stopped worker cannot accept new work
+    // --------------------------------------------------------
+
+    if (
+        worker.status ===
+        WORKER_STATES.STOPPED
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            stopped:
+                true,
+
+            error:
+                "Stopped worker cannot accept new tasks."
 
         };
 
@@ -769,9 +800,24 @@ function removeTaskFromQueue(
     taskId
 ) {
 
+    const normalizedTaskId =
+        safeString(
+            taskId
+        );
+
+
+    if (
+        !normalizedTaskId
+    ) {
+
+        return false;
+
+    }
+
+
     const index =
         worker.queue.indexOf(
-            taskId
+            normalizedTaskId
         );
 
 
@@ -846,7 +892,7 @@ async function runAssignedTask(
 
 
     // --------------------------------------------------------
-    // Worker pause/stop state
+    // Worker pause state
     // --------------------------------------------------------
 
     if (
@@ -869,6 +915,10 @@ async function runAssignedTask(
 
     }
 
+
+    // --------------------------------------------------------
+    // Worker stop state
+    // --------------------------------------------------------
 
     if (
         worker.status ===
@@ -1152,6 +1202,26 @@ async function runAssignedTask(
 
     } else if (
         latestTask?.status ===
+        agentManager.TASK_STATES.CANCELLED
+    ) {
+
+        removeTaskFromQueue(
+            worker,
+            taskId
+        );
+
+
+        worker.status =
+            WORKER_STATES.IDLE;
+
+        worker.activeTaskId =
+            null;
+
+        worker.lastError =
+            null;
+
+    } else if (
+        latestTask?.status ===
         agentManager.TASK_STATES.FAILED
     ) {
 
@@ -1397,6 +1467,27 @@ function pauseWorker(
 
 
     if (
+        worker.status ===
+        WORKER_STATES.STOPPED
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            stopped:
+                true,
+
+            error:
+                "Stopped worker cannot be paused."
+
+        };
+
+    }
+
+
+    if (
         worker.activeTaskId
     ) {
 
@@ -1483,6 +1574,27 @@ function resumeWorker(
 
     const worker =
         resolved.worker;
+
+
+    if (
+        worker.status ===
+        WORKER_STATES.STOPPED
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            stopped:
+                true,
+
+            error:
+                "Stopped worker cannot be resumed."
+
+        };
+
+    }
 
 
     if (
@@ -1573,6 +1685,11 @@ function resumeWorker(
 // ============================================================
 // STOP WORKER
 // ============================================================
+//
+// Important fix in v5.10.1:
+// Preserve the active task ID before clearing it so the task
+// can be removed correctly from the worker queue.
+// ============================================================
 
 function stopWorker(
     workerId
@@ -1598,12 +1715,48 @@ function stopWorker(
 
 
     if (
-        worker.activeTaskId
+        worker.status ===
+        WORKER_STATES.STOPPED
+    ) {
+
+        return {
+
+            success:
+                true,
+
+            stopped:
+                true,
+
+            worker:
+                clone(
+                    worker
+                ),
+
+            status:
+                "already-stopped"
+
+        };
+
+    }
+
+
+    // --------------------------------------------------------
+    // Capture active task ID BEFORE clearing it
+    // --------------------------------------------------------
+
+    const activeTaskId =
+        safeString(
+            worker.activeTaskId
+        );
+
+
+    if (
+        activeTaskId
     ) {
 
         const result =
             agentManager.stopTask(
-                worker.activeTaskId
+                activeTaskId
             );
 
 
@@ -1611,16 +1764,28 @@ function stopWorker(
             result.success
         ) {
 
+            removeTaskFromQueue(
+                worker,
+                activeTaskId
+            );
+
+
             worker.status =
                 WORKER_STATES.STOPPED;
 
             worker.activeTaskId =
                 null;
 
-            removeTaskFromQueue(
-                worker,
-                worker.activeTaskId
-            );
+            worker.stoppedTasks +=
+                1;
+
+            worker.lastError =
+                null;
+
+            worker.lastResult =
+                clone(
+                    result
+                );
 
             worker.updatedAt =
                 now();
@@ -1632,6 +1797,10 @@ function stopWorker(
 
             ...result,
 
+            stopped:
+                result.success ===
+                true,
+
             worker:
                 clone(
                     worker
@@ -1641,6 +1810,13 @@ function stopWorker(
 
     }
 
+
+    // --------------------------------------------------------
+    // Stop worker with no active task
+    //
+    // Queued tasks are intentionally preserved so stop does
+    // not silently delete pending work.
+    // --------------------------------------------------------
 
     worker.status =
         WORKER_STATES.STOPPED;
@@ -1660,7 +1836,10 @@ function stopWorker(
         worker:
             clone(
                 worker
-            )
+            ),
+
+        status:
+            "worker-stopped"
 
     };
 
@@ -1735,6 +1914,14 @@ function cancelWorkerTask(
 
         worker.status =
             WORKER_STATES.IDLE;
+
+        worker.lastResult =
+            clone(
+                result
+            );
+
+        worker.lastError =
+            null;
 
         worker.updatedAt =
             now();
