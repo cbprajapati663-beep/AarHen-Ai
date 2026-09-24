@@ -586,6 +586,9 @@ jobs:
 
                 {
 
+                  description:
+                    "Calculate 10 + 20",
+
                   action:
                     "calculate",
 
@@ -611,7 +614,11 @@ jobs:
               true
             ) {
               throw new Error(
-                "Execution task step creation failed."
+                "Execution task step creation failed: " +
+                (
+                  plan.error ||
+                  "unknown error"
+                )
               );
             }
 
@@ -789,6 +796,9 @@ jobs:
 
                 {
 
+                  description:
+                    "Send a message to a customer",
+
                   action:
                     "send_message",
 
@@ -814,7 +824,11 @@ jobs:
               true
             ) {
               throw new Error(
-                "Approval task step creation failed."
+                "Approval task step creation failed: " +
+                (
+                  step.error ||
+                  "unknown error"
+                )
               );
             }
 
@@ -959,6 +973,9 @@ jobs:
 
               {
 
+                description:
+                  "Calculate 100 + 200",
+
                 action:
                   "calculate",
 
@@ -984,7 +1001,11 @@ jobs:
             true
           ) {
             throw new Error(
-              "Pause task step creation failed."
+              "Pause task step creation failed: " +
+              (
+                step.error ||
+                "unknown error"
+              )
             );
           }
 
@@ -1156,6 +1177,9 @@ jobs:
 
               {
 
+                description:
+                  "Calculate 1 + 1",
+
                 action:
                   "calculate",
 
@@ -1182,6 +1206,9 @@ jobs:
               task2.task.id,
 
               {
+
+                description:
+                  "Calculate 2 + 2",
 
                 action:
                   "calculate",
@@ -1210,7 +1237,12 @@ jobs:
             true
           ) {
             throw new Error(
-              "Queue test step creation failed."
+              "Queue test step creation failed: " +
+              (
+                step1.error ||
+                step2.error ||
+                "unknown error"
+              )
             );
           }
 
