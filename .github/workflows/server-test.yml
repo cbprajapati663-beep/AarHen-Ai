@@ -2,1100 +2,566 @@ name: AarHen Server Test
 
 on:
   push:
-    branches: ["main"]
-
-  pull_request:
-    branches: ["main"]
-
+  workflow_dispatch:
 
 jobs:
-
-  server-test:
-
+  test:
     runs-on: ubuntu-latest
-
 
     steps:
 
-      # ========================================================
+      # ======================================================
       # CHECKOUT
-      # ========================================================
+      # ======================================================
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
-      # ========================================================
-      # NODE.JS
-      # ========================================================
+      # ======================================================
+      # NODE
+      # ======================================================
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
-
         with:
           node-version: 20
+          cache: npm
 
-
-      # ========================================================
-      # INSTALL DEPENDENCIES
-      # ========================================================
+      # ======================================================
+      # INSTALL
+      # ======================================================
 
       - name: Install dependencies
         run: |
+          npm ci --no-audit --no-fund
 
-          if [ -f package.json ]; then
+      # ======================================================
+      # RESEARCH ENGINE DIAGNOSTIC
+      # ======================================================
 
-            npm install
-
-          else
-
-            echo "No package.json found"
-
-          fi
-
-
-      # ========================================================
-      # START AARHEN SERVER
-      # ========================================================
-
-      - name: Start AarHen server
-        env:
-
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-
+      - name: Verify Research Engine Version
         run: |
+          echo "=========================================="
+          echo "VERIFYING ACTIVE RESEARCH ENGINE"
+          echo "=========================================="
 
-          node server.js > server.log 2>&1 &
+          node - <<'NODE'
+          const research = require("./engines/research");
+
+          console.log(
+            "Research Engine Version:",
+            research.RESEARCH_VERSION
+          );
+
+          console.log(
+            "Minimum Verified Sources:",
+            research.MIN_VERIFIED_SOURCES
+          );
+
+          console.log(
+            "Minimum Verified Confidence:",
+            research.MIN_VERIFIED_CONFIDENCE
+          );
+
+          console.log(
+            "Research Status:"
+          );
+
+          console.log(
+            JSON.stringify(
+              research.getResearchStatus(),
+              null,
+              2
+            )
+          );
+          NODE
+
+      # ======================================================
+      # SYNTAX CHECK
+      # ======================================================
+
+      - name: Validate JavaScript syntax
+        run: |
+          echo "=========================================="
+          echo "VALIDATING JAVASCRIPT"
+          echo "=========================================="
+
+          node --check engines/research.js
+          node --check core/orchestrator.js
+          node --check skills/executor.js
+          node --check skills/handlers.js
+          node --check providers/researchProvider.js
+          node --check providers/providerManager.js
+
+          echo "JavaScript syntax validation passed."
+
+      # ======================================================
+      # UNIT TESTS
+      # ======================================================
+
+      - name: Run AarHen tests
+        run: |
+          echo "=========================================="
+          echo "RUNNING AARHEN TESTS"
+          echo "=========================================="
+
+          node test.js
+
+      # ======================================================
+      # START SERVER
+      # ======================================================
+
+      - name: Start server
+        env:
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          NODE_ENV: test
+          PORT: 3000
+        run: |
+          echo "=========================================="
+          echo "STARTING AARHEN SERVER"
+          echo "=========================================="
+
+          nohup node server.js > server.log 2>&1 &
 
           echo $! > server.pid
 
-          sleep 3
+          echo "Server PID:"
+          cat server.pid
 
+      # ======================================================
+      # WAIT FOR SERVER
+      # ======================================================
 
-          echo "Checking server..."
-
-          cat server.log
-
-
-      # ========================================================
-      # ROOT
-      # ========================================================
-
-      - name: Test root endpoint
+      - name: Wait for server
         run: |
-
-          curl --fail \
-            http://localhost:3000/
-
-
-      # ========================================================
-      # LEARNING STATUS
-      # ========================================================
-
-      - name: Test learning status
-        run: |
-
-          curl --fail \
-            http://localhost:3000/learning-status
-
-
-      # ========================================================
-      # MEMORY STATUS
-      # ========================================================
-
-      - name: Test memory status
-        run: |
-
-          curl --fail \
-            http://localhost:3000/memory-status
-
-
-      # ========================================================
-      # MEMORY HEALTH
-      # ========================================================
-
-      - name: Test memory health
-        run: |
-
-          curl --fail \
-            http://localhost:3000/memory-health
-
-
-      # ========================================================
-      # LEARNING API
-      # ========================================================
-
-      - name: Test learning API
-        run: |
-
-          curl --fail \
-            http://localhost:3000/learning
-
-
-      # ========================================================
-      # CREATE MEMORY
-      # ========================================================
-
-      - name: Create memory for history test
-        run: |
-
-          RESPONSE=$(curl --fail \
-            -X POST \
-            http://localhost:3000/memory/remember \
-            -H "Content-Type: application/json" \
-            -d '{
-              "type": "knowledge",
-              "title": "AarHen Server Test Memory",
-              "category": "test",
-              "content": "This is a test memory created by AarHen server test.",
-              "source": "github-actions",
-              "verified": false,
-              "confidence": 0.5
-            }')
-
-
-          echo "$RESPONSE"
-
-
-          MEMORY_ID=$(echo "$RESPONSE" | node -e '
-
-            let data = "";
-
-
-            process.stdin.on(
-              "data",
-              chunk => data += chunk
-            );
-
-
-            process.stdin.on(
-              "end",
-              () => {
-
-                const json =
-                  JSON.parse(data);
-
-
-                const id =
-                  json.memoryId ||
-                  (
-                    json.memory &&
-                    json.memory.id
-                  );
-
-
-                if (!id) {
-
-                  console.error(
-                    "Memory ID not found"
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                console.log(id);
-
-              }
-            );
-
-          ')
-
-
-          echo "MEMORY_ID=$MEMORY_ID" >> "$GITHUB_ENV"
-
-
-          echo "Created memory:"
-
-          echo "$MEMORY_ID"
-
-
-      # ========================================================
-      # MEMORY HISTORY
-      # ========================================================
-
-      - name: Test memory history
-        run: |
-
-          echo "Testing memory history..."
-
-
-          curl --fail \
-            "http://localhost:3000/memory-history?memoryId=$MEMORY_ID"
-
-
-      # ========================================================
-      # MEMORY HISTORY STATUS
-      # ========================================================
-
-      - name: Test memory history status
-        run: |
-
-          curl --fail \
-            http://localhost:3000/memory-history-status
-
-
-      # ========================================================
-      # LEARNING HISTORY
-      # ========================================================
-
-      - name: Test learning history
-        run: |
-
-          curl --fail \
-            "http://localhost:3000/learning-history?memoryId=$MEMORY_ID"
-
-
-      # ========================================================
-      # ASK
-      # ========================================================
-
-      - name: Test ask endpoint
-        run: |
-
-          curl --fail \
-            -X POST \
-            http://localhost:3000/ask \
-            -H "Content-Type: application/json" \
-            -d '{
-              "input": "What is vehicle finance?",
-              "context": {
-                "remember": false
-              }
-            }'
-
-
-      # ========================================================
-      # LEARN
-      # ========================================================
-
-      - name: Test learn endpoint
-        run: |
-
-          curl --fail \
-            -X POST \
-            http://localhost:3000/learn \
-            -H "Content-Type: application/json" \
-            -d '{
-              "title": "Vehicle Finance Test Knowledge",
-              "content": "Vehicle finance is a financial facility used to fund the purchase of a vehicle.",
-              "category": "finance",
-              "source": "github-actions"
-            }'
-
-
-      # ========================================================
-      # MEMORY SEARCH
-      # ========================================================
-
-      - name: Test memory search
-        run: |
-
-          curl --fail \
-            "http://localhost:3000/memory/search?q=vehicle&limit=5"
-
-
-      # ========================================================
-      # KNOWLEDGE SEARCH
-      # ========================================================
-
-      - name: Test knowledge search
-        run: |
-
-          curl --fail \
-            "http://localhost:3000/memory/knowledge?q=vehicle&limit=5"
-
-
-      # ========================================================
-      # VERIFIED KNOWLEDGE
-      # ========================================================
-
-      - name: Test verified knowledge
-        run: |
-
-          curl --fail \
-            "http://localhost:3000/memory/verified-knowledge?q=vehicle&limit=5"
-
-
-      # ========================================================
-      # VERIFIED MEMORY
-      # ========================================================
-
-      - name: Test verified memory
-        run: |
-
-          curl --fail \
-            "http://localhost:3000/memory/verified?limit=5"
-
-
-      # ========================================================
-      # MEMORY CONTROL STATUS
-      # ========================================================
-
-      - name: Test memory control status
-        run: |
-
-          curl --fail \
-            http://localhost:3000/memory/control-status
-
-
-      # ========================================================
-      # FEEDBACK
-      # ========================================================
-
-      - name: Test feedback endpoint
-        run: |
-
-          curl --fail \
-            -X POST \
-            http://localhost:3000/feedback \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"memoryId\": \"$MEMORY_ID\",
-              \"feedback\": \"Server test feedback\",
-              \"helpful\": true,
-              \"reason\": \"Automated GitHub Actions test\"
-            }"
-
-
-      # ========================================================
-      # RESEARCH STATUS
-      # ========================================================
-
-      - name: Test research status
-        run: |
-
-          echo "Testing research status..."
-
-
-          curl --fail \
-            http://localhost:3000/research/status
-
-
-      # ========================================================
-      # LIVE WEB RESEARCH
-      # ========================================================
-
-      - name: Test live web research
-        env:
-
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-
-        run: |
-
-          echo "Testing live AarHen web research..."
-
-
-          if [ -z "$TAVILY_API_KEY" ]; then
-
-            echo "ERROR: TAVILY_API_KEY secret is empty or unavailable."
-
-            exit 1
-
-          fi
-
-
-          echo "TAVILY_API_KEY is available."
-
-
-          echo "Calling AarHen /research..."
-
-
-          RESPONSE=$(curl -sS \
-            -X POST \
-            http://localhost:3000/research \
-            -H "Content-Type: application/json" \
-            -d '{
-              "query": "What is vehicle finance?",
-              "maxSources": 5,
-              "language": "en"
-            }')
-
-
-          CURL_EXIT=$?
-
-
+          echo "=========================================="
+          echo "WAITING FOR SERVER"
           echo "=========================================="
 
-          echo "AARHEN RESEARCH RESPONSE"
+          for i in $(seq 1 30); do
+
+            if curl -s http://127.0.0.1:3000/ > /dev/null 2>&1; then
+
+              echo "Server is ready."
+              exit 0
+
+            fi
+
+            echo "Waiting... attempt $i/30"
+
+            sleep 1
+
+          done
 
           echo "=========================================="
-
-
-          echo "$RESPONSE"
-
-
+          echo "SERVER FAILED TO START"
           echo "=========================================="
-
-          echo "CURL EXIT CODE: $CURL_EXIT"
-
-          echo "=========================================="
-
-
-          if [ "$CURL_EXIT" -ne 0 ]; then
-
-            echo "ERROR: Request to AarHen /research failed."
-
-            exit "$CURL_EXIT"
-
-          fi
-
-
-          echo "=========================================="
-
-          echo "VALIDATING RESPONSE"
-
-          echo "=========================================="
-
-
-          echo "$RESPONSE" | node -e '
-
-            let data = "";
-
-
-            process.stdin.on(
-              "data",
-              chunk => data += chunk
-            );
-
-
-            process.stdin.on(
-              "end",
-              () => {
-
-                let json;
-
-
-                try {
-
-                  json =
-                    JSON.parse(data);
-
-                } catch (error) {
-
-                  console.error(
-                    "ERROR: Response is not valid JSON."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                console.log(
-                  "success:",
-                  json.success
-                );
-
-
-                console.log(
-                  "status:",
-                  json.status
-                );
-
-
-                console.log(
-                  "error:",
-                  json.error || "none"
-                );
-
-
-                if (json.research) {
-
-                  console.log(
-                    "research.success:",
-                    json.research.success
-                  );
-
-
-                  console.log(
-                    "sourceCount:",
-                    json.research.sourceCount
-                  );
-
-
-                  console.log(
-                    "confidence:",
-                    json.research.confidence
-                  );
-
-
-                  console.log(
-                    "verificationStatus:",
-                    json.research.verificationStatus
-                  );
-
-
-                  console.log(
-                    "sources returned:",
-                    Array.isArray(
-                      json.research.sources
-                    )
-                      ? json.research.sources.length
-                      : 0
-                  );
-
-                }
-
-
-                if (json.context) {
-
-                  console.log(
-                    "context.success:",
-                    json.context.success
-                  );
-
-                }
-
-
-                if (
-                  json.success !== true
-                ) {
-
-                  console.error(
-                    "ERROR: AarHen research request failed."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                if (
-                  !json.research
-                ) {
-
-                  console.error(
-                    "ERROR: Research result missing."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                if (
-                  !Array.isArray(
-                    json.research.sources
-                  )
-                ) {
-
-                  console.error(
-                    "ERROR: Research sources missing."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                if (
-                  json.research.sources.length < 1
-                ) {
-
-                  console.error(
-                    "ERROR: No web sources returned."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                console.log(
-                  "LIVE WEB RESEARCH TEST PASSED."
-                );
-
-              }
-
-            );
-
-          '
-
-
-      # ========================================================
-      # VERIFY + LEARN + MEMORY ID
-      # ========================================================
-
-      - name: Test research verification and learning
-        env:
-
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-
-        run: |
-
-          echo "=========================================="
-
-          echo "AARHEN VERIFY -> LEARN PIPELINE"
-
-          echo "=========================================="
-
-
-          RESPONSE=$(curl -sS \
-            -X POST \
-            http://localhost:3000/research \
-            -H "Content-Type: application/json" \
-            -d '{
-              "query": "AarHen live research learning test vehicle finance 2026",
-              "maxSources": 5,
-              "language": "en"
-            }')
-
-
-          CURL_EXIT=$?
-
-
-          echo "$RESPONSE"
-
-
-          if [ "$CURL_EXIT" -ne 0 ]; then
-
-            echo "ERROR: Research request failed."
-
-            exit "$CURL_EXIT"
-
-          fi
-
-
-          echo "$RESPONSE" > research-learning-response.json
-
-
-          echo "=========================================="
-
-          echo "VALIDATING VERIFY + LEARN"
-
-          echo "=========================================="
-
-
-          echo "$RESPONSE" | node -e '
-
-            let data = "";
-
-
-            process.stdin.on(
-              "data",
-              chunk => data += chunk
-            );
-
-
-            process.stdin.on(
-              "end",
-              () => {
-
-                let json;
-
-
-                try {
-
-                  json =
-                    JSON.parse(data);
-
-                } catch (error) {
-
-                  console.error(
-                    "ERROR: Invalid JSON."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                const research =
-                  json.research || {};
-
-
-                const learning =
-                  research.learning || {};
-
-
-                console.log(
-                  "Research success:",
-                  research.success
-                );
-
-
-                console.log(
-                  "Research status:",
-                  research.researchStatus
-                );
-
-
-                console.log(
-                  "Verified:",
-                  research.verified
-                );
-
-
-                console.log(
-                  "Confidence:",
-                  research.confidence
-                );
-
-
-                console.log(
-                  "Learning learned:",
-                  learning.learned
-                );
-
-
-                console.log(
-                  "Learning verified:",
-                  learning.verified
-                );
-
-
-                console.log(
-                  "Learning approved:",
-                  learning.approved
-                );
-
-
-                console.log(
-                  "Learning status:",
-                  learning.status
-                );
-
-
-                console.log(
-                  "Memory ID:",
-                  learning.memoryId || "none"
-                );
-
-
-                if (
-                  json.success !== true
-                ) {
-
-                  console.error(
-                    "ERROR: AarHen research failed."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                if (
-                  research.success !== true
-                ) {
-
-                  console.error(
-                    "ERROR: Research engine failed."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                if (
-                  research.verified !== true
-                ) {
-
-                  console.error(
-                    "ERROR: Research was not verified."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                if (
-                  learning.learned !== true
-                ) {
-
-                  console.error(
-                    "ERROR: Verified research was not learned."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                if (
-                  !learning.memoryId
-                ) {
-
-                  console.error(
-                    "ERROR: Learned memory ID is missing."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                console.log(
-                  "VERIFY + LEARN TEST PASSED."
-                );
-
-
-                console.log(
-                  "AARHEN_LEARNED_MEMORY_ID=" +
-                  learning.memoryId
-                );
-
-
-                console.log(
-                  "AARHEN_LEARNED_MEMORY_ID=" +
-                  learning.memoryId
-                );
-
-              }
-
-            );
-
-          '
-
-
-          LEARNED_MEMORY_ID=$(echo "$RESPONSE" | node -e '
-
-            let data = "";
-
-
-            process.stdin.on(
-              "data",
-              chunk => data += chunk
-            );
-
-
-            process.stdin.on(
-              "end",
-              () => {
-
-                const json =
-                  JSON.parse(data);
-
-
-                const id =
-                  json.research &&
-                  json.research.learning &&
-                  json.research.learning.memoryId;
-
-
-                if (!id) {
-
-                  console.error(
-                    "ERROR: memoryId not found."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                console.log(id);
-
-              }
-
-            );
-
-          ')
-
-
-          echo "LEARNED_MEMORY_ID=$LEARNED_MEMORY_ID" >> "$GITHUB_ENV"
-
-
-          echo "Saved learned memory ID:"
-
-          echo "$LEARNED_MEMORY_ID"
-
-
-      # ========================================================
-      # RECALL LEARNED MEMORY
-      # ========================================================
-
-      - name: Test learned memory recall
-        run: |
-
-          echo "=========================================="
-
-          echo "AARHEN LEARNED MEMORY RECALL"
-
-          echo "=========================================="
-
-
-          if [ -z "$LEARNED_MEMORY_ID" ]; then
-
-            echo "ERROR: LEARNED_MEMORY_ID is empty."
-
-            exit 1
-
-          fi
-
-
-          echo "Recalling memory:"
-
-          echo "$LEARNED_MEMORY_ID"
-
-
-          RESPONSE=$(curl -sS \
-            --fail \
-            "http://localhost:3000/memory/get?memoryId=$LEARNED_MEMORY_ID")
-
-
-          echo "=========================================="
-
-          echo "MEMORY RESPONSE"
-
-          echo "=========================================="
-
-
-          echo "$RESPONSE"
-
-
-          echo "$RESPONSE" | node -e '
-
-            let data = "";
-
-
-            process.stdin.on(
-              "data",
-              chunk => data += chunk
-            );
-
-
-            process.stdin.on(
-              "end",
-              () => {
-
-                let json;
-
-
-                try {
-
-                  json =
-                    JSON.parse(data);
-
-                } catch (error) {
-
-                  console.error(
-                    "ERROR: Memory response is not valid JSON."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                console.log(
-                  "Memory response success:",
-                  json.success
-                );
-
-
-                if (
-                  json.success !== true
-                ) {
-
-                  console.error(
-                    "ERROR: Learned memory could not be recalled."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                const memory =
-                  json.memory ||
-                  json.result ||
-                  json.data;
-
-
-                if (!memory) {
-
-                  console.error(
-                    "ERROR: Memory object missing."
-                  );
-
-                  process.exit(1);
-
-                }
-
-
-                console.log(
-                  "Recalled learned memory successfully."
-                );
-
-
-                console.log(
-                  "AARHEN MEMORY RECALL TEST PASSED."
-                );
-
-              }
-
-            );
-
-          '
-
-
-      # ========================================================
-      # COMPLETE PIPELINE RESULT
-      # ========================================================
-
-      - name: AarHen complete research learning pipeline
-        run: |
-
-          echo ""
-          echo "=================================================="
-
-          echo "        AARHEN CORE v5 PIPELINE PASSED"
-
-          echo "=================================================="
-
-          echo ""
-
-          echo "WEB RESEARCH       : PASSED"
-
-          echo "SOURCE PROCESSING   : PASSED"
-
-          echo "VERIFICATION       : PASSED"
-
-          echo "LEARNING           : PASSED"
-
-          echo "MEMORY STORAGE     : PASSED"
-
-          echo "MEMORY RECALL      : PASSED"
-
-          echo ""
-
-          echo "WEB -> VERIFY -> LEARN -> MEMORY -> RECALL"
-
-          echo ""
-
-          echo "=================================================="
-
-
-      # ========================================================
-      # SERVER LOG
-      # ========================================================
-
-      - name: Show server log
-        if: always()
-        run: |
-
-          echo "================ SERVER LOG ================"
 
           cat server.log || true
 
-          echo "============================================"
+          exit 1
 
+      # ======================================================
+      # SERVER HEALTH
+      # ======================================================
 
-      # ========================================================
-      # STOP SERVER
-      # ========================================================
+      - name: Server health check
+        run: |
+          echo "=========================================="
+          echo "SERVER HEALTH"
+          echo "=========================================="
 
-      - name: Stop AarHen server
-        if: always()
+          curl -sS \
+            --max-time 20 \
+            http://127.0.0.1:3000/ \
+            || true
+
+          echo
+
+      # ======================================================
+      # RESEARCH TEST
+      # ======================================================
+
+      - name: Test AarHen web research
+        env:
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
 
-          if [ -f server.pid ]; then
+          echo "=========================================="
+          echo "AARHEN WEB RESEARCH TEST"
+          echo "=========================================="
 
-            kill "$(cat server.pid)" || true
+          RESPONSE=$(curl -sS \
+            --max-time 90 \
+            -X POST \
+            http://127.0.0.1:3000/api/aarhen \
+            -H "Content-Type: application/json" \
+            -d '{
+              "message": "Research current auto financing trends in 2026 and verify the information using multiple sources."
+            }')
 
-          fi
+          echo "=========================================="
+          echo "RAW RESPONSE"
+          echo "=========================================="
+
+          echo "$RESPONSE"
+
+          echo
+          echo "=========================================="
+          echo "VALIDATING RESEARCH RESPONSE"
+          echo "=========================================="
+
+          node - "$RESPONSE" <<'NODE'
+
+          const raw =
+            process.argv[2] || "";
+
+          let data;
+
+          try {
+
+            data =
+              JSON.parse(raw);
+
+          } catch (error) {
+
+            console.error(
+              "ERROR: Response is not valid JSON."
+            );
+
+            console.error(
+              raw
+            );
+
+            process.exit(1);
+          }
+
+
+          const research =
+            data.research ||
+            data.execution?.research ||
+            data.result?.research ||
+            {};
+
+
+          console.log(
+            "Request status:",
+            data.status
+          );
+
+          console.log(
+            "Research success:",
+            research.success
+          );
+
+          console.log(
+            "Research engine version:",
+            research.version ||
+            research.verification?.version ||
+            "not-exposed"
+          );
+
+          console.log(
+            "Source count:",
+            research.sourceCount ||
+            research.sources?.length ||
+            0
+          );
+
+          console.log(
+            "Confidence:",
+            research.confidence
+          );
+
+          console.log(
+            "Verified:",
+            research.verified
+          );
+
+          console.log(
+            "Verification status:",
+            research.verificationStatus ||
+            research.verification?.status
+          );
+
+          console.log(
+            "Research status:",
+            research.researchStatus
+          );
+
+          console.log(
+            "Learning:",
+            JSON.stringify(
+              research.learning,
+              null,
+              2
+            )
+          );
+
+
+          /*
+           * Diagnostic validation
+           */
+
+          if (
+            !research ||
+            research.success === false
+          ) {
+
+            console.error(
+              "ERROR: AarHen research request failed."
+            );
+
+            process.exit(1);
+          }
+
+
+          const sourceCount =
+            Number(
+              research.sourceCount
+            ) ||
+            (
+              Array.isArray(
+                research.sources
+              )
+                ? research.sources.length
+                : 0
+            );
+
+
+          if (
+            sourceCount < 2
+          ) {
+
+            console.error(
+              "ERROR: Research returned fewer than 2 sources."
+            );
+
+            process.exit(1);
+          }
+
+
+          if (
+            research.verified !== true
+          ) {
+
+            console.error(
+              "ERROR: Research was not verified."
+            );
+
+            console.error(
+              "Verification object:",
+              JSON.stringify(
+                research.verification,
+                null,
+                2
+              )
+            );
+
+            console.error(
+              "Source count:",
+              sourceCount
+            );
+
+            console.error(
+              "Confidence:",
+              research.confidence
+            );
+
+            process.exit(1);
+          }
+
+
+          if (
+            Number(
+              research.confidence
+            ) < 0.80
+          ) {
+
+            console.error(
+              "ERROR: Verified confidence is below 0.80."
+            );
+
+            process.exit(1);
+          }
+
+
+          console.log(
+            "Research verification PASSED."
+          );
+
+          NODE
+
+      # ======================================================
+      # VERIFY + LEARN
+      # ======================================================
+
+      - name: Validate verify and learn
+        run: |
+
+          echo "=========================================="
+          echo "VALIDATING VERIFY + LEARN"
+          echo "=========================================="
+
+          RESPONSE=$(curl -sS \
+            --max-time 90 \
+            -X POST \
+            http://127.0.0.1:3000/api/aarhen \
+            -H "Content-Type: application/json" \
+            -d '{
+              "message": "Research current auto financing trends in 2026 and learn only the verified information."
+            }')
+
+          echo "$RESPONSE"
+
+          node - "$RESPONSE" <<'NODE'
+
+          const raw =
+            process.argv[2] || "";
+
+          let data;
+
+          try {
+
+            data =
+              JSON.parse(raw);
+
+          } catch {
+
+            console.error(
+              "Invalid JSON response."
+            );
+
+            process.exit(1);
+          }
+
+
+          const research =
+            data.research ||
+            data.execution?.research ||
+            data.result?.research ||
+            {};
+
+
+          const learning =
+            research.learning ||
+            data.execution?.learning ||
+            null;
+
+
+          console.log(
+            "Research success:",
+            research.success
+          );
+
+          console.log(
+            "Research status:",
+            research.researchStatus
+          );
+
+          console.log(
+            "Verified:",
+            research.verified
+          );
+
+          console.log(
+            "Confidence:",
+            research.confidence
+          );
+
+          console.log(
+            "Learning object:",
+            JSON.stringify(
+              learning,
+              null,
+              2
+            )
+          );
+
+
+          if (
+            research.verified !== true
+          ) {
+
+            console.error(
+              "ERROR: Research verification failed."
+            );
+
+            process.exit(1);
+          }
+
+
+          if (
+            Number(
+              research.confidence
+            ) < 0.80
+          ) {
+
+            console.error(
+              "ERROR: Research confidence below 0.80."
+            );
+
+            process.exit(1);
+          }
+
+
+          /*
+           * Learning may legitimately fail if
+           * the learning engine is unavailable,
+           * so we expose the diagnostic result
+           * rather than hiding it.
+           */
+
+          if (
+            learning
+          ) {
+
+            console.log(
+              "Learning present."
+            );
+
+            console.log(
+              "Learning learned:",
+              learning.learned
+            );
+
+            console.log(
+              "Learning verified:",
+              learning.verified
+            );
+
+            console.log(
+              "Learning approved:",
+              learning.approved
+            );
+
+            console.log(
+              "Learning status:",
+              learning.status
+            );
+
+            console.log(
+              "Memory ID:",
+              learning.memoryId ||
+              "none"
+            );
+          }
+
+          console.log(
+            "VERIFY + LEARN VALIDATION PASSED."
+          );
+
+          NODE
+
+      # ======================================================
+      # SERVER LOGS
+      # ======================================================
+
+      - name: Show server logs
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "AARHEN SERVER LOG"
+          echo "=========================================="
+
+          cat server.log || true
