@@ -1,0 +1,1137 @@
+name: AarHen Agent Manager Test
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  agent-manager-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD AGENT MANAGER
+      # ======================================================
+
+      - name: Load Agent Manager
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          if (!agentManager) {
+            throw new Error(
+              "core/agentManager.js could not be loaded."
+            );
+          }
+
+          if (
+            agentManager.AGENT_MANAGER_VERSION !==
+            "5.8.0"
+          ) {
+            throw new Error(
+              "Agent Manager version mismatch."
+            );
+          }
+
+          console.log(
+            "Agent Manager loaded successfully."
+          );
+
+          console.log(
+            "Version:",
+            agentManager.AGENT_MANAGER_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Agent Manager Status Test
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          agentManager.reset();
+
+          const status =
+            agentManager.getStatus();
+
+          if (!status) {
+            throw new Error(
+              "Agent Manager status missing."
+            );
+          }
+
+          if (
+            status.success !== true
+          ) {
+            throw new Error(
+              "Agent Manager status is not healthy."
+            );
+          }
+
+          if (
+            status.version !==
+            agentManager.AGENT_MANAGER_VERSION
+          ) {
+            throw new Error(
+              "Agent Manager status version mismatch."
+            );
+          }
+
+          if (
+            status.agents !== 0 ||
+            status.tasks !== 0
+          ) {
+            throw new Error(
+              "Agent Manager reset did not clear the store."
+            );
+          }
+
+          console.log(
+            "Agent Manager status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # AGENT CREATION TEST
+      # ======================================================
+
+      - name: Agent Creation Test
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          agentManager.reset();
+
+          const result =
+            agentManager.createAgent({
+
+              name:
+                "AarHen Test Agent",
+
+              description:
+                "Agent Manager integration test.",
+
+              type:
+                "test",
+
+              owner:
+                "AarHen",
+
+              metadata: {
+
+                environment:
+                  "github-actions"
+
+              }
+
+            });
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Agent creation failed."
+            );
+          }
+
+          if (
+            !result.agent
+          ) {
+            throw new Error(
+              "Created agent is missing."
+            );
+          }
+
+          if (
+            result.agent.name !==
+            "AarHen Test Agent"
+          ) {
+            throw new Error(
+              "Agent name mismatch."
+            );
+          }
+
+          if (
+            result.agent.state !==
+            agentManager.AGENT_STATES.IDLE
+          ) {
+            throw new Error(
+              "New agent should start in idle state."
+            );
+          }
+
+          const fetched =
+            agentManager.getAgent(
+              result.agent.id
+            );
+
+          if (
+            fetched.success !== true
+          ) {
+            throw new Error(
+              "Created agent could not be fetched."
+            );
+          }
+
+          console.log(
+            "Agent creation test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # TASK CREATION TEST
+      # ======================================================
+
+      - name: Task Creation Test
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          agentManager.reset();
+
+          const agent =
+            agentManager.createAgent({
+
+              name:
+                "Task Test Agent"
+
+            });
+
+          if (
+            agent.success !== true
+          ) {
+            throw new Error(
+              "Test agent creation failed."
+            );
+          }
+
+          const task =
+            agentManager.createTask(
+
+              agent.agent.id,
+
+              "Complete AarHen agent test",
+
+              {
+
+                priority:
+                  "high",
+
+                autonomy:
+                  true,
+
+                maxRetries:
+                  1,
+
+                context: {
+
+                  source:
+                    "agent-manager-test"
+
+                }
+
+              }
+
+            );
+
+          if (
+            task.success !== true
+          ) {
+            throw new Error(
+              "Task creation failed."
+            );
+          }
+
+          if (
+            task.task.status !==
+            agentManager.TASK_STATES.CREATED
+          ) {
+            throw new Error(
+              "New task should start in created state."
+            );
+          }
+
+          if (
+            task.task.priority !==
+            "high"
+          ) {
+            throw new Error(
+              "Task priority mismatch."
+            );
+          }
+
+          const listed =
+            agentManager.listTasks(
+              agent.agent.id
+            );
+
+          if (
+            listed.count !== 1
+          ) {
+            throw new Error(
+              "Task list count mismatch."
+            );
+          }
+
+          console.log(
+            "Task creation test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PLAN + PERMISSION TEST
+      # ======================================================
+
+      - name: Task Planning and Permission Test
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          agentManager.reset();
+
+          const agent =
+            agentManager.createAgent({
+
+              name:
+                "Planning Test Agent"
+
+            });
+
+          const task =
+            agentManager.createTask(
+
+              agent.agent.id,
+
+              "Run a two-step controlled task"
+
+            );
+
+          if (
+            !task.success
+          ) {
+            throw new Error(
+              "Planning test task creation failed."
+            );
+          }
+
+          const planned =
+            agentManager.planTask(
+
+              task.task.id,
+
+              [
+
+                {
+
+                  name:
+                    "Calculate",
+
+                  description:
+                    "Perform a safe calculation.",
+
+                  action:
+                    "calculate",
+
+                  input: {
+
+                    expression:
+                      "2 + 2"
+
+                  }
+
+                },
+
+                {
+
+                  name:
+                    "Send Message",
+
+                  description:
+                    "Prepare a message action.",
+
+                  action:
+                    "send_message"
+
+                }
+
+              ]
+
+            );
+
+          if (
+            planned.success !== true
+          ) {
+            throw new Error(
+              "Task planning failed."
+            );
+          }
+
+          if (
+            planned.task.steps.length !== 2
+          ) {
+            throw new Error(
+              "Planned step count mismatch."
+            );
+          }
+
+          const firstStep =
+            planned.task.steps[0];
+
+          const secondStep =
+            planned.task.steps[1];
+
+          if (
+            firstStep.policy !==
+            "ALLOW"
+          ) {
+            throw new Error(
+              "Safe calculation step was not allowed."
+            );
+          }
+
+          if (
+            firstStep.approved !== true
+          ) {
+            throw new Error(
+              "Safe calculation step should be automatically approved."
+            );
+          }
+
+          if (
+            secondStep.policy !==
+            "ASK"
+          ) {
+            throw new Error(
+              "Send-message step should require approval."
+            );
+          }
+
+          if (
+            secondStep.requiresApproval !== true
+          ) {
+            throw new Error(
+              "Approval requirement was not preserved."
+            );
+          }
+
+          if (
+            planned.task.status !==
+            agentManager.TASK_STATES.WAITING_APPROVAL
+          ) {
+            throw new Error(
+              "Task should wait for approval."
+            );
+          }
+
+          console.log(
+            "Task planning and permission test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # APPROVAL TEST
+      # ======================================================
+
+      - name: Task Approval Test
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          agentManager.reset();
+
+          const agent =
+            agentManager.createAgent({
+
+              name:
+                "Approval Test Agent"
+
+            });
+
+          const task =
+            agentManager.createTask(
+
+              agent.agent.id,
+
+              "Approval flow test"
+
+            );
+
+          agentManager.planTask(
+
+            task.task.id,
+
+            [
+
+              {
+
+                name:
+                  "Approved Action",
+
+                description:
+                  "Test approval requirement.",
+
+                action:
+                  "send_message"
+
+              }
+
+            ]
+
+          );
+
+          const before =
+            agentManager.startTask(
+              task.task.id
+            );
+
+          if (
+            before.success !== false
+          ) {
+            throw new Error(
+              "Task started without required approval."
+            );
+          }
+
+          if (
+            before.requiresApproval !== true
+          ) {
+            throw new Error(
+              "Approval requirement was not reported."
+            );
+          }
+
+          const approved =
+            agentManager.approveTask(
+              task.task.id
+            );
+
+          if (
+            approved.success !== true
+          ) {
+            throw new Error(
+              "Task approval failed."
+            );
+          }
+
+          const started =
+            agentManager.startTask(
+              task.task.id
+            );
+
+          if (
+            started.success !== true
+          ) {
+            throw new Error(
+              "Approved task did not start."
+            );
+          }
+
+          if (
+            started.task.status !==
+            agentManager.TASK_STATES.RUNNING
+          ) {
+            throw new Error(
+              "Approved task is not running."
+            );
+          }
+
+          console.log(
+            "Task approval test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CONTROLLED EXECUTION TEST
+      # ======================================================
+
+      - name: Controlled Agent Execution Test
+        run: |
+          node - <<'NODE'
+
+          (async () => {
+
+            const agentManager =
+              require("./core/agentManager");
+
+            agentManager.reset();
+
+            const agent =
+              agentManager.createAgent({
+
+                name:
+                  "Execution Test Agent"
+
+              });
+
+            const task =
+              agentManager.createTask(
+
+                agent.agent.id,
+
+                "Execute two controlled steps"
+
+              );
+
+            const planned =
+              agentManager.planTask(
+
+                task.task.id,
+
+                [
+
+                  {
+
+                    name:
+                      "Step One",
+
+                    description:
+                      "Safe calculation step.",
+
+                    action:
+                      "calculate",
+
+                    input: {
+
+                      expression:
+                        "2 + 2"
+
+                    }
+
+                  },
+
+                  {
+
+                    name:
+                      "Step Two",
+
+                    description:
+                      "Safe knowledge lookup.",
+
+                    action:
+                      "search_knowledge"
+
+                  }
+
+                ]
+
+              );
+
+            if (
+              planned.success !== true
+            ) {
+              throw new Error(
+                "Controlled execution planning failed."
+              );
+            }
+
+            const run =
+              await agentManager.runTask(
+
+                task.task.id,
+
+                async ({
+                  step
+                }) => {
+
+                  return {
+
+                    success:
+                      true,
+
+                    action:
+                      step.action,
+
+                    output:
+                      "controlled-test-success"
+
+                  };
+
+                }
+
+              );
+
+            if (
+              run.success !== true
+            ) {
+              throw new Error(
+                "Controlled task execution failed."
+              );
+            }
+
+            if (
+              run.completed !== true
+            ) {
+              throw new Error(
+                "Task was not marked completed."
+              );
+            }
+
+            if (
+              run.task.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+              throw new Error(
+                "Task final state is not completed."
+              );
+            }
+
+            if (
+              run.task.steps.length !== 2
+            ) {
+              throw new Error(
+                "Executed step count mismatch."
+              );
+            }
+
+            if (
+              run.task.steps.some(
+                step =>
+                  step.status !==
+                  agentManager.STEP_STATES.COMPLETED
+              )
+            ) {
+              throw new Error(
+                "Not all steps completed."
+              );
+            }
+
+            console.log(
+              "Controlled agent execution test passed."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # RETRY TEST
+      # ======================================================
+
+      - name: Step Retry Test
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          agentManager.reset();
+
+          const agent =
+            agentManager.createAgent({
+
+              name:
+                "Retry Test Agent"
+
+            });
+
+          const task =
+            agentManager.createTask(
+
+              agent.agent.id,
+
+              "Test step retry",
+
+              {
+
+                maxRetries:
+                  1
+
+              }
+
+            );
+
+          const planned =
+            agentManager.planTask(
+
+              task.task.id,
+
+              [
+
+                {
+
+                  name:
+                    "Retry Step",
+
+                  description:
+                    "Step that should be retryable.",
+
+                  action:
+                    "calculate"
+
+                }
+
+              ]
+
+            );
+
+          if (
+            planned.success !== true
+          ) {
+            throw new Error(
+              "Retry task planning failed."
+            );
+          }
+
+          const started =
+            agentManager.startTask(
+              task.task.id
+            );
+
+          if (
+            started.success !== true
+          ) {
+            throw new Error(
+              "Retry task did not start."
+            );
+          }
+
+          const next =
+            agentManager.getNextStep(
+              task.task.id
+            );
+
+          if (
+            next.success !== true ||
+            !next.step
+          ) {
+            throw new Error(
+              "Retry step was not available."
+            );
+          }
+
+          const startedStep =
+            agentManager.startStep(
+
+              task.task.id,
+
+              next.step.id
+
+            );
+
+          if (
+            startedStep.success !== true
+          ) {
+            throw new Error(
+              "Retry step did not start."
+            );
+          }
+
+          const failed =
+            agentManager.failStep(
+
+              task.task.id,
+
+              next.step.id,
+
+              "Intentional test failure."
+
+            );
+
+          if (
+            failed.success !== true
+          ) {
+            throw new Error(
+              "Failure recording failed."
+            );
+          }
+
+          if (
+            failed.retryAvailable !== true
+          ) {
+            throw new Error(
+              "Retry was not made available."
+            );
+          }
+
+          if (
+            failed.step.status !==
+            agentManager.STEP_STATES.PENDING
+          ) {
+            throw new Error(
+              "Retryable step should return to pending."
+            );
+          }
+
+          console.log(
+            "Step retry test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PAUSE / RESUME / STOP TEST
+      # ======================================================
+
+      - name: Agent Task Controls Test
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          agentManager.reset();
+
+          const agent =
+            agentManager.createAgent({
+
+              name:
+                "Control Test Agent"
+
+            });
+
+          const task =
+            agentManager.createTask(
+
+              agent.agent.id,
+
+              "Test pause resume stop"
+
+            );
+
+          agentManager.planTask(
+
+            task.task.id,
+
+            [
+
+              {
+
+                name:
+                  "Control Step",
+
+                description:
+                  "Control-state test step.",
+
+                action:
+                  "calculate"
+
+              }
+
+            ]
+
+          );
+
+          const started =
+            agentManager.startTask(
+              task.task.id
+            );
+
+          if (
+            started.success !== true
+          ) {
+            throw new Error(
+              "Control test task did not start."
+            );
+          }
+
+          const paused =
+            agentManager.pauseTask(
+              task.task.id
+            );
+
+          if (
+            paused.success !== true
+          ) {
+            throw new Error(
+              "Task pause failed."
+            );
+          }
+
+          if (
+            paused.task.status !==
+            agentManager.TASK_STATES.PAUSED
+          ) {
+            throw new Error(
+              "Task did not enter paused state."
+            );
+          }
+
+          const resumed =
+            agentManager.resumeTask(
+              task.task.id
+            );
+
+          if (
+            resumed.success !== true
+          ) {
+            throw new Error(
+              "Task resume failed."
+            );
+          }
+
+          if (
+            resumed.task.status !==
+            agentManager.TASK_STATES.RUNNING
+          ) {
+            throw new Error(
+              "Task did not resume into running state."
+            );
+          }
+
+          const stopped =
+            agentManager.stopTask(
+
+              task.task.id,
+
+              "Stopped by test."
+
+            );
+
+          if (
+            stopped.success !== true
+          ) {
+            throw new Error(
+              "Task stop failed."
+            );
+          }
+
+          if (
+            stopped.task.status !==
+            agentManager.TASK_STATES.STOPPED
+          ) {
+            throw new Error(
+              "Task did not enter stopped state."
+            );
+          }
+
+          if (
+            stopped.task.stopRequested !== true
+          ) {
+            throw new Error(
+              "Stop request flag was not set."
+            );
+          }
+
+          console.log(
+            "Agent task controls test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL STATUS TEST
+      # ======================================================
+
+      - name: Final Agent Manager Status Test
+        run: |
+          node - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          const status =
+            agentManager.getStatus();
+
+          if (
+            status.success !== true
+          ) {
+            throw new Error(
+              "Final Agent Manager status failed."
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "Final Agent Manager status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN AGENT MANAGER TEST"
+          echo "=============================================="
+          echo " Agent Manager Load: PASSED"
+          echo " Agent Creation: PASSED"
+          echo " Task Creation: PASSED"
+          echo " Task Planning: PASSED"
+          echo " Permission Integration: PASSED"
+          echo " Approval Flow: PASSED"
+          echo " Controlled Execution: PASSED"
+          echo " Retry Logic: PASSED"
+          echo " Pause/Resume/Stop: PASSED"
+          echo " Status API: PASSED"
+          echo "=============================================="
+          echo " AGENT SYSTEM FOUNDATION v5.8.0 READY"
+          echo "=============================================="
