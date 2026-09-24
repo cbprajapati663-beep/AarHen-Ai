@@ -1167,6 +1167,13 @@ function validateCheckpointForRecovery(checkpoint) {
     if (!Array.isArray(task.steps) || task.totalSteps !== task.steps.length) {
         return { valid: false, reason: "Checkpoint step data is inconsistent." };
     }
+    if (checkpoint.totalSteps !== task.totalSteps ||
+        checkpoint.completedSteps !== task.completedSteps ||
+        checkpoint.failedSteps !== task.failedSteps ||
+        checkpoint.pendingSteps !== task.pendingSteps ||
+        checkpoint.currentStepIndex !== task.currentStepIndex) {
+        return { valid: false, reason: "Checkpoint summary fields do not match its task snapshot." };
+    }
     const count = (status) => task.steps.filter(step => step && step.status === status).length;
     if (task.completedSteps !== count(agentManager.STEP_STATES.COMPLETED) ||
         task.failedSteps !== count(agentManager.STEP_STATES.FAILED) ||
