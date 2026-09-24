@@ -1,0 +1,93 @@
+name: AarHen Checkpoint Status Count Consistency Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-status-counts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify checkpoint status counters across lifecycle
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          let status = engine.getStatus();
+          assert(status.success && status.checkpointCount === 0 &&
+            status.trackedTasks === 0,
+            "Initial checkpoint counters should be zero.");
+
+          const agent = manager.createAgent({
+            id: "status-count-agent",
+            name: "Checkpoint status count consistency test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "status-count-agent",
+            "Checkpoint status count",
+            { id: "status-count-task" }
+          );
+          assert(created.success, "Task creation failed.");
+          assert(manager.startTask("status-count-task").success,
+            "Task start failed.");
+
+          for (const id of ["status-count-checkpoint-1", "status-count-checkpoint-2"]) {
+            assert(bridge.saveTaskCheckpoint("status-count-task", { id }).success,
+              "Checkpoint save failed: " + id);
+          }
+
+          status = engine.getStatus();
+          assert(status.checkpointCount === 2 && status.trackedTasks === 1,
+            "Counters should reflect two checkpoints for one task.");
+
+          assert(bridge.deleteCheckpoint("status-count-checkpoint-1").success,
+            "Individual checkpoint deletion failed.");
+          status = engine.getStatus();
+          assert(status.checkpointCount === 1 && status.trackedTasks === 1,
+            "Counters incorrect after individual deletion.");
+
+          const deleted = bridge.deleteTaskCheckpoints("status-count-task");
+          assert(deleted.success && deleted.deleted === 1,
+            "Task checkpoint deletion should remove the remaining checkpoint.");
+
+          status = engine.getStatus();
+          assert(status.checkpointCount === 0 && status.trackedTasks === 0,
+            "Counters should return to zero after deleting task checkpoints.");
+
+          assert(bridge.saveTaskCheckpoint("status-count-task", {
+            id: "status-count-reset-checkpoint"
+          }).success, "Checkpoint save before reset failed.");
+
+          const reset = bridge.reset();
+          assert(reset.success, "Checkpoint reset failed.");
+
+          status = engine.getStatus();
+          assert(status.checkpointCount === 0 && status.trackedTasks === 0,
+            "Counters should be zero after reset.");
+
+          console.log("Checkpoint status count consistency tests passed.");
+          console.log(JSON.stringify({
+            finalCheckpointCount: status.checkpointCount,
+            finalTrackedTasks: status.trackedTasks,
+            resetDeleted: reset.deleted
+          }, null, 2));
+          NODE
