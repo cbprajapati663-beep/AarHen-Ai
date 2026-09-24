@@ -1,0 +1,47 @@
+name: AarHen STOP Requested Recovery Block Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  stop-requested-recovery-block:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify STOP-requested work cannot be recovered
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          const stopped = {
+            status: "running",
+            stopRequested: true,
+            pendingSteps: 1,
+            failedSteps: 0
+          };
+
+          assert(engine.isRecoveryEligible(stopped) === false,
+            "A task with STOP requested must not be recovery-eligible.");
+
+          const ordinary = {
+            status: "running",
+            stopRequested: false,
+            pendingSteps: 1,
+            failedSteps: 0
+          };
+
+          assert(engine.isRecoveryEligible(ordinary) === true,
+            "Ordinary running work with pending steps should remain eligible.");
+
+          console.log("STOP-requested recovery block tests passed.");
+          NODE
