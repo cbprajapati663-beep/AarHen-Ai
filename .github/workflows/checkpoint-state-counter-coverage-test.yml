@@ -1,0 +1,72 @@
+name: AarHen Checkpoint State Counter Coverage Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-state-counters:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify status counters for checkpoint states
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          bridge.reset();
+
+          const cases = [
+            ["completed", "completed"],
+            ["paused", "paused"],
+            ["failed", "failed"],
+            ["stopped", "stopped"]
+          ];
+
+          for (const [taskId, status] of cases) {
+            const result = engine.saveCheckpoint({
+              id: "counter-task-" + taskId,
+              status,
+              steps: []
+            }, {
+              id: "counter-checkpoint-" + taskId
+            });
+            assert(result.success, "Could not save " + status + " checkpoint.");
+          }
+
+          const status = engine.getStatus();
+          assert(status.checkpointCount === 4,
+            "Total checkpoint count should be four.");
+          assert(status.trackedTasks === 4,
+            "Tracked task count should be four.");
+          assert(status.completedCheckpoints === 1,
+            "Completed checkpoint counter should be one.");
+          assert(status.pausedCheckpoints === 1,
+            "Paused checkpoint counter should be one.");
+          assert(status.failedCheckpoints === 1,
+            "Failed checkpoint counter should be one.");
+          assert(status.stoppedCheckpoints === 1,
+            "Stopped checkpoint counter should be one.");
+
+          console.log("Checkpoint state counter coverage tests passed.");
+          console.log(JSON.stringify({
+            checkpointCount: status.checkpointCount,
+            trackedTasks: status.trackedTasks,
+            completed: status.completedCheckpoints,
+            paused: status.pausedCheckpoints,
+            failed: status.failedCheckpoints,
+            stopped: status.stoppedCheckpoints
+          }, null, 2));
+          NODE
