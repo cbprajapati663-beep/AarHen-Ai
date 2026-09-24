@@ -10,63 +10,16 @@
 // - Connect Brain, Memory, RAG, Research, Routing, Intent,
 //   Permissions, Executor and Response systems
 // - Support controlled Autonomous Worker execution
+// - Support Checkpoint Recovery Controller
 // - Preserve existing non-autonomous execution behavior
-//
-// Autonomous integration:
-//
-// Normal:
-// Input
-//   ↓
-// Master Brain
-//   ↓
-// Routing
-//   ↓
-// Intent
-//   ↓
-// Research
-//   ↓
-// Permission
-//   ↓
-// Skill Executor
-//   ↓
-// Response
-//
-// Autonomous:
-// Input
-//   ↓
-// Master Brain
-//   ↓
-// Routing
-//   ↓
-// Intent
-//   ↓
-// Research
-//   ↓
-// Permission / Memory Context
-//   ↓
-// Autonomous Worker
-//   ↓
-// Agent Planner
-//   ↓
-// Agent Manager
-//   ↓
-// Agent Worker
-//   ↓
-// Worker Provider
-//   ↓
-// Provider Bridge
-//   ↓
-// Provider Manager
-//   ↓
-// Agent Runner
-//   ↓
-// Response
 //
 // IMPORTANT:
 // - Existing normal execution remains intact.
 // - Autonomous mode is opt-in through context.autonomous=true.
 // - Autonomous execution does not bypass permissions.
 // - Protected external actions remain approval-controlled.
+// - Checkpoint Recovery Controller does not bypass the
+//   Autonomous Worker / Recovery / Agent Runner chain.
 // ============================================================
 
 
@@ -106,6 +59,10 @@ const autonomousWorker =
     require("./autonomousWorker");
 
 
+const checkpointRecoveryController =
+    require("./checkpointRecoveryController");
+
+
 // ============================================================
 // VERSION
 // ============================================================
@@ -118,17 +75,24 @@ const ORCHESTRATOR_VERSION =
 // SELECT SKILL
 // ============================================================
 
-function selectSkill(input) {
+function selectSkill(
+    input
+) {
 
     const result =
         router.route(
             input
         );
 
-    if (!result.success) {
+
+    if (
+        !result.success
+    ) {
 
         return result;
+
     }
+
 
     return {
 
@@ -143,7 +107,9 @@ function selectSkill(input) {
 
         status:
             result.status
+
     };
+
 }
 
 
@@ -159,9 +125,12 @@ function shouldResearch(
 ) {
 
     if (
-        context.research === true ||
+        context.research ===
+            true ||
+
         String(
-            context.intent || ""
+            context.intent ||
+            ""
         ).toLowerCase() ===
             "research"
     ) {
@@ -173,12 +142,15 @@ function shouldResearch(
 
             reason:
                 "Live research explicitly requested by context."
+
         };
+
     }
 
 
     if (
-        context.research === false
+        context.research ===
+        false
     ) {
 
         return {
@@ -188,15 +160,17 @@ function shouldResearch(
 
             reason:
                 "Live research explicitly disabled by context."
+
         };
+
     }
 
 
     const category =
         String(
-            intentResult.category || ""
-        )
-            .toLowerCase();
+            intentResult.category ||
+            ""
+        ).toLowerCase();
 
 
     if (
@@ -211,7 +185,9 @@ function shouldResearch(
 
             reason:
                 "Intent category requires web research."
+
         };
+
     }
 
 
@@ -223,9 +199,9 @@ function shouldResearch(
     const skillCategory =
         String(
             selectedSkill
-                ?.category || ""
-        )
-            .toLowerCase();
+                ?.category ||
+            ""
+        ).toLowerCase();
 
 
     const skillName =
@@ -235,19 +211,21 @@ function shouldResearch(
             selectedSkill
                 ?.id ||
             ""
-        )
-            .toLowerCase();
+        ).toLowerCase();
 
 
     if (
         skillCategory ===
             "research" ||
+
         skillName.includes(
             "research"
         ) ||
+
         skillName.includes(
             "web-search"
         ) ||
+
         skillName.includes(
             "web_search"
         )
@@ -260,15 +238,17 @@ function shouldResearch(
 
             reason:
                 "Research skill selected by router."
+
         };
+
     }
 
 
     const cleanRequest =
         String(
-            request || ""
-        )
-            .toLowerCase();
+            request ||
+            ""
+        ).toLowerCase();
 
 
     const researchSignals = [
@@ -324,7 +304,9 @@ function shouldResearch(
 
             reason:
                 `Fresh-web signal detected: ${matchedSignal}.`
+
         };
+
     }
 
 
@@ -359,7 +341,9 @@ function shouldResearch(
 
             reason:
                 `Research keyword detected: ${matchedKeyword}.`
+
         };
+
     }
 
 
@@ -370,12 +354,14 @@ function shouldResearch(
 
         reason:
             "Live web research not required."
+
     };
+
 }
 
 
 // ============================================================
-// NORMALIZE RESEARCH SOURCES
+// COLLECT RESEARCH SOURCES
 // ============================================================
 
 function collectResearchSources(
@@ -385,31 +371,18 @@ function collectResearchSources(
     const candidates = [
 
         result?.sources,
-
         result?.results,
-
         result?.research?.sources,
-
         result?.research?.results,
-
         result?.result?.sources,
-
         result?.result?.results,
-
         result?.raw?.sources,
-
         result?.raw?.results,
-
         result?.research?.raw?.sources,
-
         result?.research?.raw?.results,
-
         result?.result?.raw?.sources,
-
         result?.result?.raw?.results,
-
         result?.data?.sources,
-
         result?.data?.results
 
     ];
@@ -428,13 +401,20 @@ function collectResearchSources(
         ) {
 
             return candidate;
+
         }
+
     }
 
 
     return [];
+
 }
 
+
+// ============================================================
+// NORMALIZE RESEARCH RESULT
+// ============================================================
 
 function normalizeResearchResult(
     result,
@@ -448,23 +428,17 @@ function normalizeResearchResult(
         {};
 
 
-    // --------------------------------------------------------
-    // SOURCE COLLECTION
-    // --------------------------------------------------------
-
     let sources =
         collectResearchSources(
             result
         );
 
 
-    // --------------------------------------------------------
-    // NORMALIZE SOURCES
-    // --------------------------------------------------------
-
     sources =
         sources
-            .filter(Boolean)
+            .filter(
+                Boolean
+            )
             .map(
                 (
                     source,
@@ -512,14 +486,12 @@ function normalizeResearchResult(
                             source.published_at ||
                             source.date ||
                             null
+
                     };
+
                 }
             );
 
-
-    // --------------------------------------------------------
-    // VERIFICATION
-    // --------------------------------------------------------
 
     const verification =
         rawResearch.verification ||
@@ -538,10 +510,13 @@ function normalizeResearchResult(
     const verified =
         rawResearch.verified ===
             true ||
+
         result?.verified ===
             true ||
+
         verification?.verified ===
             true ||
+
         verificationStatus ===
             "verified";
 
@@ -559,12 +534,9 @@ function normalizeResearchResult(
 
         verificationStatus =
             "review";
+
     }
 
-
-    // --------------------------------------------------------
-    // CONFIDENCE
-    // --------------------------------------------------------
 
     let confidence =
         typeof rawResearch.confidence ===
@@ -581,12 +553,12 @@ function normalizeResearchResult(
 
 
     if (
-        confidence >
-        1
+        confidence > 1
     ) {
 
         confidence =
             confidence / 100;
+
     }
 
 
@@ -600,10 +572,6 @@ function normalizeResearchResult(
         );
 
 
-    // --------------------------------------------------------
-    // SOURCE COUNT
-    // --------------------------------------------------------
-
     const sourceCount =
         sources.length ||
         Number(
@@ -613,10 +581,6 @@ function normalizeResearchResult(
         );
 
 
-    // --------------------------------------------------------
-    // ANSWER
-    // --------------------------------------------------------
-
     const answer =
         rawResearch.answer ||
         rawResearch.summary ||
@@ -625,29 +589,17 @@ function normalizeResearchResult(
         "";
 
 
-    // --------------------------------------------------------
-    // PROVIDER
-    // --------------------------------------------------------
-
     const provider =
         rawResearch.provider ||
         result?.provider ||
         "tavily";
 
 
-    // --------------------------------------------------------
-    // LEARNING
-    // --------------------------------------------------------
-
     const learning =
         rawResearch.learning ||
         result?.learning ||
         null;
 
-
-    // --------------------------------------------------------
-    // RESEARCH STATUS
-    // --------------------------------------------------------
 
     const researchStatus =
         rawResearch.researchStatus ||
@@ -656,16 +608,10 @@ function normalizeResearchResult(
         result?.status ||
         (
             verified
-
                 ? "verified"
-
                 : "review"
         );
 
-
-    // --------------------------------------------------------
-    // FINAL STANDARDIZED OBJECT
-    // --------------------------------------------------------
 
     return {
 
@@ -726,6 +672,7 @@ function normalizeResearchResult(
             rawResearch
 
     };
+
 }
 
 
@@ -760,6 +707,7 @@ async function performResearch(
                 maxSources,
 
                 language
+
             });
 
 
@@ -805,13 +753,11 @@ async function performResearch(
 
                 verificationStatus:
                     "failed"
+
             };
+
         }
 
-
-        // ----------------------------------------------------
-        // Convert Research API output to stable object
-        // ----------------------------------------------------
 
         const standardizedResearch =
             normalizeResearchResult(
@@ -873,9 +819,12 @@ async function performResearch(
             status:
                 standardizedResearch
                     .researchStatus
+
         };
 
-    } catch (error) {
+    } catch (
+        error
+    ) {
 
         return {
 
@@ -911,8 +860,11 @@ async function performResearch(
 
             verificationStatus:
                 "error"
+
         };
+
     }
+
 }
 
 
@@ -932,6 +884,7 @@ function determinePermission(
         return permissions.check(
             "execute_external_code"
         );
+
     }
 
 
@@ -949,6 +902,7 @@ function determinePermission(
         return permissions.check(
             "security_testing_against_external_target"
         );
+
     }
 
 
@@ -960,43 +914,39 @@ function determinePermission(
         return permissions.check(
             "execute_external_code"
         );
+
     }
 
 
     if (
 
-        category ===
-            "finance" ||
+        category === "finance" ||
 
-        category ===
-            "calculation" ||
+        category === "calculation" ||
 
-        category ===
-            "knowledge" ||
+        category === "knowledge" ||
 
-        category ===
-            "research" ||
+        category === "research" ||
 
-        category ===
-            "data" ||
+        category === "data" ||
 
-        category ===
-            "documents" ||
+        category === "documents" ||
 
-        category ===
-            "business"
+        category === "business"
 
     ) {
 
         return permissions.check(
             "read_public_information"
         );
+
     }
 
 
     return permissions.check(
         "execute_external_code"
     );
+
 }
 
 
@@ -1032,6 +982,7 @@ function buildExecutionContext(
             thinkingContext:
                 brainResult
                     .thinkingContext
+
         },
 
         memoryManagement: {
@@ -1059,6 +1010,7 @@ function buildExecutionContext(
                     .memory
                     ?.verified ||
                 []
+
         },
 
         routing: {
@@ -1070,6 +1022,7 @@ function buildExecutionContext(
             matches:
                 routing
                     .matches
+
         },
 
         intent: {
@@ -1085,8 +1038,11 @@ function buildExecutionContext(
             parameters:
                 intentResult
                     .parameters
+
         }
+
     };
+
 }
 
 
@@ -1119,7 +1075,9 @@ function determineMemoryAction(
 
             reason:
                 "No memory decision available."
+
         };
+
     }
 
 
@@ -1138,7 +1096,9 @@ function determineMemoryAction(
 
             reason:
                 "Memory explicitly disabled by user."
+
         };
+
     }
 
 
@@ -1172,7 +1132,9 @@ function determineMemoryAction(
 
             confidence:
                 decision.confidence
+
         };
+
     }
 
 
@@ -1210,7 +1172,9 @@ function determineMemoryAction(
 
                 confidence:
                     decision.confidence
+
             };
+
         }
 
 
@@ -1227,7 +1191,9 @@ function determineMemoryAction(
 
             reason:
                 decision.reason
+
         };
+
     }
 
 
@@ -1256,7 +1222,9 @@ function determineMemoryAction(
 
         confidence:
             decision.confidence
+
     };
+
 }
 
 
@@ -1292,7 +1260,9 @@ function storeMemory(
                 memoryAction
                     ?.reason ||
                 "Memory storage not requested."
+
         };
+
     }
 
 
@@ -1351,9 +1321,7 @@ function storeMemory(
                 Array.isArray(
                     context.memoryTags
                 )
-
                     ? context.memoryTags
-
                     : [],
 
             verified:
@@ -1363,7 +1331,9 @@ function storeMemory(
 
             remember:
                 true
+
         });
+
     }
 
 
@@ -1408,19 +1378,14 @@ function storeMemory(
 
         remember:
             true
+
     });
+
 }
 
 
 // ============================================================
-// DETECT AUTONOMOUS MODE
-// ============================================================
-//
-// Autonomous mode is intentionally opt-in.
-//
-// Normal orchestrator requests continue to use the existing
-// direct Executor pipeline.
-//
+// AUTONOMOUS MODE
 // ============================================================
 
 function shouldUseAutonomousWorker(
@@ -1432,23 +1397,12 @@ function shouldUseAutonomousWorker(
         context.autonomous ===
         true
     );
+
 }
 
 
 // ============================================================
-// PREPARE AUTONOMOUS EXECUTION CONTEXT
-// ============================================================
-//
-// The current orchestrator context is passed into the
-// Autonomous Worker.
-//
-// This is important because:
-// - Brain context is preserved.
-// - Memory context is preserved.
-// - Knowledge context is preserved.
-// - Existing live research is preserved.
-// - Worker Provider can reuse existing research context.
-// - Unnecessary duplicate web searches are avoided.
+// BUILD AUTONOMOUS OPTIONS
 // ============================================================
 
 function buildAutonomousWorkerOptions(
@@ -1469,21 +1423,18 @@ function buildAutonomousWorkerOptions(
     };
 
 
-    // --------------------------------------------------------
-    // Preserve autonomous flag inside worker context
-    // --------------------------------------------------------
-
     autonomousOptions.context
         .autonomous =
             true;
 
 
     return autonomousOptions;
+
 }
 
 
 // ============================================================
-// EXECUTE THROUGH AUTONOMOUS WORKER
+// EXECUTE THROUGH AUTONOMOUS + CHECKPOINT RECOVERY
 // ============================================================
 
 async function executeAutonomousWorker(
@@ -1493,10 +1444,10 @@ async function executeAutonomousWorker(
 ) {
 
     if (
-        !autonomousWorker ||
-        typeof autonomousWorker
+        !checkpointRecoveryController ||
+        typeof checkpointRecoveryController
             .executeRequest !==
-            "function"
+        "function"
     ) {
 
         return {
@@ -1505,12 +1456,21 @@ async function executeAutonomousWorker(
                 false,
 
             stage:
-                "autonomous-worker",
+                "checkpoint-recovery-controller",
+
+            autonomous:
+                true,
+
+            workerVersion:
+                autonomousWorker
+                    ?.AUTONOMOUS_WORKER_VERSION ||
+                null,
 
             error:
-                "Autonomous Worker is unavailable."
+                "Checkpoint Recovery Controller is unavailable."
 
         };
+
     }
 
 
@@ -1527,7 +1487,7 @@ async function executeAutonomousWorker(
     try {
 
         const result =
-            await autonomousWorker
+            await checkpointRecoveryController
                 .executeRequest(
 
                     request,
@@ -1552,7 +1512,14 @@ async function executeAutonomousWorker(
 
             workerVersion:
                 autonomousWorker
-                    .AUTONOMOUS_WORKER_VERSION ||
+                    ?.AUTONOMOUS_WORKER_VERSION ||
+                null,
+
+            checkpointRecoveryControllerVersion:
+                result
+                    ?.checkpointRecoveryControllerVersion ||
+                checkpointRecoveryController
+                    ?.CHECKPOINT_RECOVERY_CONTROLLER_VERSION ||
                 null,
 
             task:
@@ -1579,15 +1546,35 @@ async function executeAutonomousWorker(
                 result?.waitingApproval ===
                     true,
 
+            recovery:
+                result?.recovery ||
+                null,
+
+            beforeCheckpoint:
+                result?.beforeCheckpoint ||
+                null,
+
+            afterCheckpoint:
+                result?.afterCheckpoint ||
+                null,
+
+            checkpointSave:
+                result?.checkpointSave ||
+                null,
+
             result:
-                result || null,
+                result ||
+                null,
 
             error:
                 result?.error ||
                 null
+
         };
 
-    } catch (error) {
+    } catch (
+        error
+    ) {
 
         return {
 
@@ -1595,19 +1582,24 @@ async function executeAutonomousWorker(
                 false,
 
             stage:
-                "autonomous-worker-error",
+                "checkpoint-recovery-controller-error",
 
             autonomous:
                 true,
 
             workerVersion:
                 autonomousWorker
-                    .AUTONOMOUS_WORKER_VERSION ||
+                    ?.AUTONOMOUS_WORKER_VERSION ||
+                null,
+
+            checkpointRecoveryControllerVersion:
+                checkpointRecoveryController
+                    ?.CHECKPOINT_RECOVERY_CONTROLLER_VERSION ||
                 null,
 
             error:
-                error.message ||
-                "Autonomous Worker execution failed.",
+                error?.message ||
+                "Checkpoint Recovery Controller execution failed.",
 
             task:
                 null,
@@ -1622,9 +1614,27 @@ async function executeAutonomousWorker(
                 null,
 
             workerStatus:
+                null,
+
+            waitingApproval:
+                false,
+
+            recovery:
+                null,
+
+            beforeCheckpoint:
+                null,
+
+            afterCheckpoint:
+                null,
+
+            checkpointSave:
                 null
+
         };
+
     }
+
 }
 
 
@@ -1683,6 +1693,7 @@ function buildAutonomousOrchestrationResult(
 
         status =
             "needs-user-input";
+
     }
 
 
@@ -1723,6 +1734,11 @@ function buildAutonomousOrchestrationResult(
                     ?.workerVersion ||
                 null,
 
+            checkpointRecoveryControllerVersion:
+                autonomousExecution
+                    ?.checkpointRecoveryControllerVersion ||
+                null,
+
             stage:
                 autonomousExecution
                     ?.stage ||
@@ -1754,7 +1770,28 @@ function buildAutonomousOrchestrationResult(
             execution:
                 autonomousExecution
                     ?.execution ||
+                null,
+
+            recovery:
+                autonomousExecution
+                    ?.recovery ||
+                null,
+
+            beforeCheckpoint:
+                autonomousExecution
+                    ?.beforeCheckpoint ||
+                null,
+
+            afterCheckpoint:
+                autonomousExecution
+                    ?.afterCheckpoint ||
+                null,
+
+            checkpointSave:
+                autonomousExecution
+                    ?.checkpointSave ||
                 null
+
         },
 
         execution:
@@ -1766,6 +1803,7 @@ function buildAutonomousOrchestrationResult(
             new Date().toISOString()
 
     };
+
 }
 
 
@@ -1777,10 +1815,6 @@ async function process(
     input,
     context = {}
 ) {
-
-    // --------------------------------------------------------
-    // INPUT VALIDATION
-    // --------------------------------------------------------
 
     if (
         !input ||
@@ -1795,7 +1829,9 @@ async function process(
 
             error:
                 "Invalid input."
+
         };
+
     }
 
 
@@ -1814,7 +1850,9 @@ async function process(
 
             error:
                 "Input is empty."
+
         };
+
     }
 
 
@@ -1834,11 +1872,12 @@ async function process(
     ) {
 
         return brainResult;
+
     }
 
 
     // --------------------------------------------------------
-    // SKILL ROUTING
+    // ROUTING
     // --------------------------------------------------------
 
     const routing =
@@ -1852,11 +1891,12 @@ async function process(
     ) {
 
         return routing;
+
     }
 
 
     // --------------------------------------------------------
-    // INTENT ANALYSIS
+    // INTENT
     // --------------------------------------------------------
 
     let intentResult =
@@ -1870,18 +1910,19 @@ async function process(
     ) {
 
         return intentResult;
+
     }
 
 
     // --------------------------------------------------------
-    // EXPLICIT CONTEXT INTENT OVERRIDE
+    // EXPLICIT RESEARCH CONTEXT OVERRIDE
     // --------------------------------------------------------
 
     if (
         String(
-            context.intent || ""
-        )
-            .toLowerCase() ===
+            context.intent ||
+            ""
+        ).toLowerCase() ===
         "research"
     ) {
 
@@ -1901,21 +1942,26 @@ async function process(
             parameters: {
 
                 ...(
+
                     intentResult.parameters ||
                     {}
+
                 ),
 
                 maxSources:
                     Number(
                         context.maxResearchSources
                     ) || 5
+
             }
+
         };
+
     }
 
 
     // --------------------------------------------------------
-    // LIVE WEB RESEARCH DECISION
+    // RESEARCH DECISION
     // --------------------------------------------------------
 
     const researchDecision =
@@ -1931,10 +1977,6 @@ async function process(
 
         );
 
-
-    // --------------------------------------------------------
-    // DEFAULT RESEARCH RESULT
-    // --------------------------------------------------------
 
     let researchResult = {
 
@@ -1975,7 +2017,7 @@ async function process(
 
 
     // --------------------------------------------------------
-    // LIVE WEB RESEARCH
+    // LIVE RESEARCH
     // --------------------------------------------------------
 
     if (
@@ -2033,8 +2075,11 @@ async function process(
 
                 timestamp:
                     new Date().toISOString()
+
             };
+
         }
+
     }
 
 
@@ -2053,7 +2098,7 @@ async function process(
 
 
     // --------------------------------------------------------
-    // MEMORY ACTION DECISION
+    // MEMORY
     // --------------------------------------------------------
 
     const memoryAction =
@@ -2090,7 +2135,7 @@ async function process(
 
 
     // --------------------------------------------------------
-    // RESEARCH CONTEXT INJECTION
+    // RESEARCH CONTEXT
     // --------------------------------------------------------
 
     executionContext
@@ -2144,16 +2189,20 @@ async function process(
                 null,
 
             learning:
-                researchResult.learning ||
+                researchResult
+                    .learning ||
                 null,
 
             result:
-                researchResult.research ||
+                researchResult
+                    .research ||
                 null,
 
             context:
-                researchResult.context ||
+                researchResult
+                    .context ||
                 null
+
         };
 
 
@@ -2195,6 +2244,7 @@ async function process(
                 context
 
             );
+
     }
 
 
@@ -2204,16 +2254,7 @@ async function process(
 
 
     // ========================================================
-    // AUTONOMOUS WORKER MODE
-    // ========================================================
-    //
-    // IMPORTANT:
-    // This is placed BEFORE the existing direct-executor
-    // approval/execution block so that Autonomous Worker owns
-    // the full Agent Planner → Manager → Worker → Runner flow.
-    //
-    // Existing non-autonomous behavior remains unchanged.
-    //
+    // AUTONOMOUS MODE
     // ========================================================
 
     if (
@@ -2268,12 +2309,13 @@ async function process(
 
 
         return autonomousResult;
+
     }
 
 
-    // --------------------------------------------------------
-    // EXISTING APPROVAL REQUIRED
-    // --------------------------------------------------------
+    // ========================================================
+    // EXISTING APPROVAL FLOW
+    // ========================================================
 
     if (
         permission.requiresApproval
@@ -2316,6 +2358,7 @@ async function process(
 
             timestamp:
                 new Date().toISOString()
+
         };
 
 
@@ -2328,13 +2371,15 @@ async function process(
                     .createResponse(
                         approvalResult
                     )
+
         };
+
     }
 
 
-    // --------------------------------------------------------
-    // EXISTING SKILL EXECUTION
-    // --------------------------------------------------------
+    // ========================================================
+    // EXISTING DIRECT EXECUTION
+    // ========================================================
 
     const execution =
         await executor
@@ -2344,17 +2389,13 @@ async function process(
 
                 context:
                     executionContext
+
             });
 
 
-    // --------------------------------------------------------
+    // ========================================================
     // FINAL RESEARCH RESULT
-    // --------------------------------------------------------
-    //
-    // Prefer executor standardized research output when
-    // available, while preserving orchestrator metadata.
-    //
-    // --------------------------------------------------------
+    // ========================================================
 
     const finalResearchResult =
         intentResult.category ===
@@ -2369,14 +2410,17 @@ async function process(
 
                 sources:
                     Array.isArray(
-                        execution.research
+                        execution
+                            .research
                             .sources
                     ) &&
-                    execution.research
-                        .sources.length >
-                        0
+                    execution
+                        .research
+                        .sources
+                        .length > 0
 
-                        ? execution.research
+                        ? execution
+                            .research
                             .sources
 
                         : researchResult
@@ -2384,15 +2428,19 @@ async function process(
 
                 sourceCount:
                     Array.isArray(
-                        execution.research
+                        execution
+                            .research
                             .sources
                     ) &&
-                    execution.research
-                        .sources.length >
-                        0
+                    execution
+                        .research
+                        .sources
+                        .length > 0
 
-                        ? execution.research
-                            .sources.length
+                        ? execution
+                            .research
+                            .sources
+                            .length
 
                         : researchResult
                             .sourceCount
@@ -2402,9 +2450,9 @@ async function process(
             : researchResult;
 
 
-    // --------------------------------------------------------
-    // FINAL RESULT
-    // --------------------------------------------------------
+    // ========================================================
+    // FINAL NORMAL RESULT
+    // ========================================================
 
     const orchestrationResult = {
 
@@ -2444,6 +2492,7 @@ async function process(
                 autonomousWorker
                     ?.AUTONOMOUS_WORKER_VERSION ||
                 null
+
         },
 
         status:
@@ -2464,10 +2513,6 @@ async function process(
     };
 
 
-    // --------------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------------
-
     orchestrationResult.response =
         responseEngine
             .createResponse(
@@ -2476,6 +2521,7 @@ async function process(
 
 
     return orchestrationResult;
+
 }
 
 
@@ -2492,6 +2538,7 @@ async function orchestrate(
         input,
         context
     );
+
 }
 
 
@@ -2507,7 +2554,20 @@ function getStatus() {
             .getStatus ===
             "function"
 
-            ? autonomousWorker.getStatus()
+            ? autonomousWorker
+                .getStatus()
+
+            : null;
+
+
+    const checkpointRecoveryStatus =
+        checkpointRecoveryController &&
+        typeof checkpointRecoveryController
+            .getStatus ===
+            "function"
+
+            ? checkpointRecoveryController
+                .getStatus()
 
             : null;
 
@@ -2579,6 +2639,14 @@ function getStatus() {
 
             "Autonomous Worker",
 
+            "Checkpoint Engine",
+
+            "Checkpoint Bridge",
+
+            "Autonomous Recovery",
+
+            "Checkpoint Recovery Controller",
+
             "Response Engine"
 
         ],
@@ -2619,6 +2687,10 @@ function getStatus() {
 
             "Autonomous Mode Check",
 
+            "Checkpoint Recovery Controller",
+
+            "Checkpoint Before Execution",
+
             "Autonomous Worker",
 
             "Agent Planning",
@@ -2633,7 +2705,17 @@ function getStatus() {
 
             "Provider Manager",
 
+            "Recovery Worker",
+
+            "Recovery Bridge",
+
+            "Recovery Engine",
+
             "Agent Runner",
+
+            "Autonomous Guard",
+
+            "Checkpoint After Execution",
 
             "Skill Execution",
 
@@ -2675,6 +2757,7 @@ function getStatus() {
 
             researchFailureProtection:
                 true
+
         },
 
         memorySystem: {
@@ -2708,6 +2791,7 @@ function getStatus() {
 
             safeDefault:
                 "evaluate-only"
+
         },
 
         autonomousSystem: {
@@ -2759,9 +2843,58 @@ function getStatus() {
                     ?.workerProvider ||
                 null
 
+        },
+
+        checkpointRecoverySystem: {
+
+            enabled:
+                true,
+
+            mode:
+                "autonomous-only",
+
+            connected:
+                Boolean(
+                    checkpointRecoveryStatus &&
+                    checkpointRecoveryStatus
+                        .success ===
+                    true
+                ),
+
+            version:
+                checkpointRecoveryStatus
+                    ?.version ||
+                null,
+
+            status:
+                checkpointRecoveryStatus
+                    ?.status ||
+                null,
+
+            autonomousWorker:
+                checkpointRecoveryStatus
+                    ?.autonomousWorker ||
+                null,
+
+            autonomousRecovery:
+                checkpointRecoveryStatus
+                    ?.autonomousRecovery ||
+                null,
+
+            checkpointBridge:
+                checkpointRecoveryStatus
+                    ?.checkpointBridge ||
+                null,
+
+            agentManager:
+                checkpointRecoveryStatus
+                    ?.agentManager ||
+                null
+
         }
 
     };
+
 }
 
 
