@@ -79,7 +79,9 @@ jobs:
 
           const approval = setupTask("safety-approval", "waiting_approval", true);
           const approvalCandidate = engine.getRecoveryCandidate("safety-approval");
-          assert(approvalCandidate.success && approvalCandidate.recoverable === true, "Approval-waiting task may be recoverable only as a checkpoint candidate.");
+          assert(approvalCandidate.success && approvalCandidate.recoverable === false, "Approval-waiting task must not be automatically recoverable.");
+          const approvalPlan = engine.buildRecoveryPlan("safety-approval");
+          assert(approvalPlan.success && approvalPlan.plan.action === "no-recovery", "Approval-waiting task must not receive an automatic resume plan.");
           assert(approval.task.approvalRequired === true, "Checkpoint must preserve task approval requirement.");
           assert(approval.task.steps[0].requiresApproval === true, "Checkpoint must preserve step approval requirement.");
           assert(approval.task.steps[0].approved === false, "Checkpoint must not invent approval.");
@@ -88,6 +90,7 @@ jobs:
           console.log(JSON.stringify({
             activeAction: activePlan.plan.action,
             stoppedAction: stoppedPlan.plan.action,
+            approvalAction: approvalPlan.plan.action,
             approvalRequired: approval.task.approvalRequired,
             stepApproved: approval.task.steps[0].approved
           }, null, 2));
