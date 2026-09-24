@@ -1,0 +1,1233 @@
+name: AarHen Recovery Bridge Test
+
+on:
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+jobs:
+
+  recovery-bridge-test:
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD COMPONENTS
+      # ======================================================
+
+      - name: Load Recovery Bridge
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const bridge =
+            require("./core/recoveryBridge");
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+          const runner =
+            require("./core/agentRunner");
+
+          const guard =
+            require("./core/autonomousGuard");
+
+
+          if (!bridge) {
+
+            throw new Error(
+              "Recovery Bridge could not be loaded."
+            );
+
+          }
+
+
+          if (
+            bridge.RECOVERY_BRIDGE_VERSION !==
+            "5.12.1"
+          ) {
+
+            throw new Error(
+              "Recovery Bridge version mismatch."
+            );
+
+          }
+
+
+          if (
+            recovery.RECOVERY_ENGINE_VERSION !==
+            "5.12.0"
+          ) {
+
+            throw new Error(
+              "Recovery Engine version mismatch."
+            );
+
+          }
+
+
+          if (
+            runner.AGENT_RUNNER_VERSION !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Agent Runner version mismatch."
+            );
+
+          }
+
+
+          if (
+            guard.AUTONOMOUS_GUARD_VERSION !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Autonomous Guard version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery Bridge:",
+            bridge.RECOVERY_BRIDGE_VERSION
+          );
+
+          console.log(
+            "Recovery Engine:",
+            recovery.RECOVERY_ENGINE_VERSION
+          );
+
+          console.log(
+            "Agent Runner:",
+            runner.AGENT_RUNNER_VERSION
+          );
+
+          console.log(
+            "Autonomous Guard:",
+            guard.AUTONOMOUS_GUARD_VERSION
+          );
+
+
+          console.log(
+            "All Recovery Bridge dependencies loaded."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Recovery Bridge Status Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const bridge =
+            require("./core/recoveryBridge");
+
+
+          const status =
+            bridge.getStatus();
+
+
+          if (
+            status.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Bridge status is unhealthy."
+            );
+
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Recovery Bridge is not active."
+            );
+
+          }
+
+
+          if (
+            status.version !==
+            "5.12.1"
+          ) {
+
+            throw new Error(
+              "Recovery Bridge status version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.recoveryEngine?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Bridge is not connected to Recovery Engine."
+            );
+
+          }
+
+
+          if (
+            status.agentRunner?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Bridge is not connected to Agent Runner."
+            );
+
+          }
+
+
+          if (
+            status.autonomousSafetyGuard?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Bridge is not connected to Autonomous Safety Guard."
+            );
+
+          }
+
+
+          if (
+            status.recoveryEngine?.version !==
+            "5.12.0"
+          ) {
+
+            throw new Error(
+              "Recovery Engine connection version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.agentRunner?.version !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Agent Runner connection version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.autonomousSafetyGuard?.version !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Autonomous Guard connection version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery Bridge status test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FAILURE ANALYSIS TEST
+      # ======================================================
+
+      - name: Failure Analysis Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const bridge =
+            require("./core/recoveryBridge");
+
+
+          const result =
+            bridge.analyzeFailure({
+
+              success:
+                false,
+
+              error:
+                "Temporary network connection failure.",
+
+              executionStatus:
+                "network-error"
+
+            });
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Bridge failure analysis failed."
+            );
+
+          }
+
+
+          if (
+            result.classification !==
+            "network"
+          ) {
+
+            throw new Error(
+              "Recovery Bridge failure classification mismatch."
+            );
+
+          }
+
+
+          if (
+            result.retryable !==
+            true
+          ) {
+
+            throw new Error(
+              "Network failure should be retryable."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery Bridge failure analysis passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SAFE RETRY DECISION TEST
+      # ======================================================
+
+      - name: Safe Retry Decision Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const bridge =
+            require("./core/recoveryBridge");
+
+
+          const retry =
+            bridge.canRetry(
+
+              {
+
+                success:
+                  false,
+
+                error:
+                  "Temporary provider unavailable.",
+
+                executionStatus:
+                  "provider-error"
+
+              },
+
+              1,
+
+              {
+
+                maxAttempts:
+                  3,
+
+                baseDelayMs:
+                  0,
+
+                maxDelayMs:
+                  100
+
+              }
+
+            );
+
+
+          if (
+            retry.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Bridge retry decision failed."
+            );
+
+          }
+
+
+          if (
+            retry.retry !==
+            true
+          ) {
+
+            throw new Error(
+              "Temporary provider failure should be retryable."
+            );
+
+          }
+
+
+          if (
+            retry.classification !==
+            "provider"
+          ) {
+
+            throw new Error(
+              "Provider classification mismatch."
+            );
+
+          }
+
+
+          if (
+            retry.nextAttempt !==
+            2
+          ) {
+
+            throw new Error(
+              "Next attempt should be 2."
+            );
+
+          }
+
+
+          console.log(
+            "Safe retry decision test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # APPROVAL MUST NOT RETRY
+      # ======================================================
+
+      - name: Approval Safety Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const bridge =
+            require("./core/recoveryBridge");
+
+
+          const retry =
+            bridge.canRetry(
+
+              {
+
+                success:
+                  false,
+
+                requiresApproval:
+                  true,
+
+                executionStatus:
+                  "approval-required",
+
+                error:
+                  "Action requires approval."
+
+              },
+
+              1
+
+            );
+
+
+          if (
+            retry.retry !==
+            false
+          ) {
+
+            throw new Error(
+              "Approval action was incorrectly marked retryable."
+            );
+
+          }
+
+
+          if (
+            retry.classification !==
+            "approval"
+          ) {
+
+            throw new Error(
+              "Approval classification mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Approval safety test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STOP MUST NOT RETRY
+      # ======================================================
+
+      - name: STOP Safety Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const bridge =
+            require("./core/recoveryBridge");
+
+
+          const retry =
+            bridge.canRetry(
+
+              {
+
+                success:
+                  false,
+
+                stopped:
+                  true,
+
+                executionStatus:
+                  "autonomous-stop",
+
+                error:
+                  "Emergency STOP activated."
+
+              },
+
+              1
+
+            );
+
+
+          if (
+            retry.retry !==
+            false
+          ) {
+
+            throw new Error(
+              "STOP state was incorrectly marked retryable."
+            );
+
+          }
+
+
+          if (
+            retry.classification !==
+            "stop"
+          ) {
+
+            throw new Error(
+              "STOP classification mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "STOP safety test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # GUARD BLOCK MUST NOT RETRY
+      # ======================================================
+
+      - name: Guard Block Safety Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const bridge =
+            require("./core/recoveryBridge");
+
+
+          const retry =
+            bridge.canRetry(
+
+              {
+
+                success:
+                  false,
+
+                blocked:
+                  true,
+
+                safetyGuard: {
+
+                  allowed:
+                    false
+
+                },
+
+                executionStatus:
+                  "autonomous-guard-blocked",
+
+                error:
+                  "Autonomous Safety Guard blocked execution."
+
+              },
+
+              1
+
+            );
+
+
+          if (
+            retry.retry !==
+            false
+          ) {
+
+            throw new Error(
+              "Safety Guard block was incorrectly marked retryable."
+            );
+
+          }
+
+
+          if (
+            retry.classification !==
+            "safety"
+          ) {
+
+            throw new Error(
+              "Safety classification mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Guard block safety test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CONTROLLED RECOVERY EXECUTION TEST
+      # ======================================================
+
+      - name: Controlled Recovery Execution Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const bridge =
+              require("./core/recoveryBridge");
+
+
+            let calls =
+              0;
+
+
+            const runner =
+              async () => {
+
+                calls +=
+                  1;
+
+
+                if (
+                  calls ===
+                  1
+                ) {
+
+                  return {
+
+                    success:
+                      false,
+
+                    error:
+                      "Temporary network failure.",
+
+                    executionStatus:
+                      "network-error"
+
+                  };
+
+                }
+
+
+                return {
+
+                  success:
+                    true,
+
+                  action:
+                    "calculate",
+
+                  result: {
+
+                    value:
+                      30
+
+                  },
+
+                  executionStatus:
+                    "completed"
+
+                };
+
+              };
+
+
+            const result =
+              await bridge.execute(
+
+                {
+
+                  task: {
+
+                    id:
+                      "bridge-execute-task",
+
+                    agentId:
+                      "bridge-execute-agent"
+
+                  },
+
+                  step: {
+
+                    id:
+                      "bridge-execute-step",
+
+                    action:
+                      "calculate",
+
+                    approved:
+                      true,
+
+                    input: {
+
+                      request:
+                        "Calculate 10 + 20"
+
+                    }
+
+                  }
+
+                },
+
+                {
+
+                  runner,
+
+                  maxAttempts:
+                    3,
+
+                  baseDelayMs:
+                    0,
+
+                  maxDelayMs:
+                    100
+
+                }
+
+              );
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Bridge execution failed: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            if (
+              calls !==
+              2
+            ) {
+
+              throw new Error(
+                "Recovery Bridge should execute exactly two attempts."
+              );
+
+            }
+
+
+            if (
+              result.recovery?.recovered !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Bridge did not report recovered=true."
+              );
+
+            }
+
+
+            if (
+              result.bridgeVersion !==
+              "5.12.1"
+            ) {
+
+              throw new Error(
+                "Recovery Bridge response version mismatch."
+              );
+
+            }
+
+
+            if (
+              result.recoveryEngineVersion !==
+              "5.12.0"
+            ) {
+
+              throw new Error(
+                "Recovery Engine response version mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Controlled Recovery Bridge execution passed."
+            );
+
+
+            console.log(
+              JSON.stringify(
+                result,
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # REAL AGENT RUNNER EXECUTION TEST
+      # ======================================================
+
+      - name: Real Agent Runner Recovery Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const bridge =
+              require("./core/recoveryBridge");
+
+
+            const agentManager =
+              require("./core/agentManager");
+
+
+            agentManager.reset();
+
+
+            const agent =
+              agentManager.createAgent({
+
+                id:
+                  "bridge-real-agent",
+
+                name:
+                  "Recovery Bridge Real Agent"
+
+              });
+
+
+            if (
+              agent.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Real Agent Runner test agent creation failed."
+              );
+
+            }
+
+
+            const task =
+              agentManager.createTask(
+
+                "bridge-real-agent",
+
+                "Calculate 10 + 20",
+
+                {
+
+                  id:
+                    "bridge-real-task",
+
+                  maxRetries:
+                    0
+
+                }
+
+              );
+
+
+            if (
+              task.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Real Agent Runner test task creation failed."
+              );
+
+            }
+
+
+            const step =
+              agentManager.addStep(
+
+                "bridge-real-task",
+
+                {
+
+                  id:
+                    "bridge-real-step",
+
+                  name:
+                    "Bridge Calculation",
+
+                  description:
+                    "Recovery Bridge real Agent Runner test.",
+
+                  action:
+                    "calculate",
+
+                  approved:
+                    true,
+
+                  maxRetries:
+                    0,
+
+                  input: {
+
+                    request:
+                      "Calculate 10 + 20"
+
+                  }
+
+                }
+
+              );
+
+
+            if (
+              step.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Real Agent Runner test step creation failed."
+              );
+
+            }
+
+
+            const result =
+              await bridge.runTask(
+
+                "bridge-real-task",
+
+                {
+
+                  maxAttempts:
+                    1,
+
+                  maxIterations:
+                    10,
+
+                  baseDelayMs:
+                    0
+
+                }
+
+              );
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Bridge real Agent Runner execution failed: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            if (
+              result.task?.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Real Agent Runner task did not complete."
+              );
+
+            }
+
+
+            if (
+              result.task?.steps?.[0]?.status !==
+              agentManager.STEP_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Real Agent Runner step did not complete."
+              );
+
+            }
+
+
+            if (
+              result.bridgeVersion !==
+              "5.12.1"
+            ) {
+
+              throw new Error(
+                "Real execution bridge version mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Real Agent Runner recovery bridge execution passed."
+            );
+
+
+            console.log(
+              "Task:",
+              result.task.id
+            );
+
+            console.log(
+              "Task Status:",
+              result.task.status
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # FINAL HEALTH
+      # ======================================================
+
+      - name: Final Recovery Bridge Health Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const bridge =
+            require("./core/recoveryBridge");
+
+          const runner =
+            require("./core/agentRunner");
+
+          const guard =
+            require("./core/autonomousGuard");
+
+
+          const bridgeStatus =
+            bridge.getStatus();
+
+          const runnerStatus =
+            runner.getStatus();
+
+          const guardStatus =
+            guard.getStatus();
+
+
+          if (
+            bridgeStatus.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Bridge final health check failed."
+            );
+
+          }
+
+
+          if (
+            runnerStatus.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Agent Runner final health check failed."
+            );
+
+          }
+
+
+          if (
+            guardStatus.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Autonomous Safety Guard final health check failed."
+            );
+
+          }
+
+
+          if (
+            bridgeStatus.agentRunner?.version !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Recovery Bridge final Agent Runner version mismatch."
+            );
+
+          }
+
+
+          if (
+            bridgeStatus.autonomousSafetyGuard?.version !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Recovery Bridge final Guard version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Final Recovery Bridge health test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=============================================="
+          echo " AARHEN RECOVERY BRIDGE TEST"
+          echo "=============================================="
+          echo " Bridge Load: PASSED"
+          echo " Bridge Status: PASSED"
+          echo " Failure Analysis: PASSED"
+          echo " Safe Retry Decision: PASSED"
+          echo " Approval Safety: PASSED"
+          echo " STOP Safety: PASSED"
+          echo " Guard Block Safety: PASSED"
+          echo " Controlled Recovery: PASSED"
+          echo " Real Agent Runner: PASSED"
+          echo " Final Health: PASSED"
+          echo "=============================================="
+          echo " RECOVERY BRIDGE v5.12.1"
+          echo "=============================================="
+          echo " RECOVERY + CONTROLLED EXECUTION READY"
+          echo "=============================================="
