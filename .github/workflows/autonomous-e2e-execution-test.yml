@@ -1,0 +1,94 @@
+name: AarHen Autonomous End-to-End Execution Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/orchestrator.js"
+      - "core/autonomousWorker.js"
+      - "core/agentManager.js"
+      - "core/agentWorker.js"
+      - "core/agentRunner.js"
+      - "core/agentPlanner.js"
+      - ".github/workflows/autonomous-e2e-execution-test.yml"
+
+jobs:
+  autonomous-e2e-execution:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify autonomous request through task completion
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          (async () => {
+            const orchestrator = require("./core/orchestrator");
+            const agentManager = require("./core/agentManager");
+            const agentWorker = require("./core/agentWorker");
+
+            const result = await orchestrator.process(
+              "Calculate 100 + 200",
+              { autonomous: true }
+            );
+
+            if (!result || result.success !== true) {
+              throw new Error(
+                "Autonomous request failed: " +
+                (result?.error || result?.execution?.error || "missing result")
+              );
+            }
+
+            if (result.status !== "completed") {
+              throw new Error("Expected completed request, got " + result.status);
+            }
+
+            if (result.autonomous?.enabled !== true) {
+              throw new Error("Autonomous mode was not activated.");
+            }
+
+            const taskId = result.autonomous?.task?.id;
+            const workerId = result.autonomous?.worker?.id;
+
+            if (!taskId) throw new Error("Autonomous task ID is missing.");
+            if (!workerId) throw new Error("Autonomous worker ID is missing.");
+
+            const taskResult = agentManager.getTask(taskId);
+            if (!taskResult.success || !taskResult.task) {
+              throw new Error("Could not retrieve final autonomous task.");
+            }
+
+            if (taskResult.task.status !== agentManager.TASK_STATES.COMPLETED) {
+              throw new Error("Task did not complete: " + taskResult.task.status);
+            }
+
+            if (!Array.isArray(taskResult.task.steps) || taskResult.task.steps.length === 0) {
+              throw new Error("Task plan/steps are missing.");
+            }
+
+            if (result.autonomous.workerStatus !== agentWorker.WORKER_STATES.IDLE) {
+              throw new Error(
+                "Worker did not return to idle: " + result.autonomous.workerStatus
+              );
+            }
+
+            console.log("Autonomous end-to-end execution test passed.");
+            console.log(JSON.stringify({
+              requestStatus: result.status,
+              autonomousEnabled: result.autonomous.enabled,
+              taskId,
+              taskStatus: taskResult.task.status,
+              plannedSteps: taskResult.task.steps.length,
+              workerId,
+              workerStatus: result.autonomous.workerStatus
+            }, null, 2));
+          })().catch(error => {
+            console.error(error);
+            process.exitCode = 1;
+          });
+          NODE
