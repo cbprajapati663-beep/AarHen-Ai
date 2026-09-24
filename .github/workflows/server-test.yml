@@ -19,6 +19,7 @@ jobs:
         with:
           fetch-depth: 1
 
+
       # ======================================================
       # NODE.JS
       # ======================================================
@@ -28,15 +29,9 @@ jobs:
         with:
           node-version: 20
 
+
       # ======================================================
       # NPM CACHE
-      # ======================================================
-      #
-      # IMPORTANT:
-      # Do NOT use setup-node cache: npm here because
-      # this repository currently has no package-lock.json.
-      #
-      # We cache npm's download cache manually instead.
       # ======================================================
 
       - name: Cache npm
@@ -47,8 +42,9 @@ jobs:
           restore-keys: |
             aarhen-npm-${{ runner.os }}-
 
+
       # ======================================================
-      # INSTALL DEPENDENCIES
+      # INSTALL
       # ======================================================
 
       - name: Install dependencies
@@ -62,58 +58,62 @@ jobs:
             --no-fund \
             --prefer-offline
 
+
       # ======================================================
-      # RESEARCH ENGINE VERSION
+      # CHECK RESEARCH ENGINE
       # ======================================================
 
       - name: Verify Research Engine
         run: |
+
           echo "=========================================="
-          echo "VERIFYING RESEARCH ENGINE"
+          echo "RESEARCH ENGINE CHECK"
           echo "=========================================="
 
           node - <<'NODE'
 
           const research =
-            require("./engines/research");
+              require("./engines/research");
 
           console.log(
-            "Research Engine Version:",
-            research.RESEARCH_VERSION
+              "Research Engine Version:",
+              research.RESEARCH_VERSION
           );
 
           console.log(
-            "Minimum Verified Sources:",
-            research.MIN_VERIFIED_SOURCES
+              "Minimum Verified Sources:",
+              research.MIN_VERIFIED_SOURCES
           );
 
           console.log(
-            "Minimum Verified Confidence:",
-            research.MIN_VERIFIED_CONFIDENCE
+              "Minimum Verified Confidence:",
+              research.MIN_VERIFIED_CONFIDENCE
           );
 
           console.log(
-            "=========================================="
+              "Research Engine Status:"
           );
 
           console.log(
-            JSON.stringify(
-              research.getResearchStatus(),
-              null,
-              2
-            )
+              JSON.stringify(
+                  research.getResearchStatus(),
+                  null,
+                  2
+              )
           );
 
           NODE
 
+
       # ======================================================
-      # JAVASCRIPT SYNTAX CHECK
+      # SYNTAX CHECK
       # ======================================================
 
       - name: Validate JavaScript syntax
         run: |
+
           echo "=========================================="
-          echo "VALIDATING JAVASCRIPT"
+          echo "JAVASCRIPT SYNTAX CHECK"
           echo "=========================================="
 
           node --check engines/research.js
@@ -128,550 +128,640 @@ jobs:
 
           node --check providers/providerManager.js
 
-          echo "JavaScript syntax validation PASSED."
+          echo "All selected JavaScript files are valid."
+
 
       # ======================================================
       # CORE TESTS
       # ======================================================
 
-      - name: Run AarHen tests
+      - name: Run AarHen unit tests
         run: |
+
           echo "=========================================="
-          echo "RUNNING AARHEN TESTS"
+          echo "RUNNING AARHEN UNIT TESTS"
           echo "=========================================="
 
           node test.js
 
+
       # ======================================================
-      # START SERVER
+      # DIRECT ORCHESTRATOR RESEARCH TEST
+      # ======================================================
+      #
+      # IMPORTANT:
+      #
+      # We intentionally DO NOT call:
+      #
+      # /api/aarhen
+      #
+      # because the current server does not expose
+      # that POST route.
+      #
+      # Direct orchestration avoids the unnecessary
+      # HTTP hop and makes this test faster.
       # ======================================================
 
-      - name: Start server
+      - name: Test AarHen Research Directly
         env:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           NODE_ENV: test
-          PORT: 3000
-        run: |
-          echo "=========================================="
-          echo "STARTING AARHEN SERVER"
-          echo "=========================================="
-
-          nohup node server.js > server.log 2>&1 &
-
-          echo $! > server.pid
-
-          echo "Server PID:"
-          cat server.pid
-
-          sleep 1
-
-          echo "Initial server log:"
-          cat server.log || true
-
-      # ======================================================
-      # WAIT FOR SERVER
-      # ======================================================
-
-      - name: Wait for server
-        run: |
-          echo "=========================================="
-          echo "WAITING FOR SERVER"
-          echo "=========================================="
-
-          READY=false
-
-          for i in $(seq 1 20); do
-
-            if curl -sS \
-              --max-time 3 \
-              http://127.0.0.1:3000/ \
-              > /dev/null 2>&1; then
-
-              echo "Server is READY."
-
-              READY=true
-
-              break
-
-            fi
-
-            echo "Waiting for server... $i/20"
-
-            sleep 1
-
-          done
-
-          if [ "$READY" != "true" ]; then
-
-            echo "=========================================="
-            echo "SERVER FAILED TO START"
-            echo "=========================================="
-
-            echo "Server log:"
-            cat server.log || true
-
-            exit 1
-
-          fi
-
-      # ======================================================
-      # SERVER HEALTH
-      # ======================================================
-
-      - name: Server health check
-        run: |
-          echo "=========================================="
-          echo "SERVER HEALTH CHECK"
-          echo "=========================================="
-
-          curl -sS \
-            --max-time 10 \
-            http://127.0.0.1:3000/ \
-            || true
-
-          echo
-
-      # ======================================================
-      # WEB RESEARCH TEST
-      # ======================================================
-
-      - name: Test AarHen web research
-        env:
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
 
           echo "=========================================="
-          echo "AARHEN WEB RESEARCH TEST"
+          echo "DIRECT AARHEN RESEARCH TEST"
           echo "=========================================="
 
-          RESPONSE=$(curl -sS \
-            --max-time 90 \
-            -X POST \
-            http://127.0.0.1:3000/api/aarhen \
-            -H "Content-Type: application/json" \
-            -d '{
-              "message": "Research current auto financing trends in 2026 and verify the information using multiple sources."
-            }')
+          node - <<'NODE'
 
-          echo "=========================================="
-          echo "RAW RESPONSE"
-          echo "=========================================="
+          (async () => {
 
-          echo "$RESPONSE"
+              const orchestrator =
+                  require("./core/orchestrator");
 
-          echo
-          echo "=========================================="
-          echo "VALIDATING RESEARCH"
-          echo "=========================================="
+              const research =
+                  require("./engines/research");
 
-          node - "$RESPONSE" <<'NODE'
+              const query =
+                  "Research current auto financing trends in 2026 and verify the information using multiple sources.";
 
-          const raw =
-            process.argv[2] || "";
+              console.log(
+                  "Query:",
+                  query
+              );
 
-          let data;
-
-          try {
-
-            data =
-              JSON.parse(raw);
-
-          } catch (error) {
-
-            console.error(
-              "ERROR: Response is not valid JSON."
-            );
-
-            console.error(raw);
-
-            process.exit(1);
-          }
+              console.log(
+                  "Loaded Research Engine:",
+                  research.RESEARCH_VERSION
+              );
 
 
-          const research =
-
-            data.research ||
-
-            data.execution?.research ||
-
-            data.result?.research ||
-
-            data.execution?.result ||
-
-            {};
+              const result =
+                  await orchestrator.process(
+                      query,
+                      {
+                          maxResearchSources: 5,
+                          researchLanguage: "auto"
+                      }
+                  );
 
 
-          const sourceCount =
+              console.log(
+                  "=========================================="
+              );
 
-            Number(
-              research.sourceCount
-            ) ||
+              console.log(
+                  "ORCHESTRATOR RESULT"
+              );
 
-            (
-              Array.isArray(
-                research.sources
-              )
-                ? research.sources.length
-                : 0
-            );
+              console.log(
+                  "=========================================="
+              );
 
 
-          console.log(
-            "Request status:",
-            data.status
-          );
-
-          console.log(
-            "Research success:",
-            research.success
-          );
-
-          console.log(
-            "Research engine version:",
-            research.version ||
-
-            research.verification?.version ||
-
-            "not-exposed"
-          );
-
-          console.log(
-            "Source count:",
-            sourceCount
-          );
-
-          console.log(
-            "Confidence:",
-            research.confidence
-          );
-
-          console.log(
-            "Verified:",
-            research.verified
-          );
-
-          console.log(
-            "Verification status:",
-            research.verificationStatus ||
-
-            research.verification?.status
-          );
-
-          console.log(
-            "Research status:",
-            research.researchStatus
-          );
-
-          console.log(
-            "Provider:",
-            research.provider
-          );
-
-          console.log(
-            "Learning:",
-            JSON.stringify(
-              research.learning,
-              null,
-              2
-            )
-          );
+              console.log(
+                  "Overall status:",
+                  result.status
+              );
 
 
-          console.log(
-            "=========================================="
-          );
-
-          console.log(
-            "VERIFICATION DETAILS"
-          );
-
-          console.log(
-            JSON.stringify(
-              research.verification,
-              null,
-              2
-            )
-          );
+              const researchResult =
+                  result.research ||
+                  result.execution?.research ||
+                  result.execution?.result ||
+                  {};
 
 
-          if (
-            research.success === false
-          ) {
-
-            console.error(
-              "ERROR: Research request failed."
-            );
-
-            process.exit(1);
-          }
+              const sources =
+                  Array.isArray(
+                      researchResult.sources
+                  )
+                      ? researchResult.sources
+                      : [];
 
 
-          if (
-            sourceCount < 2
-          ) {
-
-            console.error(
-              "ERROR: Fewer than 2 research sources returned."
-            );
-
-            process.exit(1);
-          }
+              const sourceCount =
+                  Number(
+                      researchResult.sourceCount
+                  ) ||
+                  sources.length;
 
 
-          if (
-            research.verified !== true
-          ) {
-
-            console.error(
-              "ERROR: Research was not verified."
-            );
-
-            console.error(
-              "Full verification object:"
-            );
-
-            console.error(
-              JSON.stringify(
-                research.verification,
-                null,
-                2
-              )
-            );
-
-            process.exit(1);
-          }
+              console.log(
+                  "Research success:",
+                  researchResult.success
+              );
 
 
-          if (
-            Number(
-              research.confidence
-            ) < 0.80
-          ) {
-
-            console.error(
-              "ERROR: Confidence is below 0.80."
-            );
-
-            process.exit(1);
-          }
+              console.log(
+                  "Research version:",
+                  researchResult.version ||
+                  researchResult.verification?.version ||
+                  "not-exposed"
+              );
 
 
-          console.log(
-            "Research verification PASSED."
-          );
+              console.log(
+                  "Source count:",
+                  sourceCount
+              );
+
+
+              console.log(
+                  "Confidence:",
+                  researchResult.confidence
+              );
+
+
+              console.log(
+                  "Verified:",
+                  researchResult.verified
+              );
+
+
+              console.log(
+                  "Verification status:",
+                  researchResult.verificationStatus ||
+                  researchResult.verification?.status
+              );
+
+
+              console.log(
+                  "Research status:",
+                  researchResult.researchStatus
+              );
+
+
+              console.log(
+                  "Provider:",
+                  researchResult.provider
+              );
+
+
+              console.log(
+                  "Learning:"
+              );
+
+
+              console.log(
+                  JSON.stringify(
+                      researchResult.learning,
+                      null,
+                      2
+                  )
+              );
+
+
+              console.log(
+                  "=========================================="
+              );
+
+              console.log(
+                  "VERIFICATION DETAILS"
+              );
+
+              console.log(
+                  JSON.stringify(
+                      researchResult.verification,
+                      null,
+                      2
+                  )
+              );
+
+
+              console.log(
+                  "=========================================="
+              );
+
+              console.log(
+                  "SOURCE TITLES"
+              );
+
+              for (
+                  const source of sources
+              ) {
+
+                  console.log(
+                      "-",
+                      source.title
+                  );
+              }
+
+
+              /* ============================================
+                 VALIDATION
+              ============================================ */
+
+
+              if (
+                  result.success === false
+              ) {
+
+                  console.error(
+                      "ERROR: Orchestrator returned success=false."
+                  );
+
+                  console.error(
+                      JSON.stringify(
+                          result,
+                          null,
+                          2
+                      )
+                  );
+
+                  process.exit(1);
+              }
+
+
+              if (
+                  researchResult.success === false
+              ) {
+
+                  console.error(
+                      "ERROR: Research engine returned failure."
+                  );
+
+                  console.error(
+                      JSON.stringify(
+                          researchResult,
+                          null,
+                          2
+                      )
+                  );
+
+                  process.exit(1);
+              }
+
+
+              if (
+                  sourceCount < 2
+              ) {
+
+                  console.error(
+                      "ERROR: Fewer than 2 research sources returned."
+                  );
+
+                  process.exit(1);
+              }
+
+
+              if (
+                  researchResult.verified !== true
+              ) {
+
+                  console.error(
+                      "ERROR: Research was not verified."
+                  );
+
+                  console.error(
+                      "Verification:"
+                  );
+
+                  console.error(
+                      JSON.stringify(
+                          researchResult.verification,
+                          null,
+                          2
+                      )
+                  );
+
+                  console.error(
+                      "Confidence:",
+                      researchResult.confidence
+                  );
+
+                  process.exit(1);
+              }
+
+
+              if (
+                  Number(
+                      researchResult.confidence
+                  ) < 0.80
+              ) {
+
+                  console.error(
+                      "ERROR: Verified confidence below 0.80."
+                  );
+
+                  process.exit(1);
+              }
+
+
+              console.log(
+                  "=========================================="
+              );
+
+              console.log(
+                  "RESEARCH VERIFICATION PASSED"
+              );
+
+              console.log(
+                  "=========================================="
+
+              );
+
+          })().catch(error => {
+
+              console.error(
+                  "=========================================="
+              );
+
+              console.error(
+                  "DIRECT ORCHESTRATOR ERROR"
+              );
+
+              console.error(
+                  "=========================================="
+              );
+
+              console.error(
+                  error &&
+                  error.stack
+                      ? error.stack
+                      : error
+              );
+
+              process.exit(1);
+          });
 
           NODE
+
 
       # ======================================================
       # VERIFY + LEARN
       # ======================================================
 
-      - name: Validate verify and learn
+      - name: Validate Verify and Learn
+        env:
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          NODE_ENV: test
         run: |
 
           echo "=========================================="
-          echo "VALIDATING VERIFY + LEARN"
+          echo "VERIFY + LEARN TEST"
           echo "=========================================="
 
-          RESPONSE=$(curl -sS \
-            --max-time 90 \
-            -X POST \
-            http://127.0.0.1:3000/api/aarhen \
-            -H "Content-Type: application/json" \
-            -d '{
-              "message": "Research current auto financing trends in 2026 and learn only the verified information."
-            }')
+          node - <<'NODE'
 
-          echo "=========================================="
-          echo "VERIFY + LEARN RAW RESPONSE"
-          echo "=========================================="
+          (async () => {
 
-          echo "$RESPONSE"
-
-          echo
-          echo "=========================================="
-          echo "VERIFY + LEARN VALIDATION"
-          echo "=========================================="
-
-          node - "$RESPONSE" <<'NODE'
-
-          const raw =
-            process.argv[2] || "";
-
-          let data;
-
-          try {
-
-            data =
-              JSON.parse(raw);
-
-          } catch (error) {
-
-            console.error(
-              "ERROR: Invalid JSON response."
-            );
-
-            console.error(raw);
-
-            process.exit(1);
-          }
+              const orchestrator =
+                  require("./core/orchestrator");
 
 
-          const research =
-
-            data.research ||
-
-            data.execution?.research ||
-
-            data.result?.research ||
-
-            {};
+              const query =
+                  "Research current auto financing trends in 2026 and learn only the verified information.";
 
 
-          const learning =
-
-            research.learning ||
-
-            data.execution?.learning ||
-
-            null;
-
-
-          console.log(
-            "Research success:",
-            research.success
-          );
-
-          console.log(
-            "Research status:",
-            research.researchStatus
-          );
-
-          console.log(
-            "Verified:",
-            research.verified
-          );
-
-          console.log(
-            "Confidence:",
-            research.confidence
-          );
-
-          console.log(
-            "Source count:",
-            research.sourceCount
-          );
-
-          console.log(
-            "Learning:"
-          );
-
-          console.log(
-            JSON.stringify(
-              learning,
-              null,
-              2
-            )
-          );
+              const result =
+                  await orchestrator.process(
+                      query,
+                      {
+                          maxResearchSources: 5,
+                          researchLanguage: "auto"
+                      }
+                  );
 
 
-          if (
-            research.verified !== true
-          ) {
-
-            console.error(
-              "ERROR: Research verification failed."
-            );
-
-            process.exit(1);
-          }
+              const research =
+                  result.research ||
+                  result.execution?.research ||
+                  {};
 
 
-          if (
-            Number(
-              research.confidence
-            ) < 0.80
-          ) {
-
-            console.error(
-              "ERROR: Research confidence below 0.80."
-            );
-
-            process.exit(1);
-          }
+              const learning =
+                  research.learning ||
+                  result.execution?.learning ||
+                  null;
 
 
-          /*
-           * Learning is inspected separately.
-           *
-           * We do not pretend learning succeeded
-           * when the learning engine reports failure.
-           */
-
-          if (
-            learning
-          ) {
-
-            console.log(
-              "Learning learned:",
-              learning.learned
-            );
-
-            console.log(
-              "Learning verified:",
-              learning.verified
-            );
-
-            console.log(
-              "Learning approved:",
-              learning.approved
-            );
-
-            console.log(
-              "Learning status:",
-              learning.status
-            );
-
-            console.log(
-              "Memory ID:",
-              learning.memoryId ||
-              "none"
-            );
-          }
+              console.log(
+                  "Research success:",
+                  research.success
+              );
 
 
-          console.log(
-            "VERIFY + LEARN VALIDATION PASSED."
-          );
+              console.log(
+                  "Research status:",
+                  research.researchStatus
+              );
+
+
+              console.log(
+                  "Source count:",
+                  research.sourceCount
+              );
+
+
+              console.log(
+                  "Confidence:",
+                  research.confidence
+              );
+
+
+              console.log(
+                  "Verified:",
+                  research.verified
+              );
+
+
+              console.log(
+                  "Verification:"
+              );
+
+
+              console.log(
+                  JSON.stringify(
+                      research.verification,
+                      null,
+                      2
+                  )
+              );
+
+
+              console.log(
+                  "Learning:"
+              );
+
+
+              console.log(
+                  JSON.stringify(
+                      learning,
+                      null,
+                      2
+                  )
+              );
+
+
+              console.log(
+                  "=========================================="
+              );
+
+
+              if (
+                  research.success === false
+              ) {
+
+                  console.error(
+                      "ERROR: Research failed."
+                  );
+
+                  process.exit(1);
+              }
+
+
+              if (
+                  research.verified !== true
+              ) {
+
+                  console.error(
+                      "ERROR: Research verification failed."
+                  );
+
+                  process.exit(1);
+              }
+
+
+              if (
+                  Number(
+                      research.confidence
+                  ) < 0.80
+              ) {
+
+                  console.error(
+                      "ERROR: Research confidence below 0.80."
+                  );
+
+                  process.exit(1);
+              }
+
+
+              /*
+               * Learning diagnostics.
+               *
+               * We require the learning object to exist.
+               */
+
+              if (
+                  !learning
+              ) {
+
+                  console.error(
+                      "ERROR: Learning result is missing."
+                  );
+
+                  process.exit(1);
+              }
+
+
+              console.log(
+                  "Learning learned:",
+                  learning.learned
+              );
+
+
+              console.log(
+                  "Learning verified:",
+                  learning.verified
+              );
+
+
+              console.log(
+                  "Learning approved:",
+                  learning.approved
+              );
+
+
+              console.log(
+                  "Learning status:",
+                  learning.status
+              );
+
+
+              console.log(
+                  "Memory ID:",
+                  learning.memoryId ||
+                  "none"
+              );
+
+
+              /*
+               * The research engine must never report
+               * learning as successful unless its learning
+               * engine actually reports success.
+               */
+
+              if (
+                  learning.learned !== true
+              ) {
+
+                  console.error(
+                      "ERROR: Verified research exists, but learning was not completed."
+                  );
+
+                  process.exit(1);
+              }
+
+
+              console.log(
+                  "=========================================="
+              );
+
+
+              console.log(
+                  "VERIFY + LEARN PASSED"
+              );
+
+
+              console.log(
+                  "=========================================="
+
+              );
+
+          })().catch(error => {
+
+              console.error(
+                  error &&
+                  error.stack
+                      ? error.stack
+                      : error
+              );
+
+              process.exit(1);
+          });
 
           NODE
 
+
       # ======================================================
-      # SERVER LOGS
+      # FINAL SUMMARY
       # ======================================================
 
-      - name: Show server logs
+      - name: AarHen test summary
         if: always()
         run: |
 
+          echo
           echo "=========================================="
-          echo "AARHEN SERVER LOG"
+          echo "AARHEN TEST SUMMARY"
           echo "=========================================="
 
-          cat server.log || true
+          echo "Research Engine:"
+          node -e "
+            const r=require('./engines/research');
+            console.log(r.RESEARCH_VERSION);
+          "
 
-      # ======================================================
-      # STOP SERVER
-      # ======================================================
+          echo
+          echo "Node:"
+          node --version
 
-      - name: Stop server
-        if: always()
-        run: |
+          echo
+          echo "NPM:"
+          npm --version
 
-          if [ -f server.pid ]; then
-
-            kill $(cat server.pid) 2>/dev/null || true
-
-          fi
-
-          echo "Server cleanup completed."
+          echo
+          echo "=========================================="
+          echo "TEST WORKFLOW FINISHED"
+          echo "=========================================="
