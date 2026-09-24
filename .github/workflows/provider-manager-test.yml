@@ -1,0 +1,1245 @@
+name: AarHen Provider Manager Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "providers/providerManager.js"
+      - "providers/researchProvider.js"
+      - ".github/workflows/provider-manager-test.yml"
+
+jobs:
+
+  provider-manager-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # NODE SETUP
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # LOAD TEST
+      # ======================================================
+
+      - name: Provider Manager Load Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+          if (!manager) {
+            throw new Error(
+              "Provider Manager could not be loaded."
+            );
+          }
+
+          if (
+            manager.PROVIDER_MANAGER_VERSION !==
+            "5.9.0"
+          ) {
+            throw new Error(
+              "Provider Manager version mismatch."
+            );
+          }
+
+          console.log(
+            "Provider Manager loaded successfully."
+          );
+
+          console.log(
+            "Version:",
+            manager.PROVIDER_MANAGER_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Provider Manager Status Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+          const status =
+            manager.getStatus();
+
+          if (!status) {
+            throw new Error(
+              "Provider Manager status is missing."
+            );
+          }
+
+          if (
+            status.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider Manager status is not healthy."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Provider Manager is not active."
+            );
+          }
+
+          if (
+            status.version !==
+            "5.9.0"
+          ) {
+            throw new Error(
+              "Status version mismatch."
+            );
+          }
+
+          if (
+            !Array.isArray(
+              status.providers
+            )
+          ) {
+            throw new Error(
+              "Provider list is missing."
+            );
+          }
+
+          console.log(
+            "Provider Manager status test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # BUILT-IN RESEARCH PROVIDER TEST
+      # ======================================================
+
+      - name: Built-in Research Provider Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+          const provider =
+            manager.getProvider(
+              "research"
+            );
+
+          if (!provider) {
+            throw new Error(
+              "Built-in research provider is missing."
+            );
+          }
+
+          const config =
+            manager.getProviderConfig(
+              "research"
+            );
+
+          if (!config) {
+            throw new Error(
+              "Research provider configuration is missing."
+            );
+          }
+
+          if (
+            config.enabled !==
+            true
+          ) {
+            throw new Error(
+              "Research provider should be enabled by default."
+            );
+          }
+
+          if (
+            config.providerType !==
+            "web-search"
+          ) {
+            throw new Error(
+              "Research provider type mismatch."
+            );
+          }
+
+          console.log(
+            "Built-in research provider test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # HEALTH TEST
+      # ======================================================
+
+      - name: Provider Health Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+          const health =
+            manager.getProviderHealth(
+              "research"
+            );
+
+          if (!health) {
+            throw new Error(
+              "Research provider health result missing."
+            );
+          }
+
+          if (
+            health.provider !==
+            "research"
+          ) {
+            throw new Error(
+              "Provider health identity mismatch."
+            );
+          }
+
+          if (
+            health.exists !==
+            true
+          ) {
+            throw new Error(
+              "Research provider was not detected."
+            );
+          }
+
+          if (
+            health.enabled !==
+            true
+          ) {
+            throw new Error(
+              "Research provider is unexpectedly disabled."
+            );
+          }
+
+          console.log(
+            "Provider health test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              health,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # MOCK PROVIDER REGISTRATION TEST
+      # ======================================================
+
+      - name: Mock Provider Registration Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+          const mockProvider = {
+
+            async search({
+              query,
+              maxSources
+            } = {}) {
+
+              return {
+
+                success:
+                  true,
+
+                provider:
+                  "Mock Search Provider",
+
+                query,
+
+                answer:
+                  "Mock provider response.",
+
+                results:
+                  Array.from(
+                    {
+                      length:
+                        Math.max(
+                          1,
+                          Math.min(
+                            Number(
+                              maxSources
+                            ) || 1,
+                            3
+                          )
+                        )
+                    },
+                    (_, index) => ({
+
+                      title:
+                        `Mock Result ${index + 1}`,
+
+                      url:
+                        `https://example.com/mock-${index + 1}`,
+
+                      snippet:
+                        "Mock research result."
+
+                    })
+                  ),
+
+                sourceCount:
+                  Math.max(
+                    1,
+                    Math.min(
+                      Number(
+                        maxSources
+                      ) || 1,
+                      3
+                    )
+                  )
+
+              };
+
+            },
+
+            getProviderStatus() {
+
+              return {
+
+                success:
+                  true,
+
+                provider:
+                  "Mock Search Provider",
+
+                connected:
+                  true,
+
+                status:
+                  "connected",
+
+                supportsSearch:
+                  true,
+
+                supportsSourceValidation:
+                  false,
+
+                supportsResultNormalization:
+                  true,
+
+                providerType:
+                  "web-search"
+
+              };
+
+            }
+
+          };
+
+
+          const registration =
+            manager.registerProvider(
+
+              "mock",
+
+              mockProvider,
+
+              {
+
+                priority:
+                  20,
+
+                enabled:
+                  true,
+
+                providerType:
+                  "web-search"
+
+              }
+
+            );
+
+
+          if (
+            registration.success !==
+            true
+          ) {
+            throw new Error(
+              "Mock provider registration failed."
+            );
+          }
+
+          if (
+            registration.provider !==
+            "mock"
+          ) {
+            throw new Error(
+              "Registered provider identity mismatch."
+            );
+          }
+
+          if (
+            registration.enabled !==
+            true
+          ) {
+            throw new Error(
+              "Registered provider should be enabled."
+            );
+          }
+
+          if (
+            registration.priority !==
+            20
+          ) {
+            throw new Error(
+              "Registered provider priority mismatch."
+            );
+          }
+
+          console.log(
+            "Mock provider registration test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PROVIDER SELECTION TEST
+      # ======================================================
+
+      - name: Provider Selection Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+          const selected =
+            manager.selectProvider(
+              "mock"
+            );
+
+          if (
+            selected.success !==
+            true
+          ) {
+            throw new Error(
+              "Mock provider selection failed."
+            );
+          }
+
+          if (
+            selected.selectedProvider !==
+            "mock"
+          ) {
+            throw new Error(
+              "Selected provider mismatch."
+            );
+          }
+
+          if (
+            selected.fallbackUsed !==
+            false
+          ) {
+            throw new Error(
+              "Explicit provider selection should not use fallback."
+            );
+          }
+
+          console.log(
+            "Provider selection test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # AUTOMATIC PROVIDER ROUTING TEST
+      # ======================================================
+
+      - name: Automatic Provider Routing Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+          const selected =
+            manager.selectProvider();
+
+          if (
+            selected.success !==
+            true
+          ) {
+            throw new Error(
+              "Automatic provider selection failed."
+            );
+          }
+
+          if (
+            !selected.selectedProvider
+          ) {
+            throw new Error(
+              "Automatic provider selection returned no provider."
+            );
+          }
+
+          console.log(
+            "Automatic provider routing test passed."
+          );
+
+          console.log(
+            "Selected:",
+            selected.selectedProvider
+          );
+
+          NODE
+
+
+      # ======================================================
+      # MOCK WEB SEARCH TEST
+      # ======================================================
+
+      - name: Mock Web Search Test
+        run: |
+
+          node - <<'NODE'
+
+          (async () => {
+
+            const manager =
+              require(
+                "./providers/providerManager"
+              );
+
+            const result =
+              await manager.searchWeb({
+
+                query:
+                  "AarHen provider manager test",
+
+                maxSources:
+                  3,
+
+                provider:
+                  "mock"
+
+              });
+
+
+            if (
+              result.success !==
+              true
+            ) {
+              throw new Error(
+                "Mock web search failed: " +
+                (
+                  result.error ||
+                  "unknown error"
+                )
+              );
+            }
+
+
+            if (
+              result.provider !==
+              "Mock Search Provider"
+            ) {
+              throw new Error(
+                "Mock web search provider mismatch."
+              );
+            }
+
+
+            if (
+              !Array.isArray(
+                result.results
+              )
+            ) {
+              throw new Error(
+                "Mock search results are missing."
+              );
+            }
+
+
+            if (
+              result.results.length !==
+              3
+            ) {
+              throw new Error(
+                "Mock search result count mismatch."
+              );
+            }
+
+
+            if (
+              !Array.isArray(
+                result.attemptedProviders
+              )
+            ) {
+              throw new Error(
+                "Attempted provider tracking is missing."
+              );
+            }
+
+
+            if (
+              !result.attemptedProviders.includes(
+                "mock"
+              )
+            ) {
+              throw new Error(
+                "Mock provider was not recorded in attempted providers."
+              );
+            }
+
+
+            console.log(
+              "Mock web search test passed."
+            );
+
+
+            console.log(
+              JSON.stringify(
+                result,
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # DISABLE / ENABLE TEST
+      # ======================================================
+
+      - name: Provider Enable Disable Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+
+          const disabled =
+            manager.setProviderEnabled(
+              "mock",
+              false
+            );
+
+
+          if (
+            disabled.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider disable operation failed."
+            );
+          }
+
+
+          if (
+            disabled.enabled !==
+            false
+          ) {
+            throw new Error(
+              "Provider was not disabled."
+            );
+          }
+
+
+          if (
+            manager.isProviderAvailable(
+              "mock"
+            ) !==
+            false
+          ) {
+            throw new Error(
+              "Disabled provider is incorrectly reported as available."
+            );
+          }
+
+
+          const enabled =
+            manager.setProviderEnabled(
+              "mock",
+              true
+            );
+
+
+          if (
+            enabled.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider enable operation failed."
+            );
+          }
+
+
+          if (
+            enabled.enabled !==
+            true
+          ) {
+            throw new Error(
+              "Provider was not enabled again."
+            );
+          }
+
+
+          if (
+            manager.isProviderAvailable(
+              "mock"
+            ) !==
+            true
+          ) {
+            throw new Error(
+              "Enabled connected provider is not available."
+            );
+          }
+
+
+          console.log(
+            "Provider enable/disable test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PRIORITY TEST
+      # ======================================================
+
+      - name: Provider Priority Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+
+          const updated =
+            manager.setProviderPriority(
+              "mock",
+              1
+            );
+
+
+          if (
+            updated.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider priority update failed."
+            );
+          }
+
+
+          if (
+            updated.priority !==
+            1
+          ) {
+            throw new Error(
+              "Provider priority was not updated."
+            );
+          }
+
+
+          const selected =
+            manager.selectProvider();
+
+
+          if (
+            selected.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider selection after priority update failed."
+            );
+          }
+
+
+          if (
+            selected.selectedProvider !==
+            "mock"
+          ) {
+            throw new Error(
+              "Priority routing did not select the highest-priority available provider."
+            );
+          }
+
+
+          console.log(
+            "Provider priority test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FALLBACK TEST
+      # ======================================================
+
+      - name: Provider Fallback Test
+        run: |
+
+          node - <<'NODE'
+
+          (async () => {
+
+            const manager =
+              require(
+                "./providers/providerManager"
+              );
+
+
+            const failingProvider = {
+
+              async search() {
+
+                return {
+
+                  success:
+                    false,
+
+                  results:
+                    [],
+
+                  error:
+                    "Intentional mock provider failure."
+
+                };
+
+              },
+
+
+              getProviderStatus() {
+
+                return {
+
+                  success:
+                    true,
+
+                  provider:
+                    "Failing Mock Provider",
+
+                  connected:
+                    true,
+
+                  status:
+                    "connected",
+
+                  supportsSearch:
+                    true,
+
+                  providerType:
+                    "web-search"
+
+                };
+
+              }
+
+            };
+
+
+            const registration =
+              manager.registerProvider(
+
+                "failing",
+
+                failingProvider,
+
+                {
+
+                  priority:
+                    0,
+
+                  enabled:
+                    true,
+
+                  providerType:
+                    "web-search"
+
+                }
+
+              );
+
+
+            if (
+              registration.success !==
+              true
+            ) {
+              throw new Error(
+                "Failing provider registration failed."
+              );
+            }
+
+
+            const result =
+              await manager.searchWeb({
+
+                query:
+                  "Fallback test",
+
+                maxSources:
+                  2
+
+              });
+
+
+            if (
+              result.success !==
+              true
+            ) {
+              throw new Error(
+                "Provider fallback did not recover search."
+              );
+            }
+
+
+            if (
+              result.provider !==
+              "Mock Search Provider"
+            ) {
+              throw new Error(
+                "Fallback provider was not selected."
+              );
+            }
+
+
+            if (
+              result.fallbackUsed !==
+              true
+            ) {
+              throw new Error(
+                "Fallback flag was not enabled."
+              );
+            }
+
+
+            if (
+              !Array.isArray(
+                result.attemptedProviders
+              )
+            ) {
+              throw new Error(
+                "Fallback attempted provider tracking is missing."
+              );
+            }
+
+
+            if (
+              result.attemptedProviders.length <
+              2
+            ) {
+              throw new Error(
+                "Fallback did not attempt multiple providers."
+              );
+            }
+
+
+            if (
+              result.attemptedProviders[0] !==
+              "failing"
+            ) {
+              throw new Error(
+                "Failing provider was not attempted first."
+              );
+            }
+
+
+            if (
+              result.attemptedProviders[1] !==
+              "mock"
+            ) {
+              throw new Error(
+                "Fallback provider order is incorrect."
+              );
+            }
+
+
+            console.log(
+              "Provider fallback test passed."
+            );
+
+
+            console.log(
+              JSON.stringify(
+                result,
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # UNKNOWN PROVIDER TEST
+      # ======================================================
+
+      - name: Unknown Provider Safety Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+
+          const result =
+            manager.searchWeb({
+
+              query:
+                "Unknown provider test",
+
+              provider:
+                "does-not-exist"
+
+            });
+
+
+          if (
+            result.success !==
+            false
+          ) {
+            throw new Error(
+              "Unknown provider was incorrectly accepted."
+            );
+          }
+
+
+          if (
+            !result.error
+          ) {
+            throw new Error(
+              "Unknown provider error message is missing."
+            );
+          }
+
+
+          console.log(
+            "Unknown provider safety test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RESET TEST
+      # ======================================================
+
+      - name: Provider Manager Reset Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+
+          const reset =
+            manager.reset();
+
+
+          if (
+            reset.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider Manager reset failed."
+            );
+          }
+
+
+          if (
+            reset.version !==
+            "5.9.0"
+          ) {
+            throw new Error(
+              "Reset version mismatch."
+            );
+          }
+
+
+          if (
+            !manager.getProvider(
+              "research"
+            )
+          ) {
+            throw new Error(
+              "Built-in research provider was removed by reset."
+            );
+          }
+
+
+          if (
+            manager.getProvider(
+              "mock"
+            ) !==
+            null
+          ) {
+            throw new Error(
+              "Dynamic mock provider was not removed by reset."
+            );
+          }
+
+
+          console.log(
+            "Provider Manager reset test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL STATUS
+      # ======================================================
+
+      - name: Final Provider Manager Status
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./providers/providerManager");
+
+
+          const status =
+            manager.getStatus();
+
+
+          if (
+            status.success !==
+            true
+          ) {
+            throw new Error(
+              "Final Provider Manager status failed."
+            );
+          }
+
+
+          if (
+            status.version !==
+            "5.9.0"
+          ) {
+            throw new Error(
+              "Final version mismatch."
+            );
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Provider Manager is not active."
+            );
+          }
+
+
+          console.log(
+            "Final Provider Manager status passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=============================================="
+          echo " AARHEN PROVIDER MANAGER TEST"
+          echo "=============================================="
+          echo " Load: PASSED"
+          echo " Status: PASSED"
+          echo " Built-in Provider: PASSED"
+          echo " Health Check: PASSED"
+          echo " Provider Registration: PASSED"
+          echo " Provider Selection: PASSED"
+          echo " Automatic Routing: PASSED"
+          echo " Web Search Gateway: PASSED"
+          echo " Enable / Disable: PASSED"
+          echo " Priority Routing: PASSED"
+          echo " Fallback Routing: PASSED"
+          echo " Unknown Provider Safety: PASSED"
+          echo " Reset: PASSED"
+          echo " Final Status: PASSED"
+          echo "=============================================="
+          echo " PROVIDER MANAGER v5.9.0 READY"
+          echo "=============================================="
