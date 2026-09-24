@@ -2,30 +2,116 @@
 // AARHEN CORE V5
 // MASTER ORCHESTRATOR
 // ============================================================
+//
+// Version: 5.0.0
+//
+// Purpose:
+// - Main AarHen request orchestration layer
+// - Connect Brain, Memory, RAG, Research, Routing, Intent,
+//   Permissions, Executor and Response systems
+// - Support controlled Autonomous Worker execution
+// - Preserve existing non-autonomous execution behavior
+//
+// Autonomous integration:
+//
+// Normal:
+// Input
+//   ↓
+// Master Brain
+//   ↓
+// Routing
+//   ↓
+// Intent
+//   ↓
+// Research
+//   ↓
+// Permission
+//   ↓
+// Skill Executor
+//   ↓
+// Response
+//
+// Autonomous:
+// Input
+//   ↓
+// Master Brain
+//   ↓
+// Routing
+//   ↓
+// Intent
+//   ↓
+// Research
+//   ↓
+// Permission / Memory Context
+//   ↓
+// Autonomous Worker
+//   ↓
+// Agent Planner
+//   ↓
+// Agent Manager
+//   ↓
+// Agent Worker
+//   ↓
+// Worker Provider
+//   ↓
+// Provider Bridge
+//   ↓
+// Provider Manager
+//   ↓
+// Agent Runner
+//   ↓
+// Response
+//
+// IMPORTANT:
+// - Existing normal execution remains intact.
+// - Autonomous mode is opt-in through context.autonomous=true.
+// - Autonomous execution does not bypass permissions.
+// - Protected external actions remain approval-controlled.
+// ============================================================
+
 
 const Brain =
     require("./brain");
 
+
 const router =
     require("../skills/router");
+
 
 const intent =
     require("./intent");
 
+
 const executor =
     require("../skills/executor");
+
 
 const permissions =
     require("./permissions");
 
+
 const responseEngine =
     require("./response");
+
 
 const memoryManager =
     require("./memoryManager");
 
+
 const researchApi =
     require("./researchApi");
+
+
+const autonomousWorker =
+    require("./autonomousWorker");
+
+
+// ============================================================
+// VERSION
+// ============================================================
+
+const ORCHESTRATOR_VERSION =
+    "5.0.0";
 
 
 // ============================================================
@@ -40,12 +126,14 @@ function selectSkill(input) {
         );
 
     if (!result.success) {
+
         return result;
     }
 
     return {
 
-        success: true,
+        success:
+            true,
 
         selectedSkill:
             result.selectedSkill,
@@ -72,12 +160,16 @@ function shouldResearch(
 
     if (
         context.research === true ||
-        String(context.intent || "").toLowerCase() === "research"
+        String(
+            context.intent || ""
+        ).toLowerCase() ===
+            "research"
     ) {
 
         return {
 
-            required: true,
+            required:
+                true,
 
             reason:
                 "Live research explicitly requested by context."
@@ -91,7 +183,8 @@ function shouldResearch(
 
         return {
 
-            required: false,
+            required:
+                false,
 
             reason:
                 "Live research explicitly disabled by context."
@@ -105,13 +198,16 @@ function shouldResearch(
         )
             .toLowerCase();
 
+
     if (
-        category === "research"
+        category ===
+        "research"
     ) {
 
         return {
 
-            required: true,
+            required:
+                true,
 
             reason:
                 "Intent category requires web research."
@@ -123,12 +219,14 @@ function shouldResearch(
         routing
             ?.selectedSkill;
 
+
     const skillCategory =
         String(
             selectedSkill
                 ?.category || ""
         )
             .toLowerCase();
+
 
     const skillName =
         String(
@@ -140,16 +238,25 @@ function shouldResearch(
         )
             .toLowerCase();
 
+
     if (
-        skillCategory === "research" ||
-        skillName.includes("research") ||
-        skillName.includes("web-search") ||
-        skillName.includes("web_search")
+        skillCategory ===
+            "research" ||
+        skillName.includes(
+            "research"
+        ) ||
+        skillName.includes(
+            "web-search"
+        ) ||
+        skillName.includes(
+            "web_search"
+        )
     ) {
 
         return {
 
-            required: true,
+            required:
+                true,
 
             reason:
                 "Research skill selected by router."
@@ -162,6 +269,7 @@ function shouldResearch(
             request || ""
         )
             .toLowerCase();
+
 
     const researchSignals = [
 
@@ -192,7 +300,9 @@ function shouldResearch(
         "from web",
         "online information",
         "latest information"
+
     ];
+
 
     const matchedSignal =
         researchSignals.find(
@@ -202,11 +312,15 @@ function shouldResearch(
                 )
         );
 
-    if (matchedSignal) {
+
+    if (
+        matchedSignal
+    ) {
 
         return {
 
-            required: true,
+            required:
+                true,
 
             reason:
                 `Fresh-web signal detected: ${matchedSignal}.`
@@ -221,7 +335,9 @@ function shouldResearch(
         "web search",
         "internet search",
         "online search"
+
     ];
+
 
     const matchedKeyword =
         researchKeywords.find(
@@ -231,11 +347,15 @@ function shouldResearch(
                 )
         );
 
-    if (matchedKeyword) {
+
+    if (
+        matchedKeyword
+    ) {
 
         return {
 
-            required: true,
+            required:
+                true,
 
             reason:
                 `Research keyword detected: ${matchedKeyword}.`
@@ -245,7 +365,8 @@ function shouldResearch(
 
     return {
 
-        required: false,
+        required:
+            false,
 
         reason:
             "Live web research not required."
@@ -254,7 +375,7 @@ function shouldResearch(
 
 
 // ============================================================
-// NORMALIZE RESEARCH RESULT
+// NORMALIZE RESEARCH SOURCES
 // ============================================================
 
 function collectResearchSources(
@@ -268,34 +389,48 @@ function collectResearchSources(
         result?.results,
 
         result?.research?.sources,
+
         result?.research?.results,
 
         result?.result?.sources,
+
         result?.result?.results,
 
         result?.raw?.sources,
+
         result?.raw?.results,
 
         result?.research?.raw?.sources,
+
         result?.research?.raw?.results,
 
         result?.result?.raw?.sources,
+
         result?.result?.raw?.results,
 
         result?.data?.sources,
+
         result?.data?.results
+
     ];
 
-    for (const candidate of candidates) {
+
+    for (
+        const candidate of
+        candidates
+    ) {
 
         if (
-            Array.isArray(candidate) &&
+            Array.isArray(
+                candidate
+            ) &&
             candidate.length > 0
         ) {
 
             return candidate;
         }
     }
+
 
     return [];
 }
@@ -311,6 +446,7 @@ function normalizeResearchResult(
         result?.result ||
         result ||
         {};
+
 
     // --------------------------------------------------------
     // SOURCE COLLECTION
@@ -330,7 +466,10 @@ function normalizeResearchResult(
         sources
             .filter(Boolean)
             .map(
-                (source, index) => {
+                (
+                    source,
+                    index
+                ) => {
 
                     return {
 
@@ -361,8 +500,11 @@ function normalizeResearchResult(
                             "",
 
                         score:
-                            typeof source.score === "number"
+                            typeof source.score ===
+                            "number"
+
                                 ? source.score
+
                                 : null,
 
                         publishedDate:
@@ -394,13 +536,19 @@ function normalizeResearchResult(
 
 
     const verified =
-        rawResearch.verified === true ||
-        result?.verified === true ||
-        verification?.verified === true ||
-        verificationStatus === "verified";
+        rawResearch.verified ===
+            true ||
+        result?.verified ===
+            true ||
+        verification?.verified ===
+            true ||
+        verificationStatus ===
+            "verified";
 
 
-    if (verified) {
+    if (
+        verified
+    ) {
 
         verificationStatus =
             "verified";
@@ -419,15 +567,22 @@ function normalizeResearchResult(
     // --------------------------------------------------------
 
     let confidence =
-        typeof rawResearch.confidence === "number"
+        typeof rawResearch.confidence ===
+        "number"
+
             ? rawResearch.confidence
-            : typeof result?.confidence === "number"
+
+            : typeof result?.confidence ===
+              "number"
+
                 ? result.confidence
+
                 : 0;
 
 
     if (
-        confidence > 1
+        confidence >
+        1
     ) {
 
         confidence =
@@ -501,7 +656,9 @@ function normalizeResearchResult(
         result?.status ||
         (
             verified
+
                 ? "verified"
+
                 : "review"
         );
 
@@ -513,8 +670,10 @@ function normalizeResearchResult(
     return {
 
         success:
-            rawResearch.success !== false &&
-            result?.success !== false,
+            rawResearch.success !==
+                false &&
+            result?.success !==
+                false,
 
         query:
             rawResearch.query ||
@@ -543,14 +702,18 @@ function normalizeResearchResult(
 
         previousKnowledgeAvailable:
             Boolean(
-                rawResearch.previousKnowledgeAvailable ||
-                result?.previousKnowledgeAvailable
+                rawResearch
+                    .previousKnowledgeAvailable ||
+                result
+                    ?.previousKnowledgeAvailable
             ),
 
         previousVerifiedKnowledgeAvailable:
             Boolean(
-                rawResearch.previousVerifiedKnowledgeAvailable ||
-                result?.previousVerifiedKnowledgeAvailable
+                rawResearch
+                    .previousVerifiedKnowledgeAvailable ||
+                result
+                    ?.previousVerifiedKnowledgeAvailable
             ),
 
         memoryId:
@@ -561,6 +724,7 @@ function normalizeResearchResult(
 
         raw:
             rawResearch
+
     };
 }
 
@@ -579,9 +743,11 @@ async function performResearch(
             context.maxResearchSources
         ) || 5;
 
+
     const language =
         context.researchLanguage ||
         "auto";
+
 
     try {
 
@@ -599,12 +765,14 @@ async function performResearch(
 
         if (
             !result ||
-            result.success !== true
+            result.success !==
+                true
         ) {
 
             return {
 
-                success: false,
+                success:
+                    false,
 
                 query:
                     request,
@@ -642,9 +810,7 @@ async function performResearch(
 
 
         // ----------------------------------------------------
-        // IMPORTANT:
-        // Convert whatever Research API returns into one
-        // stable research object.
+        // Convert Research API output to stable object
         // ----------------------------------------------------
 
         const standardizedResearch =
@@ -656,7 +822,8 @@ async function performResearch(
 
         return {
 
-            success: true,
+            success:
+                true,
 
             query:
                 request,
@@ -666,42 +833,54 @@ async function performResearch(
 
             context:
                 result.context ||
-                standardizedResearch.raw?.context ||
+                standardizedResearch
+                    .raw
+                    ?.context ||
                 null,
 
             provider:
-                standardizedResearch.provider,
+                standardizedResearch
+                    .provider,
 
             sources:
-                standardizedResearch.sources,
+                standardizedResearch
+                    .sources,
 
             sourceCount:
-                standardizedResearch.sourceCount,
+                standardizedResearch
+                    .sourceCount,
 
             confidence:
-                standardizedResearch.confidence,
+                standardizedResearch
+                    .confidence,
 
             verified:
-                standardizedResearch.verified,
+                standardizedResearch
+                    .verified,
 
             verificationStatus:
-                standardizedResearch.verificationStatus,
+                standardizedResearch
+                    .verificationStatus,
 
             verification:
-                standardizedResearch.verification,
+                standardizedResearch
+                    .verification,
 
             learning:
-                standardizedResearch.learning,
+                standardizedResearch
+                    .learning,
 
             status:
-                standardizedResearch.researchStatus
+                standardizedResearch
+                    .researchStatus
         };
 
     } catch (error) {
 
         return {
 
-            success: false,
+            success:
+                false,
 
             query:
                 request,
@@ -746,20 +925,25 @@ function determinePermission(
     routing
 ) {
 
-    if (!routing.selectedSkill) {
+    if (
+        !routing.selectedSkill
+    ) {
 
         return permissions.check(
             "execute_external_code"
         );
     }
 
+
     const category =
         routing
             .selectedSkill
             .category;
 
+
     if (
-        category === "security"
+        category ===
+        "security"
     ) {
 
         return permissions.check(
@@ -767,8 +951,10 @@ function determinePermission(
         );
     }
 
+
     if (
-        category === "coding"
+        category ===
+        "coding"
     ) {
 
         return permissions.check(
@@ -776,27 +962,37 @@ function determinePermission(
         );
     }
 
+
     if (
 
-        category === "finance" ||
+        category ===
+            "finance" ||
 
-        category === "calculation" ||
+        category ===
+            "calculation" ||
 
-        category === "knowledge" ||
+        category ===
+            "knowledge" ||
 
-        category === "research" ||
+        category ===
+            "research" ||
 
-        category === "data" ||
+        category ===
+            "data" ||
 
-        category === "documents" ||
+        category ===
+            "documents" ||
 
-        category === "business"
+        category ===
+            "business"
+
     ) {
 
         return permissions.check(
             "read_public_information"
         );
     }
+
 
     return permissions.check(
         "execute_external_code"
@@ -843,22 +1039,26 @@ function buildExecutionContext(
             decision:
                 brainResult
                     .memory
-                    ?.decision || null,
+                    ?.decision ||
+                null,
 
             managedRecall:
                 brainResult
                     .memory
-                    ?.managed || [],
+                    ?.managed ||
+                [],
 
             importantRecall:
                 brainResult
                     .memory
-                    ?.important || [],
+                    ?.important ||
+                [],
 
             verifiedRecall:
                 brainResult
                     .memory
-                    ?.verified || []
+                    ?.verified ||
+                []
         },
 
         routing: {
@@ -904,7 +1104,10 @@ function determineMemoryAction(
             ?.memory
             ?.decision;
 
-    if (!decision) {
+
+    if (
+        !decision
+    ) {
 
         return {
 
@@ -919,8 +1122,10 @@ function determineMemoryAction(
         };
     }
 
+
     if (
-        context.remember === false
+        context.remember ===
+        false
     ) {
 
         return {
@@ -936,8 +1141,10 @@ function determineMemoryAction(
         };
     }
 
+
     if (
-        context.remember === true
+        context.remember ===
+        true
     ) {
 
         return {
@@ -968,8 +1175,10 @@ function determineMemoryAction(
         };
     }
 
+
     if (
-        context.autoRemember === true
+        context.autoRemember ===
+        true
     ) {
 
         if (
@@ -1004,6 +1213,7 @@ function determineMemoryAction(
             };
         }
 
+
         return {
 
             action:
@@ -1019,6 +1229,7 @@ function determineMemoryAction(
                 decision.reason
         };
     }
+
 
     return {
 
@@ -1062,12 +1273,14 @@ function storeMemory(
 
     if (
         !memoryAction ||
-        memoryAction.shouldStore !== true
+        memoryAction.shouldStore !==
+            true
     ) {
 
         return {
 
-            success: true,
+            success:
+                true,
 
             stored:
                 false,
@@ -1084,7 +1297,8 @@ function storeMemory(
 
 
     if (
-        context.remember === true
+        context.remember ===
+        true
     ) {
 
         return memoryManager.remember({
@@ -1137,7 +1351,9 @@ function storeMemory(
                 Array.isArray(
                     context.memoryTags
                 )
+
                     ? context.memoryTags
+
                     : [],
 
             verified:
@@ -1197,6 +1413,363 @@ function storeMemory(
 
 
 // ============================================================
+// DETECT AUTONOMOUS MODE
+// ============================================================
+//
+// Autonomous mode is intentionally opt-in.
+//
+// Normal orchestrator requests continue to use the existing
+// direct Executor pipeline.
+//
+// ============================================================
+
+function shouldUseAutonomousWorker(
+    context = {}
+) {
+
+    return (
+        context &&
+        context.autonomous ===
+        true
+    );
+}
+
+
+// ============================================================
+// PREPARE AUTONOMOUS EXECUTION CONTEXT
+// ============================================================
+//
+// The current orchestrator context is passed into the
+// Autonomous Worker.
+//
+// This is important because:
+// - Brain context is preserved.
+// - Memory context is preserved.
+// - Knowledge context is preserved.
+// - Existing live research is preserved.
+// - Worker Provider can reuse existing research context.
+// - Unnecessary duplicate web searches are avoided.
+// ============================================================
+
+function buildAutonomousWorkerOptions(
+    executionContext,
+    context = {}
+) {
+
+    const autonomousOptions = {
+
+        ...context,
+
+        context: {
+
+            ...executionContext
+
+        }
+
+    };
+
+
+    // --------------------------------------------------------
+    // Preserve autonomous flag inside worker context
+    // --------------------------------------------------------
+
+    autonomousOptions.context
+        .autonomous =
+            true;
+
+
+    return autonomousOptions;
+}
+
+
+// ============================================================
+// EXECUTE THROUGH AUTONOMOUS WORKER
+// ============================================================
+
+async function executeAutonomousWorker(
+    request,
+    executionContext,
+    context = {}
+) {
+
+    if (
+        !autonomousWorker ||
+        typeof autonomousWorker
+            .executeRequest !==
+            "function"
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            stage:
+                "autonomous-worker",
+
+            error:
+                "Autonomous Worker is unavailable."
+
+        };
+    }
+
+
+    const options =
+        buildAutonomousWorkerOptions(
+
+            executionContext,
+
+            context
+
+        );
+
+
+    try {
+
+        const result =
+            await autonomousWorker
+                .executeRequest(
+
+                    request,
+
+                    options
+
+                );
+
+
+        return {
+
+            success:
+                result?.success ===
+                    true,
+
+            stage:
+                result?.stage ||
+                "autonomous-execution",
+
+            autonomous:
+                true,
+
+            workerVersion:
+                autonomousWorker
+                    .AUTONOMOUS_WORKER_VERSION ||
+                null,
+
+            task:
+                result?.task ||
+                null,
+
+            worker:
+                result?.worker ||
+                null,
+
+            provider:
+                result?.provider ||
+                null,
+
+            execution:
+                result?.execution ||
+                null,
+
+            workerStatus:
+                result?.workerStatus ||
+                null,
+
+            waitingApproval:
+                result?.waitingApproval ===
+                    true,
+
+            result:
+                result || null,
+
+            error:
+                result?.error ||
+                null
+        };
+
+    } catch (error) {
+
+        return {
+
+            success:
+                false,
+
+            stage:
+                "autonomous-worker-error",
+
+            autonomous:
+                true,
+
+            workerVersion:
+                autonomousWorker
+                    .AUTONOMOUS_WORKER_VERSION ||
+                null,
+
+            error:
+                error.message ||
+                "Autonomous Worker execution failed.",
+
+            task:
+                null,
+
+            worker:
+                null,
+
+            provider:
+                null,
+
+            execution:
+                null,
+
+            workerStatus:
+                null
+        };
+    }
+}
+
+
+// ============================================================
+// BUILD AUTONOMOUS RESULT
+// ============================================================
+
+function buildAutonomousOrchestrationResult(
+    request,
+    brainResult,
+    routing,
+    intentResult,
+    permission,
+    memoryAction,
+    memoryWrite,
+    researchResult,
+    executionContext,
+    autonomousExecution
+) {
+
+    const waitingApproval =
+        autonomousExecution
+            ?.waitingApproval ===
+        true;
+
+
+    const autonomousSuccess =
+        autonomousExecution
+            ?.success ===
+        true;
+
+
+    let status =
+        "execution-error";
+
+
+    if (
+        waitingApproval
+    ) {
+
+        status =
+            "approval-required";
+
+    } else if (
+        autonomousSuccess
+    ) {
+
+        status =
+            "completed";
+
+    } else if (
+        autonomousExecution
+            ?.execution
+            ?.needsInput
+    ) {
+
+        status =
+            "needs-user-input";
+    }
+
+
+    return {
+
+        success:
+            autonomousSuccess ||
+            waitingApproval,
+
+        request,
+
+        brain:
+            brainResult,
+
+        routing,
+
+        intent:
+            intentResult,
+
+        permission,
+
+        memoryAction,
+
+        memoryWrite,
+
+        research:
+            researchResult,
+
+        executionContext,
+
+        autonomous: {
+
+            enabled:
+                true,
+
+            workerVersion:
+                autonomousExecution
+                    ?.workerVersion ||
+                null,
+
+            stage:
+                autonomousExecution
+                    ?.stage ||
+                null,
+
+            task:
+                autonomousExecution
+                    ?.task ||
+                null,
+
+            worker:
+                autonomousExecution
+                    ?.worker ||
+                null,
+
+            provider:
+                autonomousExecution
+                    ?.provider ||
+                null,
+
+            workerStatus:
+                autonomousExecution
+                    ?.workerStatus ||
+                null,
+
+            waitingApproval:
+                waitingApproval,
+
+            execution:
+                autonomousExecution
+                    ?.execution ||
+                null
+        },
+
+        execution:
+            autonomousExecution,
+
+        status,
+
+        timestamp:
+            new Date().toISOString()
+
+    };
+}
+
+
+// ============================================================
 // PROCESS REQUEST
 // ============================================================
 
@@ -1211,12 +1784,14 @@ async function process(
 
     if (
         !input ||
-        typeof input !== "string"
+        typeof input !==
+            "string"
     ) {
 
         return {
 
-            success: false,
+            success:
+                false,
 
             error:
                 "Invalid input."
@@ -1228,11 +1803,14 @@ async function process(
         input.trim();
 
 
-    if (!request) {
+    if (
+        !request
+    ) {
 
         return {
 
-            success: false,
+            success:
+                false,
 
             error:
                 "Input is empty."
@@ -1251,7 +1829,9 @@ async function process(
         );
 
 
-    if (!brainResult.success) {
+    if (
+        !brainResult.success
+    ) {
 
         return brainResult;
     }
@@ -1267,7 +1847,9 @@ async function process(
         );
 
 
-    if (!routing.success) {
+    if (
+        !routing.success
+    ) {
 
         return routing;
     }
@@ -1283,7 +1865,9 @@ async function process(
         );
 
 
-    if (!intentResult.success) {
+    if (
+        !intentResult.success
+    ) {
 
         return intentResult;
     }
@@ -1297,7 +1881,8 @@ async function process(
         String(
             context.intent || ""
         )
-            .toLowerCase() === "research"
+            .toLowerCase() ===
+        "research"
     ) {
 
         intentResult = {
@@ -1343,6 +1928,7 @@ async function process(
             routing,
 
             context
+
         );
 
 
@@ -1352,7 +1938,8 @@ async function process(
 
     let researchResult = {
 
-        success: true,
+        success:
+            true,
 
         required:
             false,
@@ -1383,6 +1970,7 @@ async function process(
 
         reason:
             researchDecision.reason
+
     };
 
 
@@ -1396,8 +1984,11 @@ async function process(
 
         researchResult =
             await performResearch(
+
                 request,
+
                 context
+
             );
 
 
@@ -1415,7 +2006,8 @@ async function process(
 
             return {
 
-                success: false,
+                success:
+                    false,
 
                 request,
 
@@ -1452,8 +2044,11 @@ async function process(
 
     const permission =
         determinePermission(
+
             intentResult,
+
             routing
+
         );
 
 
@@ -1463,8 +2058,11 @@ async function process(
 
     const memoryAction =
         determineMemoryAction(
+
             brainResult,
+
             context
+
         );
 
 
@@ -1482,6 +2080,7 @@ async function process(
             intentResult,
 
             context
+
         );
 
 
@@ -1540,7 +2139,8 @@ async function process(
                 "not-researched",
 
             verification:
-                researchResult.verification ||
+                researchResult
+                    .verification ||
                 null,
 
             learning:
@@ -1563,7 +2163,8 @@ async function process(
 
     let memoryWrite = {
 
-        success: true,
+        success:
+            true,
 
         stored:
             false,
@@ -1573,11 +2174,13 @@ async function process(
 
         reason:
             "Memory storage not requested."
+
     };
 
 
     if (
-        memoryAction.shouldStore === true
+        memoryAction.shouldStore ===
+        true
     ) {
 
         memoryWrite =
@@ -1590,6 +2193,7 @@ async function process(
                 memoryAction,
 
                 context
+
             );
     }
 
@@ -1599,8 +2203,76 @@ async function process(
             memoryWrite;
 
 
+    // ========================================================
+    // AUTONOMOUS WORKER MODE
+    // ========================================================
+    //
+    // IMPORTANT:
+    // This is placed BEFORE the existing direct-executor
+    // approval/execution block so that Autonomous Worker owns
+    // the full Agent Planner → Manager → Worker → Runner flow.
+    //
+    // Existing non-autonomous behavior remains unchanged.
+    //
+    // ========================================================
+
+    if (
+        shouldUseAutonomousWorker(
+            context
+        )
+    ) {
+
+        const autonomousExecution =
+            await executeAutonomousWorker(
+
+                request,
+
+                executionContext,
+
+                context
+
+            );
+
+
+        const autonomousResult =
+            buildAutonomousOrchestrationResult(
+
+                request,
+
+                brainResult,
+
+                routing,
+
+                intentResult,
+
+                permission,
+
+                memoryAction,
+
+                memoryWrite,
+
+                researchResult,
+
+                executionContext,
+
+                autonomousExecution
+
+            );
+
+
+        autonomousResult.response =
+            responseEngine
+                .createResponse(
+                    autonomousResult
+                );
+
+
+        return autonomousResult;
+    }
+
+
     // --------------------------------------------------------
-    // APPROVAL REQUIRED
+    // EXISTING APPROVAL REQUIRED
     // --------------------------------------------------------
 
     if (
@@ -1609,7 +2281,8 @@ async function process(
 
         const approvalResult = {
 
-            success: true,
+            success:
+                true,
 
             request,
 
@@ -1660,7 +2333,7 @@ async function process(
 
 
     // --------------------------------------------------------
-    // EXECUTE SKILL
+    // EXISTING SKILL EXECUTION
     // --------------------------------------------------------
 
     const execution =
@@ -1675,20 +2348,19 @@ async function process(
 
 
     // --------------------------------------------------------
-    // FINAL RESULT
-    // --------------------------------------------------------
-
-    // --------------------------------------------------------
     // FINAL RESEARCH RESULT
     // --------------------------------------------------------
-    // Prefer the executor's standardized research object when
-    // available, while preserving the live-research metadata
-    // collected by the orchestrator.
+    //
+    // Prefer executor standardized research output when
+    // available, while preserving orchestrator metadata.
+    //
     // --------------------------------------------------------
 
     const finalResearchResult =
-        intentResult.category === "research" &&
+        intentResult.category ===
+            "research" &&
         execution?.research
+
             ? {
 
                 ...researchResult,
@@ -1697,32 +2369,48 @@ async function process(
 
                 sources:
                     Array.isArray(
-                        execution.research.sources
+                        execution.research
+                            .sources
                     ) &&
-                    execution.research.sources.length > 0
+                    execution.research
+                        .sources.length >
+                        0
 
-                        ? execution.research.sources
+                        ? execution.research
+                            .sources
 
-                        : researchResult.sources,
+                        : researchResult
+                            .sources,
 
                 sourceCount:
                     Array.isArray(
-                        execution.research.sources
+                        execution.research
+                            .sources
                     ) &&
-                    execution.research.sources.length > 0
+                    execution.research
+                        .sources.length >
+                        0
 
-                        ? execution.research.sources.length
+                        ? execution.research
+                            .sources.length
 
-                        : researchResult.sourceCount
+                        : researchResult
+                            .sourceCount
+
             }
 
             : researchResult;
 
 
+    // --------------------------------------------------------
+    // FINAL RESULT
+    // --------------------------------------------------------
+
     const orchestrationResult = {
 
         success:
-            execution.success !== false,
+            execution.success !==
+                false,
 
         request,
 
@@ -1747,6 +2435,17 @@ async function process(
 
         execution,
 
+        autonomous: {
+
+            enabled:
+                false,
+
+            workerVersion:
+                autonomousWorker
+                    ?.AUTONOMOUS_WORKER_VERSION ||
+                null
+        },
+
         status:
 
             execution.success
@@ -1761,6 +2460,7 @@ async function process(
 
         timestamp:
             new Date().toISOString()
+
     };
 
 
@@ -1801,13 +2501,24 @@ async function orchestrate(
 
 function getStatus() {
 
+    const autonomousStatus =
+        autonomousWorker &&
+        typeof autonomousWorker
+            .getStatus ===
+            "function"
+
+            ? autonomousWorker.getStatus()
+
+            : null;
+
+
     return {
 
         name:
             "AarHen Master Orchestrator",
 
         version:
-            "5.0.0",
+            ORCHESTRATOR_VERSION,
 
         status:
             "active",
@@ -1850,9 +2561,26 @@ function getStatus() {
 
             "Research Provider",
 
-            "Tavily Web Search",
+            "Provider Manager",
+
+            "Provider Bridge",
+
+            "Worker Provider",
+
+            "Agent Runner",
+
+            "Agent Worker",
+
+            "Agent Manager",
+
+            "Agent Planner",
+
+            "Autonomous Agent",
+
+            "Autonomous Worker",
 
             "Response Engine"
+
         ],
 
         workflow: [
@@ -1889,9 +2617,28 @@ function getStatus() {
 
             "Memory Write",
 
+            "Autonomous Mode Check",
+
+            "Autonomous Worker",
+
+            "Agent Planning",
+
+            "Agent Manager",
+
+            "Agent Worker",
+
+            "Worker Provider",
+
+            "Provider Bridge",
+
+            "Provider Manager",
+
+            "Agent Runner",
+
             "Skill Execution",
 
             "Response Generation"
+
         ],
 
         researchSystem: {
@@ -1961,7 +2708,59 @@ function getStatus() {
 
             safeDefault:
                 "evaluate-only"
+        },
+
+        autonomousSystem: {
+
+            enabled:
+                true,
+
+            mode:
+                "opt-in",
+
+            activation:
+                "context.autonomous === true",
+
+            connected:
+                Boolean(
+                    autonomousStatus &&
+                    autonomousStatus
+                        .success ===
+                    true
+                ),
+
+            version:
+                autonomousStatus
+                    ?.version ||
+                autonomousWorker
+                    ?.AUTONOMOUS_WORKER_VERSION ||
+                null,
+
+            status:
+                autonomousStatus
+                    ?.status ||
+                null,
+
+            agent:
+                autonomousStatus
+                    ?.systems
+                    ?.autonomousAgent ||
+                null,
+
+            worker:
+                autonomousStatus
+                    ?.systems
+                    ?.agentWorker ||
+                null,
+
+            workerProvider:
+                autonomousStatus
+                    ?.systems
+                    ?.workerProvider ||
+                null
+
         }
+
     };
 }
 
@@ -1971,6 +2770,8 @@ function getStatus() {
 // ============================================================
 
 module.exports = {
+
+    ORCHESTRATOR_VERSION,
 
     process,
 
@@ -1990,5 +2791,14 @@ module.exports = {
 
     buildExecutionContext,
 
+    shouldUseAutonomousWorker,
+
+    buildAutonomousWorkerOptions,
+
+    executeAutonomousWorker,
+
+    buildAutonomousOrchestrationResult,
+
     getStatus
+
 };
