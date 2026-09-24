@@ -1,0 +1,55 @@
+name: AarHen Recovery Plan Approval Gate Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  recovery-plan-approval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify approval-required recovery remains gated
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          engine.reset();
+
+          const saved = engine.saveCheckpoint({
+            id: "approval-gate-plan-task",
+            status: "running",
+            approvalRequired: true,
+            approved: false,
+            steps: [
+              { id: "approval-step", status: "pending", requiresApproval: true, approved: false }
+            ]
+          }, { id: "approval-gate-plan-checkpoint" });
+
+          assert(saved.success, "Checkpoint save should succeed.");
+
+          const candidate = engine.getRecoveryCandidate("approval-gate-plan-task");
+          assert(candidate.success && candidate.recoverable,
+            "Task with pending work should be a recovery candidate.");
+
+          const result = engine.buildRecoveryPlan("approval-gate-plan-task");
+          assert(result.success && result.recoverable, "Expected descriptive recovery plan.");
+
+          assert(result.plan.approvalRequired === true,
+            "Recovery plan must preserve approval-required flag.");
+          assert(saved.checkpoint.task.approved === false,
+            "Checkpoint must preserve unapproved state.");
+          assert(result.plan.action === "resume-from-checkpoint",
+            "Plan should describe resume only; it must not execute the task.");
+
+          console.log("Recovery plan approval gate tests passed.");
+          NODE
