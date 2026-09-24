@@ -254,7 +254,7 @@ function shouldResearch(
 
 
 // ============================================================
-// COLLECT RESEARCH SOURCES
+// NORMALIZE RESEARCH RESULT
 // ============================================================
 
 function collectResearchSources(
@@ -301,10 +301,6 @@ function collectResearchSources(
 }
 
 
-// ============================================================
-// NORMALIZE RESEARCH RESULT
-// ============================================================
-
 function normalizeResearchResult(
     result,
     request
@@ -315,7 +311,6 @@ function normalizeResearchResult(
         result?.result ||
         result ||
         {};
-
 
     // --------------------------------------------------------
     // SOURCE COLLECTION
@@ -588,7 +583,6 @@ async function performResearch(
         context.researchLanguage ||
         "auto";
 
-
     try {
 
         const result =
@@ -752,8 +746,29 @@ function determinePermission(
     routing
 ) {
 
+    if (!routing.selectedSkill) {
+
+        return permissions.check(
+            "execute_external_code"
+        );
+    }
+
+    const category =
+        routing
+            .selectedSkill
+            .category;
+
     if (
-        !routing.selectedSkill
+        category === "security"
+    ) {
+
+        return permissions.check(
+            "security_testing_against_external_target"
+        );
+    }
+
+    if (
+        category === "coding"
     ) {
 
         return permissions.check(
@@ -761,39 +776,116 @@ function determinePermission(
         );
     }
 
-
-    const skill =
-        routing.selectedSkill;
-
-
     if (
-        skill.category === "coding"
+
+        category === "finance" ||
+
+        category === "calculation" ||
+
+        category === "knowledge" ||
+
+        category === "research" ||
+
+        category === "data" ||
+
+        category === "documents" ||
+
+        category === "business"
     ) {
 
         return permissions.check(
-            "execute_external_code"
+            "read_public_information"
         );
     }
 
+    return permissions.check(
+        "execute_external_code"
+    );
+}
 
-    if (
-        skill.category === "research"
-    ) {
 
-        return permissions.check(
-            "web_access"
-        );
-    }
+// ============================================================
+// BUILD EXECUTION CONTEXT
+// ============================================================
 
+function buildExecutionContext(
+    brainResult,
+    routing,
+    intentResult,
+    context = {}
+) {
 
     return {
 
-        allowed: true,
+        ...context,
 
-        requiresApproval: false,
+        brain: {
 
-        reason:
-            "No special permission required."
+            request:
+                brainResult.request,
+
+            language:
+                brainResult.language,
+
+            memory:
+                brainResult.memory,
+
+            knowledge:
+                brainResult.knowledge,
+
+            thinkingContext:
+                brainResult
+                    .thinkingContext
+        },
+
+        memoryManagement: {
+
+            decision:
+                brainResult
+                    .memory
+                    ?.decision || null,
+
+            managedRecall:
+                brainResult
+                    .memory
+                    ?.managed || [],
+
+            importantRecall:
+                brainResult
+                    .memory
+                    ?.important || [],
+
+            verifiedRecall:
+                brainResult
+                    .memory
+                    ?.verified || []
+        },
+
+        routing: {
+
+            selectedSkill:
+                routing
+                    .selectedSkill,
+
+            matches:
+                routing
+                    .matches
+        },
+
+        intent: {
+
+            category:
+                intentResult
+                    .category,
+
+            intent:
+                intentResult
+                    .intent,
+
+            parameters:
+                intentResult
+                    .parameters
+        }
     };
 }
 
@@ -807,22 +899,25 @@ function determineMemoryAction(
     context = {}
 ) {
 
-    if (
-        context.remember === true
-    ) {
+    const decision =
+        brainResult
+            ?.memory
+            ?.decision;
+
+    if (!decision) {
 
         return {
 
-            shouldStore: true,
+            action:
+                "none",
+
+            shouldStore:
+                false,
 
             reason:
-                "Explicit memory request.",
-
-            mode:
-                "explicit"
+                "No memory decision available."
         };
     }
-
 
     if (
         context.remember === false
@@ -830,46 +925,126 @@ function determineMemoryAction(
 
         return {
 
-            shouldStore: false,
+            action:
+                "do-not-remember",
+
+            shouldStore:
+                false,
 
             reason:
-                "Memory storage explicitly disabled.",
-
-            mode:
-                "disabled"
+                "Memory explicitly disabled by user."
         };
     }
 
-
     if (
-        brainResult &&
-        brainResult.memoryDecision
+        context.remember === true
     ) {
 
         return {
 
+            action:
+                "remember",
+
             shouldStore:
-                brainResult.memoryDecision.remember === true,
+                true,
+
+            automatic:
+                false,
 
             reason:
-                brainResult.memoryDecision.reason ||
-                "Brain memory decision.",
+                "User explicitly requested memory.",
 
-            mode:
-                "automatic"
+            type:
+                decision.type,
+
+            importance:
+                decision.importance,
+
+            importanceScore:
+                decision.importanceScore,
+
+            confidence:
+                decision.confidence
         };
     }
 
+    if (
+        context.autoRemember === true
+    ) {
+
+        if (
+            decision.shouldRemember
+        ) {
+
+            return {
+
+                action:
+                    "auto-remember",
+
+                shouldStore:
+                    true,
+
+                automatic:
+                    true,
+
+                reason:
+                    decision.reason,
+
+                type:
+                    decision.type,
+
+                importance:
+                    decision.importance,
+
+                importanceScore:
+                    decision.importanceScore,
+
+                confidence:
+                    decision.confidence
+            };
+        }
+
+        return {
+
+            action:
+                "auto-skip",
+
+            shouldStore:
+                false,
+
+            automatic:
+                true,
+
+            reason:
+                decision.reason
+        };
+    }
 
     return {
 
-        shouldStore: false,
+        action:
+            "evaluate-only",
+
+        shouldStore:
+            false,
+
+        automatic:
+            false,
 
         reason:
-            "No memory decision available.",
+            decision.reason,
 
-        mode:
-            "evaluate-only"
+        type:
+            decision.type,
+
+        importance:
+            decision.importance,
+
+        importanceScore:
+            decision.importanceScore,
+
+        confidence:
+            decision.confidence
     };
 }
 
@@ -894,127 +1069,135 @@ function storeMemory(
 
             success: true,
 
-            stored: false,
+            stored:
+                false,
 
             status:
-                "memory-not-written"
+                "memory-not-written",
+
+            reason:
+                memoryAction
+                    ?.reason ||
+                "Memory storage not requested."
         };
     }
 
 
-    try {
+    if (
+        context.remember === true
+    ) {
 
-        const result =
-            memoryManager.remember({
+        return memoryManager.remember({
 
-                content:
-                    request,
+            type:
+                context.memoryType ||
+                brainResult
+                    ?.memory
+                    ?.decision
+                    ?.type,
 
-                title:
-                    context.memoryTitle ||
-                    "AarHen Interaction Memory",
+            title:
+                context.memoryTitle ||
+                "AarHen User Memory",
 
-                category:
-                    context.memoryCategory ||
-                    "conversation",
+            category:
+                context.memoryCategory ||
+                brainResult
+                    ?.memory
+                    ?.decision
+                    ?.type ||
+                "general",
 
-                source:
-                    context.memorySource ||
-                    "orchestrator",
+            content:
+                request,
 
-                importance:
-                    context.memoryImportance ||
-                    "normal",
+            source:
+                context.memorySource ||
+                "user",
 
-                confidence:
-                    brainResult?.confidence ||
-                    0.60,
+            importance:
+                context.memoryImportance ||
+                brainResult
+                    ?.memory
+                    ?.decision
+                    ?.importance,
 
-                verified:
-                    Boolean(
-                        brainResult?.verified
-                    )
-            });
+            confidence:
+                typeof context.memoryConfidence ===
+                "number"
 
+                    ? context.memoryConfidence
 
-        return {
+                    : brainResult
+                        ?.memory
+                        ?.decision
+                        ?.confidence,
 
-            success: true,
+            tags:
+                Array.isArray(
+                    context.memoryTags
+                )
+                    ? context.memoryTags
+                    : [],
 
-            stored: true,
-
-            status:
-                result?.status ||
-                "memory-stored",
-
-            memoryId:
-                result?.memoryId ||
-                result?.id ||
-                null,
-
-            duplicate:
+            verified:
                 Boolean(
-                    result?.duplicate
+                    context.memoryVerified
                 ),
 
-            result
-        };
-
-    } catch (error) {
-
-        return {
-
-            success: false,
-
-            stored: false,
-
-            status:
-                "memory-write-error",
-
-            error:
-                error.message
-        };
+            remember:
+                true
+        });
     }
+
+
+    return memoryManager.autoRemember({
+
+        type:
+            brainResult
+                ?.memory
+                ?.decision
+                ?.type,
+
+        title:
+            "AarHen Automatic Memory",
+
+        category:
+            brainResult
+                ?.memory
+                ?.decision
+                ?.type ||
+            "general",
+
+        content:
+            request,
+
+        source:
+            "automatic-memory",
+
+        importance:
+            brainResult
+                ?.memory
+                ?.decision
+                ?.importance,
+
+        confidence:
+            brainResult
+                ?.memory
+                ?.decision
+                ?.confidence,
+
+        verified:
+            false,
+
+        remember:
+            true
+    });
 }
 
 
 // ============================================================
-// BUILD EXECUTION CONTEXT
-// ============================================================
-
-function buildExecutionContext(
-    brainResult,
-    routing,
-    intentResult,
-    context = {}
-) {
-
-    return {
-
-        brain:
-            brainResult,
-
-        routing,
-
-        intent:
-            intentResult,
-
-        userContext:
-            context,
-
-        memory:
-            brainResult?.memory ||
-            null,
-
-        knowledge:
-            brainResult?.knowledge ||
-            null
-    };
-}
-
-
-// ============================================================
-// MAIN PROCESS
+// PROCESS REQUEST
 // ============================================================
 
 async function process(
@@ -1022,42 +1205,60 @@ async function process(
     context = {}
 ) {
 
-    const request =
-        typeof input === "string"
-            ? input
-            : input?.request ||
-              input?.query ||
-              "";
+    // --------------------------------------------------------
+    // INPUT VALIDATION
+    // --------------------------------------------------------
 
-
-    if (!request.trim()) {
+    if (
+        !input ||
+        typeof input !== "string"
+    ) {
 
         return {
 
             success: false,
 
             error:
-                "AarHen requires a request.",
+                "Invalid input."
+        };
+    }
 
-            status:
-                "invalid-request"
+
+    const request =
+        input.trim();
+
+
+    if (!request) {
+
+        return {
+
+            success: false,
+
+            error:
+                "Input is empty."
         };
     }
 
 
     // --------------------------------------------------------
-    // BRAIN
+    // MASTER BRAIN
     // --------------------------------------------------------
 
     const brainResult =
-        await Brain.think(
+        Brain.think(
             request,
             context
         );
 
 
+    if (!brainResult.success) {
+
+        return brainResult;
+    }
+
+
     // --------------------------------------------------------
-    // ROUTING
+    // SKILL ROUTING
     // --------------------------------------------------------
 
     const routing =
@@ -1066,51 +1267,103 @@ async function process(
         );
 
 
+    if (!routing.success) {
+
+        return routing;
+    }
+
+
     // --------------------------------------------------------
-    // INTENT
+    // INTENT ANALYSIS
     // --------------------------------------------------------
 
-    const intentResult =
+    let intentResult =
         intent.analyzeIntent(
             request
         );
 
 
+    if (!intentResult.success) {
+
+        return intentResult;
+    }
+
+
     // --------------------------------------------------------
-    // RESEARCH DECISION
+    // EXPLICIT CONTEXT INTENT OVERRIDE
+    // --------------------------------------------------------
+
+    if (
+        String(
+            context.intent || ""
+        )
+            .toLowerCase() === "research"
+    ) {
+
+        intentResult = {
+
+            ...intentResult,
+
+            success:
+                true,
+
+            category:
+                "research",
+
+            intent:
+                "web_research",
+
+            parameters: {
+
+                ...(
+                    intentResult.parameters ||
+                    {}
+                ),
+
+                maxSources:
+                    Number(
+                        context.maxResearchSources
+                    ) || 5
+            }
+        };
+    }
+
+
+    // --------------------------------------------------------
+    // LIVE WEB RESEARCH DECISION
     // --------------------------------------------------------
 
     const researchDecision =
         shouldResearch(
+
             request,
+
             intentResult,
+
             routing,
+
             context
         );
 
 
     // --------------------------------------------------------
-    // LIVE RESEARCH
+    // DEFAULT RESEARCH RESULT
     // --------------------------------------------------------
 
     let researchResult = {
 
+        success: true,
+
         required:
-            researchDecision.required,
-
-        reason:
-            researchDecision.reason,
-
-        success:
             false,
 
         status:
-            "not-researched",
+            "research-not-required",
 
-        query:
-            request,
+        research:
+            null,
 
-        provider:
+        context:
             null,
 
         sources:
@@ -1128,19 +1381,14 @@ async function process(
         verificationStatus:
             "not-researched",
 
-        verification:
-            null,
-
-        learning:
-            null,
-
-        research:
-            null,
-
-        context:
-            null
+        reason:
+            researchDecision.reason
     };
 
+
+    // --------------------------------------------------------
+    // LIVE WEB RESEARCH
+    // --------------------------------------------------------
 
     if (
         researchDecision.required
@@ -1152,15 +1400,49 @@ async function process(
                 context
             );
 
+
         researchResult.required =
             true;
+
 
         researchResult.reason =
             researchDecision.reason;
 
-        researchResult.query =
-            researchResult.query ||
-            request;
+
+        if (
+            !researchResult.success
+        ) {
+
+            return {
+
+                success: false,
+
+                request,
+
+                brain:
+                    brainResult,
+
+                routing,
+
+                intent:
+                    intentResult,
+
+                research:
+                    researchResult,
+
+                status:
+                    "research-failed",
+
+                error:
+                    researchResult.error,
+
+                message:
+                    "AarHen could not complete the required live web research.",
+
+                timestamp:
+                    new Date().toISOString()
+            };
+        }
     }
 
 
@@ -1176,7 +1458,7 @@ async function process(
 
 
     // --------------------------------------------------------
-    // MEMORY ACTION
+    // MEMORY ACTION DECISION
     // --------------------------------------------------------
 
     const memoryAction =
@@ -1393,7 +1675,15 @@ async function process(
 
 
     // --------------------------------------------------------
+    // FINAL RESULT
+    // --------------------------------------------------------
+
+    // --------------------------------------------------------
     // FINAL RESEARCH RESULT
+    // --------------------------------------------------------
+    // Prefer the executor's standardized research object when
+    // available, while preserving the live-research metadata
+    // collected by the orchestrator.
     // --------------------------------------------------------
 
     const finalResearchResult =
@@ -1428,10 +1718,6 @@ async function process(
 
             : researchResult;
 
-
-    // --------------------------------------------------------
-    // ORCHESTRATION RESULT
-    // --------------------------------------------------------
 
     const orchestrationResult = {
 
@@ -1561,8 +1847,6 @@ function getStatus() {
             "Engine Handlers",
 
             "Research API",
-
-            "Research Engine",
 
             "Research Provider",
 
