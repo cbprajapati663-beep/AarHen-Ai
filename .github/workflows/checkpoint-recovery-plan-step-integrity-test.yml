@@ -1,0 +1,57 @@
+name: AarHen Recovery Plan Step Integrity Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  recovery-plan-step-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify plan step progress matches checkpoint
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          engine.reset();
+
+          const saved = engine.saveCheckpoint({
+            id: "step-integrity-task",
+            status: "running",
+            currentStepIndex: 1,
+            currentStepId: "step-b",
+            retries: 2,
+            steps: [
+              { id: "step-a", status: "completed" },
+              { id: "step-b", status: "pending" },
+              { id: "step-c", status: "pending" }
+            ]
+          }, { id: "step-integrity-checkpoint" });
+
+          assert(saved.success, "Checkpoint save should succeed.");
+
+          const result = engine.buildRecoveryPlan("step-integrity-task");
+          assert(result.success && result.recoverable, "Expected recoverable plan.");
+
+          const plan = result.plan;
+          const checkpoint = engine.getCheckpoint("step-integrity-checkpoint").checkpoint;
+
+          assert(plan.checkpointId === checkpoint.id, "Plan checkpoint ID mismatch.");
+          assert(plan.currentStepIndex === checkpoint.currentStepIndex, "Current step index mismatch.");
+          assert(plan.currentStepId === checkpoint.currentStepId, "Current step ID mismatch.");
+          assert(plan.completedSteps === checkpoint.completedSteps, "Completed step count mismatch.");
+          assert(plan.pendingSteps === checkpoint.pendingSteps, "Pending step count mismatch.");
+          assert(plan.retries === checkpoint.task.retries, "Retry count mismatch.");
+
+          console.log("Recovery plan step integrity tests passed.");
+          NODE
