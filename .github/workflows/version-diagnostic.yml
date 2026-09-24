@@ -1,0 +1,194 @@
+name: AarHen Version Diagnostic
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  version-diagnostic:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      - name: Print AarHen Core Versions
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          const agentRunner =
+            require("./core/agentRunner");
+
+          const autonomousWorker =
+            require("./core/autonomousWorker");
+
+          const agentWorker =
+            require("./core/agentWorker");
+
+          const workerProvider =
+            require("./core/workerProvider");
+
+          const providerBridge =
+            require("./core/providerBridge");
+
+          const orchestrator =
+            require("./core/orchestrator");
+
+
+          console.log("");
+          console.log("==============================================");
+          console.log(" AARHEN VERSION DIAGNOSTIC");
+          console.log("==============================================");
+
+          console.log(
+            "Autonomous Agent :",
+            autonomousAgent.AUTONOMOUS_AGENT_VERSION
+          );
+
+          console.log(
+            "Agent Runner     :",
+            agentRunner.AGENT_RUNNER_VERSION
+          );
+
+          console.log(
+            "Autonomous Worker:",
+            autonomousWorker.AUTONOMOUS_WORKER_VERSION
+          );
+
+          console.log(
+            "Agent Worker     :",
+            agentWorker.AGENT_WORKER_VERSION
+          );
+
+          console.log(
+            "Worker Provider  :",
+            workerProvider.WORKER_PROVIDER_VERSION
+          );
+
+          console.log(
+            "Provider Bridge  :",
+            providerBridge.PROVIDER_BRIDGE_VERSION
+          );
+
+          console.log(
+            "Orchestrator     :",
+            orchestrator.ORCHESTRATOR_VERSION
+          );
+
+          console.log("==============================================");
+
+
+          const expected = {
+
+            autonomousAgent:
+              "5.8.3",
+
+            agentRunner:
+              "5.8.4",
+
+            autonomousWorker:
+              "5.10.3",
+
+            agentWorker:
+              "5.10.1",
+
+            workerProvider:
+              "5.10.2",
+
+            providerBridge:
+              "5.9.2",
+
+            orchestrator:
+              "5.0.0"
+
+          };
+
+
+          const actual = {
+
+            autonomousAgent:
+              autonomousAgent.AUTONOMOUS_AGENT_VERSION,
+
+            agentRunner:
+              agentRunner.AGENT_RUNNER_VERSION,
+
+            autonomousWorker:
+              autonomousWorker.AUTONOMOUS_WORKER_VERSION,
+
+            agentWorker:
+              agentWorker.AGENT_WORKER_VERSION,
+
+            workerProvider:
+              workerProvider.WORKER_PROVIDER_VERSION,
+
+            providerBridge:
+              providerBridge.PROVIDER_BRIDGE_VERSION,
+
+            orchestrator:
+              orchestrator.ORCHESTRATOR_VERSION
+
+          };
+
+
+          let mismatch =
+            false;
+
+
+          for (
+            const key of
+            Object.keys(expected)
+          ) {
+
+            if (
+              actual[key] !==
+              expected[key]
+            ) {
+
+              mismatch =
+                true;
+
+              console.error(
+                `${key} mismatch: expected ${expected[key]}, got ${actual[key]}`
+              );
+
+            }
+
+          }
+
+
+          if (
+            mismatch
+          ) {
+
+            process.exitCode =
+              1;
+
+            throw new Error(
+              "AarHen core version set does not match expected architecture."
+            );
+
+          }
+
+
+          console.log(
+            "ALL CORE VERSIONS MATCH."
+          );
+
+          console.log(
+            "=============================================="
+          );
+
+          NODE
