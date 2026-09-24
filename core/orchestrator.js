@@ -706,7 +706,12 @@ async function performResearch(
 
                 maxSources,
 
-                language
+                language,
+
+                provider:
+                    context.researchProvider ||
+                    context.provider ||
+                    null
 
             });
 
