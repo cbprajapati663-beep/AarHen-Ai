@@ -1,0 +1,743 @@
+name: AarHen Brain Context Integration Test
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  brain-context-integration:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # PIPELINE LOAD
+      # ======================================================
+
+      - name: Load Unified Request Pipeline
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          if (!pipeline) {
+            throw new Error(
+              "Request Pipeline could not be loaded."
+            );
+          }
+
+          console.log(
+            "Request Pipeline loaded."
+          );
+
+          console.log(
+            "Version:",
+            pipeline.REQUEST_PIPELINE_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # BRAIN CONTEXT AUGMENTATION
+      # ======================================================
+
+      - name: Brain Context Augmentation Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+          const existingContext = {
+
+            user: "AarHen",
+
+            source:
+              "brain-context-test",
+
+            brain: {
+
+              language:
+                "en",
+
+              knowledge: {
+
+                existingKnowledge:
+                  true,
+
+                related: [
+                  {
+                    title:
+                      "Existing knowledge"
+                  }
+                ],
+
+                verified: [
+                  {
+                    title:
+                      "Existing verified knowledge"
+                  }
+                ]
+              }
+
+            }
+
+          };
+
+
+          const result =
+            pipeline.buildRequestContext(
+              "vehicle finance",
+              existingContext,
+              {
+                limit: 5
+              }
+            );
+
+
+          if (
+            !result ||
+            result.success !== true
+          ) {
+
+            throw new Error(
+              "Brain context augmentation failed."
+            );
+          }
+
+
+          if (
+            !result.context
+          ) {
+
+            throw new Error(
+              "Augmented context is missing."
+            );
+          }
+
+
+          if (
+            !result.context.brain
+          ) {
+
+            throw new Error(
+              "Brain context is missing."
+            );
+          }
+
+
+          if (
+            !result.context.brain.knowledge
+          ) {
+
+            throw new Error(
+              "Brain knowledge context is missing."
+            );
+          }
+
+
+          console.log(
+            "Brain context exists."
+          );
+
+
+          NODE
+
+
+      # ======================================================
+      # EXISTING KNOWLEDGE PRESERVATION
+      # ======================================================
+
+      - name: Existing Brain Knowledge Preservation Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+
+          const context = {
+
+            user:
+              "AarHen",
+
+            brain: {
+
+              knowledge: {
+
+                existingKnowledge:
+                  true,
+
+                customMarker:
+                  "preserve-me"
+
+              }
+
+            }
+
+          };
+
+
+          const result =
+            pipeline.buildRequestContext(
+              "vehicle finance",
+              context
+            );
+
+
+          if (
+            result.success !== true
+          ) {
+
+            throw new Error(
+              "Context creation failed."
+            );
+          }
+
+
+          const brainKnowledge =
+            result.context
+              ?.brain
+              ?.knowledge;
+
+
+          if (
+            brainKnowledge
+              ?.existingKnowledge !== true
+          ) {
+
+            throw new Error(
+              "Existing brain knowledge was overwritten."
+            );
+          }
+
+
+          if (
+            brainKnowledge
+              ?.customMarker !==
+            "preserve-me"
+          ) {
+
+            throw new Error(
+              "Existing brain context field was not preserved."
+            );
+          }
+
+
+          console.log(
+            "Existing brain knowledge preserved."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT KNOWLEDGE FIELDS
+      # ======================================================
+
+      - name: Document Knowledge Fields Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+
+          const result =
+            pipeline.buildRequestContext(
+              "vehicle finance"
+            );
+
+
+          if (
+            result.success !== true
+          ) {
+
+            throw new Error(
+              "Request context failed."
+            );
+          }
+
+
+          const brain =
+            result.context?.brain;
+
+
+          const knowledge =
+            brain?.knowledge;
+
+
+          if (!knowledge) {
+
+            throw new Error(
+              "Brain knowledge object missing."
+            );
+          }
+
+
+          const requiredFields = [
+
+            "documentKnowledge",
+
+            "documentDocuments",
+
+            "documentRag",
+
+            "documentUnifiedKnowledge",
+
+            "documentAnswerContext",
+
+            "documentKnowledgeContext",
+
+            "documentKnowledgeAvailable",
+
+            "documentDetected"
+
+          ];
+
+
+          for (
+            const field of requiredFields
+          ) {
+
+            if (
+              !Object.prototype.hasOwnProperty.call(
+                knowledge,
+                field
+              )
+            ) {
+
+              throw new Error(
+                `Required brain knowledge field missing: ${field}`
+              );
+            }
+
+          }
+
+
+          console.log(
+            "All document knowledge fields are present."
+          );
+
+
+          NODE
+
+
+      # ======================================================
+      # TOP-LEVEL DOCUMENT CONTEXT
+      # ======================================================
+
+      - name: Top Level Document Context Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+
+          const result =
+            pipeline.buildRequestContext(
+              "vehicle finance"
+            );
+
+
+          const context =
+            result.context;
+
+
+          const requiredFields = [
+
+            "documentKnowledgeEnabled",
+
+            "documentKnowledgeLimit",
+
+            "documentAware",
+
+            "documentContext",
+
+            "documentRag",
+
+            "documentDocuments",
+
+            "documentKnowledge",
+
+            "answerContext",
+
+            "knowledgeContext"
+
+          ];
+
+
+          for (
+            const field of requiredFields
+          ) {
+
+            if (
+              !Object.prototype.hasOwnProperty.call(
+                context,
+                field
+              )
+            ) {
+
+              throw new Error(
+                `Top-level document context field missing: ${field}`
+              );
+            }
+
+          }
+
+
+          if (
+            context.documentKnowledgeEnabled !== true
+          ) {
+
+            throw new Error(
+              "Document knowledge is not enabled."
+            );
+          }
+
+
+          if (
+            context.documentAware !== true
+          ) {
+
+            throw new Error(
+              "Document-aware mode is not active."
+            );
+          }
+
+
+          console.log(
+            "Top-level document context test passed."
+          );
+
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT KNOWLEDGE BLOCK TEST
+      # ======================================================
+
+      - name: Document Knowledge Block Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+
+          if (
+            typeof pipeline.buildDocumentKnowledgeBlock !==
+            "function"
+          ) {
+
+            throw new Error(
+              "buildDocumentKnowledgeBlock is not exported."
+            );
+          }
+
+
+          const block =
+            pipeline.buildDocumentKnowledgeBlock({
+
+              unifiedKnowledge: {
+
+                knowledge: {
+
+                  documentKnowledge: [
+
+                    {
+                      title:
+                        "Test document knowledge",
+
+                      content:
+                        "Vehicle finance test knowledge."
+
+                    }
+
+                  ]
+
+                },
+
+                documents: {
+
+                  results: [
+                    {
+                      title:
+                        "test-document.txt"
+                    }
+                  ],
+
+                  count:
+                    1,
+
+                  available:
+                    true
+
+                },
+
+                rag: {
+
+                  available:
+                    true
+
+                },
+
+                availability: {
+
+                  anyKnowledge:
+                    true
+
+                }
+
+              },
+
+              answerContext:
+                "Vehicle finance test context.",
+
+              knowledgeContext: {
+
+                source:
+                  "test"
+
+              }
+
+            });
+
+
+          if (
+            !block
+          ) {
+
+            throw new Error(
+              "Document knowledge block was not created."
+            );
+          }
+
+
+          if (
+            block.documentDetected !== true
+          ) {
+
+            throw new Error(
+              "Document detection failed."
+            );
+          }
+
+
+          if (
+            block.documentKnowledge.length !== 1
+          ) {
+
+            throw new Error(
+              "Document knowledge was not preserved."
+            );
+          }
+
+
+          if (
+            block.documents.count !== 1
+          ) {
+
+            throw new Error(
+              "Document count was not preserved."
+            );
+          }
+
+
+          if (
+            block.available !== true
+          ) {
+
+            throw new Error(
+              "Document knowledge availability was lost."
+            );
+          }
+
+
+          console.log(
+            "Document knowledge block test passed."
+          );
+
+
+          NODE
+
+
+      # ======================================================
+      # DISABLE MODE
+      # ======================================================
+
+      - name: Brain Context Disable Mode Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+
+          const result =
+            pipeline.buildRequestContext(
+              "vehicle finance",
+              {
+                brain: {
+                  knowledge: {
+                    preserved:
+                      true
+                  }
+                }
+              },
+              {
+                documentKnowledge:
+                  false
+              }
+            );
+
+
+          if (
+            result.success !== true
+          ) {
+
+            throw new Error(
+              "Disable mode failed."
+            );
+          }
+
+
+          if (
+            result.context
+              ?.documentKnowledgeEnabled !== false
+          ) {
+
+            throw new Error(
+              "Document knowledge disable flag missing."
+            );
+          }
+
+
+          if (
+            result.context
+              ?.brain
+          ) {
+
+            if (
+              result.context
+                .brain
+                .knowledge
+                ?.preserved !== true
+            ) {
+
+              throw new Error(
+                "Existing brain knowledge was not preserved in disable mode."
+              );
+            }
+
+          }
+
+
+          console.log(
+            "Disable mode test passed."
+          );
+
+
+          NODE
+
+
+      # ======================================================
+      # HEALTH
+      # ======================================================
+
+      - name: Brain Context Health Test
+        run: |
+          node - <<'NODE'
+
+          const pipeline =
+            require("./core/requestPipeline");
+
+
+          const health =
+            pipeline.health();
+
+
+          if (
+            health.success !== true
+          ) {
+
+            throw new Error(
+              "Pipeline health failed."
+            );
+          }
+
+
+          if (
+            health.connectedSystems
+              ?.brainKnowledgeBridge !== true
+          ) {
+
+            throw new Error(
+              "Brain knowledge bridge is not connected."
+            );
+          }
+
+
+          console.log(
+            "Brain knowledge bridge is connected."
+          );
+
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN BRAIN CONTEXT INTEGRATION"
+          echo "=============================================="
+          echo " Pipeline: CONNECTED"
+          echo " Brain Context: PASSED"
+          echo " Brain Knowledge: PRESERVED"
+          echo " Document Knowledge: CONNECTED"
+          echo " Document RAG: CONNECTED"
+          echo " Context Augmentation: PASSED"
+          echo " Disable Mode: PASSED"
+          echo " Health Check: PASSED"
+          echo "=============================================="
+          echo " BRAIN CONTEXT INTEGRATION TEST COMPLETE"
+          echo "=============================================="
