@@ -2,36 +2,62 @@
 // AARHEN CORE V5
 // AGENT PLANNER
 // ============================================================
-// Version: 5.8.1
+// Version: 5.8.4
 //
 // Purpose:
 // - Convert a user request into a controlled agent plan
 // - Use AarHen intent detection
 // - Use existing skill routing
 // - Use Permission & Safety Brain
+// - Detect direct protected actions before general category
 // - Build safe multi-step task plans
 // - Pass plans to Agent Manager
 //
 // Important:
 // This module creates plans only.
 // It does NOT execute actions.
+//
+// Direct-action priority examples:
+//
+// "Send a message to a customer"
+//        ↓
+// send_message
+//        ↓
+// ASK approval
+//
+// "Send an email"
+//        ↓
+// send_email
+//        ↓
+// ASK approval
+//
+// "Write this file"
+//        ↓
+// write_file
+//        ↓
+// ASK approval
+//
 // ============================================================
+
 
 const intent =
     require("./intent");
 
+
 const router =
     require("../skills/router");
 
+
 const permissions =
     require("./permissions");
+
 
 const agentManager =
     require("./agentManager");
 
 
 const AGENT_PLANNER_VERSION =
-    "5.8.1";
+    "5.8.4";
 
 
 // ============================================================
@@ -74,6 +100,7 @@ function normalizeLimit(
     const number =
         Number(value);
 
+
     if (
         !Number.isFinite(number) ||
         number <= 0
@@ -82,8 +109,11 @@ function normalizeLimit(
         return fallback;
     }
 
+
     return Math.min(
-        Math.floor(number),
+        Math.floor(
+            number
+        ),
         maximum
     );
 }
@@ -102,6 +132,7 @@ function getActionPermission(
             action
         );
 
+
     return {
 
         action,
@@ -114,6 +145,7 @@ function getActionPermission(
 
         approved:
             result.requiresApproval !== true
+
     };
 }
 
@@ -201,6 +233,355 @@ function createStep(
             ...safeObject(
                 config.metadata
             )
+
+        }
+
+    };
+}
+
+
+// ============================================================
+// DETECT DIRECT ACTION REQUEST
+// ============================================================
+//
+// This runs BEFORE category-based planning.
+//
+// This is important because a request such as:
+//
+// "Send a message to a customer"
+//
+// may also contain the word "customer", which can trigger
+// the Business category.
+//
+// Direct execution intent must take priority over generic
+// business/knowledge categorization.
+// ============================================================
+
+function detectDirectAction(
+    request
+) {
+
+    const value =
+        safeString(
+            request
+        )
+            .toLowerCase();
+
+
+    // --------------------------------------------------------
+    // SEND MESSAGE
+    // --------------------------------------------------------
+
+    const sendMessageSignals = [
+
+        "send a message",
+        "send message",
+        "send whatsapp",
+        "send a whatsapp",
+        "message the customer",
+        "message customer",
+        "text the customer",
+        "text customer",
+        "send text"
+
+    ];
+
+
+    if (
+        sendMessageSignals.some(
+            signal =>
+                value.includes(
+                    signal
+                )
+        )
+    ) {
+
+        return {
+
+            action:
+                "send_message",
+
+            reason:
+                "Direct messaging action detected."
+
+        };
+    }
+
+
+    // --------------------------------------------------------
+    // SEND EMAIL
+    // --------------------------------------------------------
+
+    const sendEmailSignals = [
+
+        "send an email",
+        "send email",
+        "send a mail",
+        "send mail",
+        "email the customer",
+        "email customer",
+        "email this"
+
+    ];
+
+
+    if (
+        sendEmailSignals.some(
+            signal =>
+                value.includes(
+                    signal
+                )
+        )
+    ) {
+
+        return {
+
+            action:
+                "send_email",
+
+            reason:
+                "Direct email action detected."
+
+        };
+    }
+
+
+    // --------------------------------------------------------
+    // WRITE FILE
+    // --------------------------------------------------------
+
+    const writeFileSignals = [
+
+        "write a file",
+        "write file",
+        "create a file",
+        "create file",
+        "save this to a file",
+        "save to file",
+        "update a file",
+        "update file"
+
+    ];
+
+
+    if (
+        writeFileSignals.some(
+            signal =>
+                value.includes(
+                    signal
+                )
+        )
+    ) {
+
+        return {
+
+            action:
+                "write_file",
+
+            reason:
+                "Direct file-writing action detected."
+
+        };
+    }
+
+
+    // --------------------------------------------------------
+    // DELETE FILE
+    // --------------------------------------------------------
+
+    const deleteFileSignals = [
+
+        "delete a file",
+        "delete file",
+        "remove a file",
+        "remove file"
+
+    ];
+
+
+    if (
+        deleteFileSignals.some(
+            signal =>
+                value.includes(
+                    signal
+                )
+        )
+    ) {
+
+        return {
+
+            action:
+                "delete_file",
+
+            reason:
+                "Direct file-deletion action detected."
+
+        };
+    }
+
+
+    return null;
+}
+
+
+// ============================================================
+// BUILD DIRECT ACTION PLAN
+// ============================================================
+
+function buildDirectActionPlan(
+    request,
+    directAction,
+    options = {}
+) {
+
+    if (
+        !directAction
+    ) {
+
+        return null;
+    }
+
+
+    const action =
+        safeString(
+            directAction.action
+        );
+
+
+    const descriptions = {
+
+        send_message:
+            "Prepare the requested message action. User approval is required before sending.",
+
+        send_email:
+            "Prepare the requested email action. User approval is required before sending.",
+
+        write_file:
+            "Prepare the requested file-writing action. User approval is required before writing.",
+
+        delete_file:
+            "Prepare the requested file-deletion action. User approval is required before deleting."
+
+    };
+
+
+    const names = {
+
+        send_message:
+            "Send message",
+
+        send_email:
+            "Send email",
+
+        write_file:
+            "Write file",
+
+        delete_file:
+            "Delete file"
+
+    };
+
+
+    const permission =
+        getActionPermission(
+            action
+        );
+
+
+    const step =
+        createStep(
+
+            names[action] ||
+                "Protected action",
+
+            descriptions[action] ||
+                "Prepare the requested protected action.",
+
+            action,
+
+            {
+
+                request:
+                    request,
+
+                directAction:
+                    true
+
+            },
+
+            {
+
+                requiresApproval:
+                    true,
+
+                approved:
+                    options.approved === true,
+
+                metadata: {
+
+                    directAction:
+                        true,
+
+                    detectionReason:
+                        directAction.reason
+
+                }
+
+            }
+
+        );
+
+
+    return {
+
+        success:
+            true,
+
+        request,
+
+        category:
+            "action",
+
+        intent:
+            action,
+
+        selectedSkill:
+            null,
+
+        plan: [
+            step
+        ],
+
+        stepCount:
+            1,
+
+        approvalRequired:
+            true,
+
+        autonomous:
+            options.autonomous !== false,
+
+        directAction:
+            true,
+
+        action,
+
+        policy:
+            permission.policy,
+
+        context:
+            safeObject(
+                options.context
+            ),
+
+        planner: {
+
+            name:
+                "AarHen Agent Planner",
+
+            version:
+                AGENT_PLANNER_VERSION
+
         }
 
     };
@@ -223,7 +604,10 @@ function buildPlan(
             request
         );
 
-    if (!cleanRequest) {
+
+    if (
+        !cleanRequest
+    ) {
 
         return {
 
@@ -234,7 +618,34 @@ function buildPlan(
 
             plan:
                 []
+
         };
+    }
+
+
+    // ========================================================
+    // DIRECT ACTION PRIORITY
+    // ========================================================
+
+    const directAction =
+        detectDirectAction(
+            cleanRequest
+        );
+
+
+    if (
+        directAction
+    ) {
+
+        return buildDirectActionPlan(
+
+            cleanRequest,
+
+            directAction,
+
+            options
+
+        );
     }
 
 
@@ -253,15 +664,16 @@ function buildPlan(
     const category =
         safeString(
             detectedIntent.category
-        ).toLowerCase() ||
-        "general";
+        )
+            .toLowerCase() ||
+            "general";
 
 
     const intentName =
         safeString(
             detectedIntent.intent
         ) ||
-        "general_request";
+            "general_request";
 
 
     const selectedSkill =
@@ -284,13 +696,18 @@ function buildPlan(
 
     const maxSteps =
         normalizeLimit(
+
             options.maxSteps,
+
             10,
+
             25
+
         );
 
 
-    const plan = [];
+    const plan =
+        [];
 
 
     // ========================================================
@@ -336,10 +753,17 @@ function buildPlan(
 
                 "Process the requested finance calculation or vehicle-finance information.",
 
-                intentName === "calculate_emi" ||
-                intentName === "calculate_loan_from_emi" ||
-                intentName === "simple_interest"
+                intentName ===
+                    "calculate_emi" ||
+
+                intentName ===
+                    "calculate_loan_from_emi" ||
+
+                intentName ===
+                    "simple_interest"
+
                     ? "calculate"
+
                     : "search_knowledge",
 
                 {
@@ -357,6 +781,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -391,6 +816,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -450,6 +876,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -481,6 +908,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -540,6 +968,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -603,6 +1032,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -634,6 +1064,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -685,7 +1116,9 @@ function buildPlan(
                 }
 
             )
+
         );
+
     }
 
 
@@ -717,6 +1150,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -746,6 +1180,7 @@ function buildPlan(
             )
 
         );
+
     }
 
 
@@ -766,9 +1201,12 @@ function buildPlan(
 
     const approvalRequired =
         limitedPlan.some(
+
             step =>
+
                 step.requiresApproval &&
                 !step.approved
+
         );
 
 
@@ -800,18 +1238,20 @@ function buildPlan(
         autonomous:
             options.autonomous !== false,
 
+        directAction:
+            false,
+
         context,
 
-        planner:
-            {
+        planner: {
 
-                name:
-                    "AarHen Agent Planner",
+            name:
+                "AarHen Agent Planner",
 
-                version:
-                    AGENT_PLANNER_VERSION
+            version:
+                AGENT_PLANNER_VERSION
 
-            }
+        }
 
     };
 }
@@ -830,7 +1270,10 @@ function analyzeRequest(
             request
         );
 
-    if (!cleanRequest) {
+
+    if (
+        !cleanRequest
+    ) {
 
         return {
 
@@ -838,6 +1281,7 @@ function analyzeRequest(
 
             error:
                 "Request is required."
+
         };
     }
 
@@ -856,7 +1300,8 @@ function analyzeRequest(
 
     return {
 
-        success: true,
+        success:
+            true,
 
         request:
             cleanRequest,
@@ -929,7 +1374,10 @@ function createPlannedTask(
             request
         );
 
-    if (!cleanRequest) {
+
+    if (
+        !cleanRequest
+    ) {
 
         return {
 
@@ -943,6 +1391,7 @@ function createPlannedTask(
 
             plan:
                 null
+
         };
     }
 
@@ -989,6 +1438,7 @@ function createPlannedTask(
 
             plan:
                 null
+
         };
     }
 
@@ -1020,6 +1470,7 @@ function createPlannedTask(
 
             plan:
                 null
+
         };
     }
 
@@ -1059,7 +1510,8 @@ function createPlannedTask(
 
     return {
 
-        success: true,
+        success:
+            true,
 
         task:
             planResult.task,
@@ -1067,19 +1519,26 @@ function createPlannedTask(
         plan:
             planned,
 
-        analysis:
-            {
+        analysis: {
 
-                intent:
-                    planned.intent,
+            intent:
+                planned.intent,
 
-                category:
-                    planned.category,
+            category:
+                planned.category,
 
-                selectedSkill:
-                    planned.selectedSkill
+            selectedSkill:
+                planned.selectedSkill,
 
-            }
+            directAction:
+                planned.directAction ===
+                true,
+
+            action:
+                planned.action ||
+                null
+
+        }
 
     };
 }
@@ -1108,7 +1567,8 @@ function getPlanSummary(
     return {
 
         success:
-            result.success === true,
+            result.success ===
+            true,
 
         plannerVersion:
             AGENT_PLANNER_VERSION,
@@ -1134,29 +1594,47 @@ function getPlanSummary(
 
         approvalRequired:
             plan.some(
+
                 step =>
+
                     step.requiresApproval &&
                     !step.approved
+
             ),
 
         approvedSteps:
             plan.filter(
+
                 step =>
-                    step.approved === true
+                    step.approved ===
+                    true
+
             ).length,
 
         pendingApprovalSteps:
             plan.filter(
+
                 step =>
+
                     step.requiresApproval &&
                     !step.approved
+
             ).length,
+
+        directAction:
+            result.directAction ===
+            true,
+
+        action:
+            result.action ||
+            null,
 
         actions:
             plan.map(
                 step =>
                     step.action
             )
+
     };
 }
 
@@ -1173,7 +1651,8 @@ function getStatus() {
 
     return {
 
-        success: true,
+        success:
+            true,
 
         version:
             AGENT_PLANNER_VERSION,
@@ -1181,48 +1660,57 @@ function getStatus() {
         status:
             "active",
 
-        agentManager:
+        directActionDetection:
+            true,
 
-            {
+        protectedActions:
+            [
 
-                connected:
-                    agentStatus.success === true,
+                "send_message",
 
-                version:
-                    agentStatus.version ||
-                    null
+                "send_email",
 
-            },
+                "write_file",
 
-        intentSystem:
+                "delete_file"
 
-            {
+            ],
 
-                connected:
-                    typeof intent.analyzeIntent ===
-                    "function"
+        agentManager: {
 
-            },
+            connected:
+                agentStatus.success ===
+                true,
 
-        routerSystem:
+            version:
+                agentStatus.version ||
+                null
 
-            {
+        },
 
-                connected:
-                    typeof router.route ===
-                    "function"
+        intentSystem: {
 
-            },
+            connected:
+                typeof intent.analyzeIntent ===
+                "function"
 
-        permissionSystem:
+        },
 
-            {
+        routerSystem: {
 
-                connected:
-                    typeof permissions.check ===
-                    "function"
+            connected:
+                typeof router.route ===
+                "function"
 
-            }
+        },
+
+        permissionSystem: {
+
+            connected:
+                typeof permissions.check ===
+                "function"
+
+        }
 
     };
 }
@@ -1239,6 +1727,10 @@ module.exports = {
     createStep,
 
     getActionPermission,
+
+    detectDirectAction,
+
+    buildDirectActionPlan,
 
     analyzeRequest,
 
