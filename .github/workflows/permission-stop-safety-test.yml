@@ -1,0 +1,88 @@
+name: AarHen Permission and STOP Safety Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/permissions.js"
+      - "core/agentWorker.js"
+      - "core/agentManager.js"
+      - ".github/workflows/permission-stop-safety-test.yml"
+
+jobs:
+  permission-stop-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify approval policy and worker STOP behavior
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const permissions = require("./core/permissions");
+          const workerApi = require("./core/agentWorker");
+
+          // Protected actions must remain approval-gated.
+          for (const action of [
+            "write_file",
+            "delete_file",
+            "send_message",
+            "send_email",
+            "post_online",
+            "purchase",
+            "execute_external_code",
+            "security_testing_against_external_target"
+          ]) {
+            const result = permissions.check(action);
+            if (result.policy !== "ASK" || result.requiresApproval !== true) {
+              throw new Error("Protected action is not approval-gated: " + action);
+            }
+          }
+
+          // Unknown actions must default to approval, never implicit allow.
+          const unknown = permissions.check("unregistered_sensitive_action");
+          if (unknown.policy !== "ASK" || unknown.requiresApproval !== true) {
+            throw new Error("Unknown action did not default to ASK.");
+          }
+
+          // Explicitly safe actions remain allowed.
+          for (const action of ["read_public_information", "calculate", "search_knowledge"]) {
+            if (permissions.isAllowed(action) !== true) {
+              throw new Error("Expected safe action to be allowed: " + action);
+            }
+          }
+
+          workerApi.reset();
+          const created = workerApi.createWorker({
+            id: "stop-safety-test-worker",
+            name: "STOP Safety Test Worker"
+          });
+          if (created.success !== true) throw new Error("Worker creation failed.");
+
+          const stopped = workerApi.stopWorker(created.worker.id);
+          if (stopped.success !== true || stopped.stopped !== true) {
+            throw new Error("STOP command failed: " + (stopped.error || "unknown error"));
+          }
+          if (stopped.worker?.status !== workerApi.WORKER_STATES.STOPPED) {
+            throw new Error("Worker did not enter STOPPED state.");
+          }
+
+          const repeated = workerApi.stopWorker(created.worker.id);
+          if (repeated.success !== true || repeated.status !== "already-stopped") {
+            throw new Error("Repeated STOP was not handled safely.");
+          }
+
+          console.log("Permission and STOP safety test passed.");
+          console.log(JSON.stringify({
+            protectedActionsApprovalGated: true,
+            unknownActionDefaultsToAsk: true,
+            safeActionsAllowed: true,
+            workerStopped: stopped.worker.status,
+            repeatedStop: repeated.status
+          }, null, 2));
+          NODE
