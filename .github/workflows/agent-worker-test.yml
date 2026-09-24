@@ -50,7 +50,7 @@ jobs:
 
           if (
             worker.AGENT_WORKER_VERSION !==
-            "5.10.0"
+            "5.10.1"
           ) {
             throw new Error(
               "Agent Worker version mismatch."
@@ -103,7 +103,7 @@ jobs:
 
           if (
             status.version !==
-            "5.10.0"
+            "5.10.1"
           ) {
             throw new Error(
               "Agent Worker status version mismatch."
@@ -1822,7 +1822,7 @@ jobs:
 
           if (
             reset.version !==
-            "5.10.0"
+            "5.10.1"
           ) {
             throw new Error(
               "Worker reset version mismatch."
@@ -1874,7 +1874,7 @@ jobs:
 
           if (
             status.version !==
-            "5.10.0"
+            "5.10.1"
           ) {
             throw new Error(
               "Final Worker version mismatch."
@@ -1951,5 +1951,5 @@ jobs:
           echo " Reset: PASSED"
           echo " Final Status: PASSED"
           echo "=============================================="
-          echo " AGENT WORKER v5.10.0 READY"
+          echo " AGENT WORKER v5.10.1 READY"
           echo "=============================================="
