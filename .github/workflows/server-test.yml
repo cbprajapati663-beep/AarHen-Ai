@@ -16,37 +16,66 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       # ======================================================
-      # NODE
+      # NODE.JS
       # ======================================================
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       # ======================================================
-      # INSTALL
+      # NPM CACHE
+      # ======================================================
+      #
+      # IMPORTANT:
+      # Do NOT use setup-node cache: npm here because
+      # this repository currently has no package-lock.json.
+      #
+      # We cache npm's download cache manually instead.
+      # ======================================================
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: aarhen-npm-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: |
+            aarhen-npm-${{ runner.os }}-
+
+      # ======================================================
+      # INSTALL DEPENDENCIES
       # ======================================================
 
       - name: Install dependencies
         run: |
-          npm ci --no-audit --no-fund
+          echo "=========================================="
+          echo "INSTALLING DEPENDENCIES"
+          echo "=========================================="
+
+          npm install \
+            --no-audit \
+            --no-fund \
+            --prefer-offline
 
       # ======================================================
-      # RESEARCH ENGINE DIAGNOSTIC
+      # RESEARCH ENGINE VERSION
       # ======================================================
 
-      - name: Verify Research Engine Version
+      - name: Verify Research Engine
         run: |
           echo "=========================================="
-          echo "VERIFYING ACTIVE RESEARCH ENGINE"
+          echo "VERIFYING RESEARCH ENGINE"
           echo "=========================================="
 
           node - <<'NODE'
-          const research = require("./engines/research");
+
+          const research =
+            require("./engines/research");
 
           console.log(
             "Research Engine Version:",
@@ -64,7 +93,7 @@ jobs:
           );
 
           console.log(
-            "Research Status:"
+            "=========================================="
           );
 
           console.log(
@@ -74,10 +103,11 @@ jobs:
               2
             )
           );
+
           NODE
 
       # ======================================================
-      # SYNTAX CHECK
+      # JAVASCRIPT SYNTAX CHECK
       # ======================================================
 
       - name: Validate JavaScript syntax
@@ -87,16 +117,21 @@ jobs:
           echo "=========================================="
 
           node --check engines/research.js
+
           node --check core/orchestrator.js
+
           node --check skills/executor.js
+
           node --check skills/handlers.js
+
           node --check providers/researchProvider.js
+
           node --check providers/providerManager.js
 
-          echo "JavaScript syntax validation passed."
+          echo "JavaScript syntax validation PASSED."
 
       # ======================================================
-      # UNIT TESTS
+      # CORE TESTS
       # ======================================================
 
       - name: Run AarHen tests
@@ -128,6 +163,11 @@ jobs:
           echo "Server PID:"
           cat server.pid
 
+          sleep 1
+
+          echo "Initial server log:"
+          cat server.log || true
+
       # ======================================================
       # WAIT FOR SERVER
       # ======================================================
@@ -138,28 +178,41 @@ jobs:
           echo "WAITING FOR SERVER"
           echo "=========================================="
 
-          for i in $(seq 1 30); do
+          READY=false
 
-            if curl -s http://127.0.0.1:3000/ > /dev/null 2>&1; then
+          for i in $(seq 1 20); do
 
-              echo "Server is ready."
-              exit 0
+            if curl -sS \
+              --max-time 3 \
+              http://127.0.0.1:3000/ \
+              > /dev/null 2>&1; then
+
+              echo "Server is READY."
+
+              READY=true
+
+              break
 
             fi
 
-            echo "Waiting... attempt $i/30"
+            echo "Waiting for server... $i/20"
 
             sleep 1
 
           done
 
-          echo "=========================================="
-          echo "SERVER FAILED TO START"
-          echo "=========================================="
+          if [ "$READY" != "true" ]; then
 
-          cat server.log || true
+            echo "=========================================="
+            echo "SERVER FAILED TO START"
+            echo "=========================================="
 
-          exit 1
+            echo "Server log:"
+            cat server.log || true
+
+            exit 1
+
+          fi
 
       # ======================================================
       # SERVER HEALTH
@@ -168,18 +221,18 @@ jobs:
       - name: Server health check
         run: |
           echo "=========================================="
-          echo "SERVER HEALTH"
+          echo "SERVER HEALTH CHECK"
           echo "=========================================="
 
           curl -sS \
-            --max-time 20 \
+            --max-time 10 \
             http://127.0.0.1:3000/ \
             || true
 
           echo
 
       # ======================================================
-      # RESEARCH TEST
+      # WEB RESEARCH TEST
       # ======================================================
 
       - name: Test AarHen web research
@@ -208,7 +261,7 @@ jobs:
 
           echo
           echo "=========================================="
-          echo "VALIDATING RESEARCH RESPONSE"
+          echo "VALIDATING RESEARCH"
           echo "=========================================="
 
           node - "$RESPONSE" <<'NODE'
@@ -229,19 +282,38 @@ jobs:
               "ERROR: Response is not valid JSON."
             );
 
-            console.error(
-              raw
-            );
+            console.error(raw);
 
             process.exit(1);
           }
 
 
           const research =
+
             data.research ||
+
             data.execution?.research ||
+
             data.result?.research ||
+
+            data.execution?.result ||
+
             {};
+
+
+          const sourceCount =
+
+            Number(
+              research.sourceCount
+            ) ||
+
+            (
+              Array.isArray(
+                research.sources
+              )
+                ? research.sources.length
+                : 0
+            );
 
 
           console.log(
@@ -257,15 +329,15 @@ jobs:
           console.log(
             "Research engine version:",
             research.version ||
+
             research.verification?.version ||
+
             "not-exposed"
           );
 
           console.log(
             "Source count:",
-            research.sourceCount ||
-            research.sources?.length ||
-            0
+            sourceCount
           );
 
           console.log(
@@ -281,12 +353,18 @@ jobs:
           console.log(
             "Verification status:",
             research.verificationStatus ||
+
             research.verification?.status
           );
 
           console.log(
             "Research status:",
             research.researchStatus
+          );
+
+          console.log(
+            "Provider:",
+            research.provider
           );
 
           console.log(
@@ -299,34 +377,33 @@ jobs:
           );
 
 
-          /*
-           * Diagnostic validation
-           */
+          console.log(
+            "=========================================="
+          );
+
+          console.log(
+            "VERIFICATION DETAILS"
+          );
+
+          console.log(
+            JSON.stringify(
+              research.verification,
+              null,
+              2
+            )
+          );
+
 
           if (
-            !research ||
             research.success === false
           ) {
 
             console.error(
-              "ERROR: AarHen research request failed."
+              "ERROR: Research request failed."
             );
 
             process.exit(1);
           }
-
-
-          const sourceCount =
-            Number(
-              research.sourceCount
-            ) ||
-            (
-              Array.isArray(
-                research.sources
-              )
-                ? research.sources.length
-                : 0
-            );
 
 
           if (
@@ -334,7 +411,7 @@ jobs:
           ) {
 
             console.error(
-              "ERROR: Research returned fewer than 2 sources."
+              "ERROR: Fewer than 2 research sources returned."
             );
 
             process.exit(1);
@@ -350,22 +427,15 @@ jobs:
             );
 
             console.error(
-              "Verification object:",
+              "Full verification object:"
+            );
+
+            console.error(
               JSON.stringify(
                 research.verification,
                 null,
                 2
               )
-            );
-
-            console.error(
-              "Source count:",
-              sourceCount
-            );
-
-            console.error(
-              "Confidence:",
-              research.confidence
             );
 
             process.exit(1);
@@ -379,7 +449,7 @@ jobs:
           ) {
 
             console.error(
-              "ERROR: Verified confidence is below 0.80."
+              "ERROR: Confidence is below 0.80."
             );
 
             process.exit(1);
@@ -412,7 +482,16 @@ jobs:
               "message": "Research current auto financing trends in 2026 and learn only the verified information."
             }')
 
+          echo "=========================================="
+          echo "VERIFY + LEARN RAW RESPONSE"
+          echo "=========================================="
+
           echo "$RESPONSE"
+
+          echo
+          echo "=========================================="
+          echo "VERIFY + LEARN VALIDATION"
+          echo "=========================================="
 
           node - "$RESPONSE" <<'NODE'
 
@@ -426,26 +505,35 @@ jobs:
             data =
               JSON.parse(raw);
 
-          } catch {
+          } catch (error) {
 
             console.error(
-              "Invalid JSON response."
+              "ERROR: Invalid JSON response."
             );
+
+            console.error(raw);
 
             process.exit(1);
           }
 
 
           const research =
+
             data.research ||
+
             data.execution?.research ||
+
             data.result?.research ||
+
             {};
 
 
           const learning =
+
             research.learning ||
+
             data.execution?.learning ||
+
             null;
 
 
@@ -470,7 +558,15 @@ jobs:
           );
 
           console.log(
-            "Learning object:",
+            "Source count:",
+            research.sourceCount
+          );
+
+          console.log(
+            "Learning:"
+          );
+
+          console.log(
             JSON.stringify(
               learning,
               null,
@@ -506,19 +602,15 @@ jobs:
 
 
           /*
-           * Learning may legitimately fail if
-           * the learning engine is unavailable,
-           * so we expose the diagnostic result
-           * rather than hiding it.
+           * Learning is inspected separately.
+           *
+           * We do not pretend learning succeeded
+           * when the learning engine reports failure.
            */
 
           if (
             learning
           ) {
-
-            console.log(
-              "Learning present."
-            );
 
             console.log(
               "Learning learned:",
@@ -547,6 +639,7 @@ jobs:
             );
           }
 
+
           console.log(
             "VERIFY + LEARN VALIDATION PASSED."
           );
@@ -560,8 +653,25 @@ jobs:
       - name: Show server logs
         if: always()
         run: |
+
           echo "=========================================="
           echo "AARHEN SERVER LOG"
           echo "=========================================="
 
           cat server.log || true
+
+      # ======================================================
+      # STOP SERVER
+      # ======================================================
+
+      - name: Stop server
+        if: always()
+        run: |
+
+          if [ -f server.pid ]; then
+
+            kill $(cat server.pid) 2>/dev/null || true
+
+          fi
+
+          echo "Server cleanup completed."
