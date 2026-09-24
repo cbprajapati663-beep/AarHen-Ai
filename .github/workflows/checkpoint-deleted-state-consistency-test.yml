@@ -1,0 +1,86 @@
+name: AarHen Checkpoint Deleted-State Consistency Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-deleted-state-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify deleted checkpoint consistency
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "deleted-state-agent",
+            name: "Deleted checkpoint consistency test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "deleted-state-agent",
+            "Check behavior after checkpoint deletion",
+            { id: "deleted-state-task" }
+          );
+          assert(created.success, "Task creation failed.");
+
+          assert(manager.startTask("deleted-state-task").success, "Task start failed.");
+
+          const saved = bridge.saveTaskCheckpoint("deleted-state-task", {
+            id: "deleted-state-checkpoint",
+            reason: "Checkpoint before deletion"
+          });
+          assert(saved.success, "Checkpoint save failed.");
+
+          const before = bridge.compareWithCheckpoint("deleted-state-task");
+          assert(before.success && before.checkpointExists, "Saved checkpoint should be visible.");
+
+          const deleted = bridge.deleteCheckpoint("deleted-state-checkpoint");
+          assert(deleted.success, "Checkpoint deletion failed.");
+
+          const after = bridge.compareWithCheckpoint("deleted-state-task");
+          assert(after.success, "Comparison should succeed after checkpoint deletion.");
+          assert(after.checkpointExists === false, "Deleted checkpoint still appears to exist.");
+          assert(after.changed === false, "Missing checkpoint should not be labeled as drift.");
+          assert(Array.isArray(after.differences) && after.differences.length === 0,
+            "No-checkpoint comparison should return no differences.");
+
+          const candidate = bridge.getRecoveryCandidate("deleted-state-task");
+          assert(candidate.success && candidate.recoverable === false,
+            "Task without a checkpoint must not be recoverable.");
+
+          const plan = bridge.buildRecoveryPlan("deleted-state-task");
+          assert(plan.success && plan.recoverable === false,
+            "Task without a checkpoint must not produce a recoverable plan.");
+
+          const live = manager.getTask("deleted-state-task");
+          assert(live.success && live.task.status === "running",
+            "Deleting checkpoint or inspecting recovery changed live task state.");
+
+          console.log("Checkpoint deleted-state consistency tests passed.");
+          console.log(JSON.stringify({
+            checkpointExistedBeforeDelete: before.checkpointExists,
+            checkpointExistsAfterDelete: after.checkpointExists,
+            driftAfterDelete: after.changed,
+            recoverableAfterDelete: plan.recoverable,
+            liveTaskStatus: live.task.status
+          }, null, 2));
+          NODE
