@@ -254,6 +254,54 @@ function shouldResearch(
 
 
 // ============================================================
+// COLLECT RESEARCH SOURCES
+// ============================================================
+
+function collectResearchSources(
+    result
+) {
+
+    const candidates = [
+
+        result?.sources,
+
+        result?.results,
+
+        result?.research?.sources,
+        result?.research?.results,
+
+        result?.result?.sources,
+        result?.result?.results,
+
+        result?.raw?.sources,
+        result?.raw?.results,
+
+        result?.research?.raw?.sources,
+        result?.research?.raw?.results,
+
+        result?.result?.raw?.sources,
+        result?.result?.raw?.results,
+
+        result?.data?.sources,
+        result?.data?.results
+    ];
+
+    for (const candidate of candidates) {
+
+        if (
+            Array.isArray(candidate) &&
+            candidate.length > 0
+        ) {
+
+            return candidate;
+        }
+    }
+
+    return [];
+}
+
+
+// ============================================================
 // NORMALIZE RESEARCH RESULT
 // ============================================================
 
@@ -268,39 +316,15 @@ function normalizeResearchResult(
         result ||
         {};
 
+
     // --------------------------------------------------------
     // SOURCE COLLECTION
     // --------------------------------------------------------
 
-    let sources = [];
-
-    if (
-        Array.isArray(
-            rawResearch.sources
-        )
-    ) {
-
-        sources =
-            rawResearch.sources;
-
-    } else if (
-        Array.isArray(
-            rawResearch.results
-        )
-    ) {
-
-        sources =
-            rawResearch.results;
-
-    } else if (
-        Array.isArray(
-            result?.sources
-        )
-    ) {
-
-        sources =
-            result.sources;
-    }
+    let sources =
+        collectResearchSources(
+            result
+        );
 
 
     // --------------------------------------------------------
@@ -564,6 +588,7 @@ async function performResearch(
         context.researchLanguage ||
         "auto";
 
+
     try {
 
         const result =
@@ -727,29 +752,8 @@ function determinePermission(
     routing
 ) {
 
-    if (!routing.selectedSkill) {
-
-        return permissions.check(
-            "execute_external_code"
-        );
-    }
-
-    const category =
-        routing
-            .selectedSkill
-            .category;
-
     if (
-        category === "security"
-    ) {
-
-        return permissions.check(
-            "security_testing_against_external_target"
-        );
-    }
-
-    if (
-        category === "coding"
+        !routing.selectedSkill
     ) {
 
         return permissions.check(
@@ -757,116 +761,39 @@ function determinePermission(
         );
     }
 
+
+    const skill =
+        routing.selectedSkill;
+
+
     if (
-
-        category === "finance" ||
-
-        category === "calculation" ||
-
-        category === "knowledge" ||
-
-        category === "research" ||
-
-        category === "data" ||
-
-        category === "documents" ||
-
-        category === "business"
+        skill.category === "coding"
     ) {
 
         return permissions.check(
-            "read_public_information"
+            "execute_external_code"
         );
     }
 
-    return permissions.check(
-        "execute_external_code"
-    );
-}
 
+    if (
+        skill.category === "research"
+    ) {
 
-// ============================================================
-// BUILD EXECUTION CONTEXT
-// ============================================================
+        return permissions.check(
+            "web_access"
+        );
+    }
 
-function buildExecutionContext(
-    brainResult,
-    routing,
-    intentResult,
-    context = {}
-) {
 
     return {
 
-        ...context,
+        allowed: true,
 
-        brain: {
+        requiresApproval: false,
 
-            request:
-                brainResult.request,
-
-            language:
-                brainResult.language,
-
-            memory:
-                brainResult.memory,
-
-            knowledge:
-                brainResult.knowledge,
-
-            thinkingContext:
-                brainResult
-                    .thinkingContext
-        },
-
-        memoryManagement: {
-
-            decision:
-                brainResult
-                    .memory
-                    ?.decision || null,
-
-            managedRecall:
-                brainResult
-                    .memory
-                    ?.managed || [],
-
-            importantRecall:
-                brainResult
-                    .memory
-                    ?.important || [],
-
-            verifiedRecall:
-                brainResult
-                    .memory
-                    ?.verified || []
-        },
-
-        routing: {
-
-            selectedSkill:
-                routing
-                    .selectedSkill,
-
-            matches:
-                routing
-                    .matches
-        },
-
-        intent: {
-
-            category:
-                intentResult
-                    .category,
-
-            intent:
-                intentResult
-                    .intent,
-
-            parameters:
-                intentResult
-                    .parameters
-        }
+        reason:
+            "No special permission required."
     };
 }
 
@@ -880,25 +807,22 @@ function determineMemoryAction(
     context = {}
 ) {
 
-    const decision =
-        brainResult
-            ?.memory
-            ?.decision;
-
-    if (!decision) {
+    if (
+        context.remember === true
+    ) {
 
         return {
 
-            action:
-                "none",
-
-            shouldStore:
-                false,
+            shouldStore: true,
 
             reason:
-                "No memory decision available."
+                "Explicit memory request.",
+
+            mode:
+                "explicit"
         };
     }
+
 
     if (
         context.remember === false
@@ -906,126 +830,46 @@ function determineMemoryAction(
 
         return {
 
-            action:
-                "do-not-remember",
-
-            shouldStore:
-                false,
+            shouldStore: false,
 
             reason:
-                "Memory explicitly disabled by user."
+                "Memory storage explicitly disabled.",
+
+            mode:
+                "disabled"
         };
     }
 
+
     if (
-        context.remember === true
+        brainResult &&
+        brainResult.memoryDecision
     ) {
 
         return {
 
-            action:
-                "remember",
-
             shouldStore:
-                true,
-
-            automatic:
-                false,
+                brainResult.memoryDecision.remember === true,
 
             reason:
-                "User explicitly requested memory.",
+                brainResult.memoryDecision.reason ||
+                "Brain memory decision.",
 
-            type:
-                decision.type,
-
-            importance:
-                decision.importance,
-
-            importanceScore:
-                decision.importanceScore,
-
-            confidence:
-                decision.confidence
+            mode:
+                "automatic"
         };
     }
 
-    if (
-        context.autoRemember === true
-    ) {
-
-        if (
-            decision.shouldRemember
-        ) {
-
-            return {
-
-                action:
-                    "auto-remember",
-
-                shouldStore:
-                    true,
-
-                automatic:
-                    true,
-
-                reason:
-                    decision.reason,
-
-                type:
-                    decision.type,
-
-                importance:
-                    decision.importance,
-
-                importanceScore:
-                    decision.importanceScore,
-
-                confidence:
-                    decision.confidence
-            };
-        }
-
-        return {
-
-            action:
-                "auto-skip",
-
-            shouldStore:
-                false,
-
-            automatic:
-                true,
-
-            reason:
-                decision.reason
-        };
-    }
 
     return {
 
-        action:
-            "evaluate-only",
-
-        shouldStore:
-            false,
-
-        automatic:
-            false,
+        shouldStore: false,
 
         reason:
-            decision.reason,
+            "No memory decision available.",
 
-        type:
-            decision.type,
-
-        importance:
-            decision.importance,
-
-        importanceScore:
-            decision.importanceScore,
-
-        confidence:
-            decision.confidence
+        mode:
+            "evaluate-only"
     };
 }
 
@@ -1050,135 +894,127 @@ function storeMemory(
 
             success: true,
 
-            stored:
-                false,
+            stored: false,
 
             status:
-                "memory-not-written",
-
-            reason:
-                memoryAction
-                    ?.reason ||
-                "Memory storage not requested."
+                "memory-not-written"
         };
     }
 
 
-    if (
-        context.remember === true
-    ) {
+    try {
 
-        return memoryManager.remember({
+        const result =
+            memoryManager.remember({
 
-            type:
-                context.memoryType ||
-                brainResult
-                    ?.memory
-                    ?.decision
-                    ?.type,
+                content:
+                    request,
 
-            title:
-                context.memoryTitle ||
-                "AarHen User Memory",
+                title:
+                    context.memoryTitle ||
+                    "AarHen Interaction Memory",
 
-            category:
-                context.memoryCategory ||
-                brainResult
-                    ?.memory
-                    ?.decision
-                    ?.type ||
-                "general",
+                category:
+                    context.memoryCategory ||
+                    "conversation",
 
-            content:
-                request,
+                source:
+                    context.memorySource ||
+                    "orchestrator",
 
-            source:
-                context.memorySource ||
-                "user",
+                importance:
+                    context.memoryImportance ||
+                    "normal",
 
-            importance:
-                context.memoryImportance ||
-                brainResult
-                    ?.memory
-                    ?.decision
-                    ?.importance,
+                confidence:
+                    brainResult?.confidence ||
+                    0.60,
 
-            confidence:
-                typeof context.memoryConfidence ===
-                "number"
+                verified:
+                    Boolean(
+                        brainResult?.verified
+                    )
+            });
 
-                    ? context.memoryConfidence
 
-                    : brainResult
-                        ?.memory
-                        ?.decision
-                        ?.confidence,
+        return {
 
-            tags:
-                Array.isArray(
-                    context.memoryTags
-                )
-                    ? context.memoryTags
-                    : [],
+            success: true,
 
-            verified:
+            stored: true,
+
+            status:
+                result?.status ||
+                "memory-stored",
+
+            memoryId:
+                result?.memoryId ||
+                result?.id ||
+                null,
+
+            duplicate:
                 Boolean(
-                    context.memoryVerified
+                    result?.duplicate
                 ),
 
-            remember:
-                true
-        });
+            result
+        };
+
+    } catch (error) {
+
+        return {
+
+            success: false,
+
+            stored: false,
+
+            status:
+                "memory-write-error",
+
+            error:
+                error.message
+        };
     }
-
-
-    return memoryManager.autoRemember({
-
-        type:
-            brainResult
-                ?.memory
-                ?.decision
-                ?.type,
-
-        title:
-            "AarHen Automatic Memory",
-
-        category:
-            brainResult
-                ?.memory
-                ?.decision
-                ?.type ||
-            "general",
-
-        content:
-            request,
-
-        source:
-            "automatic-memory",
-
-        importance:
-            brainResult
-                ?.memory
-                ?.decision
-                ?.importance,
-
-        confidence:
-            brainResult
-                ?.memory
-                ?.decision
-                ?.confidence,
-
-        verified:
-            false,
-
-        remember:
-            true
-    });
 }
 
 
 // ============================================================
-// PROCESS REQUEST
+// BUILD EXECUTION CONTEXT
+// ============================================================
+
+function buildExecutionContext(
+    brainResult,
+    routing,
+    intentResult,
+    context = {}
+) {
+
+    return {
+
+        brain:
+            brainResult,
+
+        routing,
+
+        intent:
+            intentResult,
+
+        userContext:
+            context,
+
+        memory:
+            brainResult?.memory ||
+            null,
+
+        knowledge:
+            brainResult?.knowledge ||
+            null
+    };
+}
+
+
+// ============================================================
+// MAIN PROCESS
 // ============================================================
 
 async function process(
@@ -1186,60 +1022,42 @@ async function process(
     context = {}
 ) {
 
-    // --------------------------------------------------------
-    // INPUT VALIDATION
-    // --------------------------------------------------------
-
-    if (
-        !input ||
-        typeof input !== "string"
-    ) {
-
-        return {
-
-            success: false,
-
-            error:
-                "Invalid input."
-        };
-    }
-
-
     const request =
-        input.trim();
+        typeof input === "string"
+            ? input
+            : input?.request ||
+              input?.query ||
+              "";
 
 
-    if (!request) {
+    if (!request.trim()) {
 
         return {
 
             success: false,
 
             error:
-                "Input is empty."
+                "AarHen requires a request.",
+
+            status:
+                "invalid-request"
         };
     }
 
 
     // --------------------------------------------------------
-    // MASTER BRAIN
+    // BRAIN
     // --------------------------------------------------------
 
     const brainResult =
-        Brain.think(
+        await Brain.think(
             request,
             context
         );
 
 
-    if (!brainResult.success) {
-
-        return brainResult;
-    }
-
-
     // --------------------------------------------------------
-    // SKILL ROUTING
+    // ROUTING
     // --------------------------------------------------------
 
     const routing =
@@ -1248,103 +1066,51 @@ async function process(
         );
 
 
-    if (!routing.success) {
-
-        return routing;
-    }
-
-
     // --------------------------------------------------------
-    // INTENT ANALYSIS
+    // INTENT
     // --------------------------------------------------------
 
-    let intentResult =
+    const intentResult =
         intent.analyzeIntent(
             request
         );
 
 
-    if (!intentResult.success) {
-
-        return intentResult;
-    }
-
-
     // --------------------------------------------------------
-    // EXPLICIT CONTEXT INTENT OVERRIDE
-    // --------------------------------------------------------
-
-    if (
-        String(
-            context.intent || ""
-        )
-            .toLowerCase() === "research"
-    ) {
-
-        intentResult = {
-
-            ...intentResult,
-
-            success:
-                true,
-
-            category:
-                "research",
-
-            intent:
-                "web_research",
-
-            parameters: {
-
-                ...(
-                    intentResult.parameters ||
-                    {}
-                ),
-
-                maxSources:
-                    Number(
-                        context.maxResearchSources
-                    ) || 5
-            }
-        };
-    }
-
-
-    // --------------------------------------------------------
-    // LIVE WEB RESEARCH DECISION
+    // RESEARCH DECISION
     // --------------------------------------------------------
 
     const researchDecision =
         shouldResearch(
-
             request,
-
             intentResult,
-
             routing,
-
             context
         );
 
 
     // --------------------------------------------------------
-    // DEFAULT RESEARCH RESULT
+    // LIVE RESEARCH
     // --------------------------------------------------------
 
     let researchResult = {
 
-        success: true,
-
         required:
+            researchDecision.required,
+
+        reason:
+            researchDecision.reason,
+
+        success:
             false,
 
         status:
-            "research-not-required",
+            "not-researched",
 
-        research:
-            null,
+        query:
+            request,
 
-        context:
+        provider:
             null,
 
         sources:
@@ -1362,14 +1128,19 @@ async function process(
         verificationStatus:
             "not-researched",
 
-        reason:
-            researchDecision.reason
+        verification:
+            null,
+
+        learning:
+            null,
+
+        research:
+            null,
+
+        context:
+            null
     };
 
-
-    // --------------------------------------------------------
-    // LIVE WEB RESEARCH
-    // --------------------------------------------------------
 
     if (
         researchDecision.required
@@ -1381,49 +1152,15 @@ async function process(
                 context
             );
 
-
         researchResult.required =
             true;
-
 
         researchResult.reason =
             researchDecision.reason;
 
-
-        if (
-            !researchResult.success
-        ) {
-
-            return {
-
-                success: false,
-
-                request,
-
-                brain:
-                    brainResult,
-
-                routing,
-
-                intent:
-                    intentResult,
-
-                research:
-                    researchResult,
-
-                status:
-                    "research-failed",
-
-                error:
-                    researchResult.error,
-
-                message:
-                    "AarHen could not complete the required live web research.",
-
-                timestamp:
-                    new Date().toISOString()
-            };
-        }
+        researchResult.query =
+            researchResult.query ||
+            request;
     }
 
 
@@ -1439,7 +1176,7 @@ async function process(
 
 
     // --------------------------------------------------------
-    // MEMORY ACTION DECISION
+    // MEMORY ACTION
     // --------------------------------------------------------
 
     const memoryAction =
@@ -1655,30 +1392,45 @@ async function process(
             });
 
 
-    // ========================================================
+    // --------------------------------------------------------
     // FINAL RESEARCH RESULT
-    // ========================================================
-    //
-    // For research requests, prefer the research result
-    // produced by the Skill Executor because it contains
-    // the complete source + verification + learning pipeline.
-    //
-    // For non-research requests, preserve the original
-    // researchResult.
-    // ========================================================
+    // --------------------------------------------------------
 
     const finalResearchResult =
         intentResult.category === "research" &&
         execution?.research
             ? {
+
                 ...researchResult,
-                ...execution.research
+
+                ...execution.research,
+
+                sources:
+                    Array.isArray(
+                        execution.research.sources
+                    ) &&
+                    execution.research.sources.length > 0
+
+                        ? execution.research.sources
+
+                        : researchResult.sources,
+
+                sourceCount:
+                    Array.isArray(
+                        execution.research.sources
+                    ) &&
+                    execution.research.sources.length > 0
+
+                        ? execution.research.sources.length
+
+                        : researchResult.sourceCount
             }
+
             : researchResult;
 
 
     // --------------------------------------------------------
-    // FINAL RESULT
+    // ORCHESTRATION RESULT
     // --------------------------------------------------------
 
     const orchestrationResult = {
