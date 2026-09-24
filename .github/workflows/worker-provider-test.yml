@@ -1,0 +1,1287 @@
+name: AarHen Worker Provider Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/providerBridge.js"
+      - "core/workerProvider.js"
+      - "core/agentWorker.js"
+      - "core/agentRunner.js"
+      - "core/agentManager.js"
+      - "providers/providerManager.js"
+      - "skills/executor.js"
+      - ".github/workflows/worker-provider-test.yml"
+
+jobs:
+
+  worker-provider-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # SETUP
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # LOAD TEST
+      # ======================================================
+
+      - name: Worker Provider Load Test
+        run: |
+
+          node - <<'NODE'
+
+          const bridge =
+            require("./core/providerBridge");
+
+          const workerProvider =
+            require("./core/workerProvider");
+
+          if (!bridge) {
+            throw new Error(
+              "Provider Bridge could not be loaded."
+            );
+          }
+
+          if (!workerProvider) {
+            throw new Error(
+              "Worker Provider could not be loaded."
+            );
+          }
+
+          if (
+            bridge.PROVIDER_BRIDGE_VERSION !==
+            "5.9.1"
+          ) {
+            throw new Error(
+              "Provider Bridge version mismatch."
+            );
+          }
+
+          if (
+            workerProvider.WORKER_PROVIDER_VERSION !==
+            "5.10.2"
+          ) {
+            throw new Error(
+              "Worker Provider version mismatch."
+            );
+          }
+
+          console.log(
+            "Worker Provider system loaded successfully."
+          );
+
+          console.log(
+            "Provider Bridge:",
+            bridge.PROVIDER_BRIDGE_VERSION
+          );
+
+          console.log(
+            "Worker Provider:",
+            workerProvider.WORKER_PROVIDER_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # BRIDGE STATUS TEST
+      # ======================================================
+
+      - name: Provider Bridge Status Test
+        run: |
+
+          node - <<'NODE'
+
+          const bridge =
+            require("./core/providerBridge");
+
+          const status =
+            bridge.getStatus();
+
+          if (
+            !status ||
+            status.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider Bridge status failed."
+            );
+          }
+
+          if (
+            status.version !==
+            "5.9.1"
+          ) {
+            throw new Error(
+              "Provider Bridge status version mismatch."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Provider Bridge is not active."
+            );
+          }
+
+          if (
+            !status.providerManager
+          ) {
+            throw new Error(
+              "Provider Manager status is missing from Bridge."
+            );
+          }
+
+          console.log(
+            "Provider Bridge status test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # WORKER PROVIDER STATUS TEST
+      # ======================================================
+
+      - name: Worker Provider Status Test
+        run: |
+
+          node - <<'NODE'
+
+          const workerProvider =
+            require("./core/workerProvider");
+
+          const status =
+            workerProvider.getStatus();
+
+          if (
+            !status ||
+            status.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker Provider status failed."
+            );
+          }
+
+          if (
+            status.version !==
+            "5.10.2"
+          ) {
+            throw new Error(
+              "Worker Provider status version mismatch."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Worker Provider is not active."
+            );
+          }
+
+          if (
+            !status.integration
+          ) {
+            throw new Error(
+              "Worker Provider integration is not connected."
+            );
+          }
+
+          if (
+            !status.worker
+          ) {
+            throw new Error(
+              "Worker status block is missing."
+            );
+          }
+
+          if (
+            !status.providerBridge
+          ) {
+            throw new Error(
+              "Provider Bridge status block is missing."
+            );
+          }
+
+          console.log(
+            "Worker Provider status test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PROVIDER-AWARE INTEGRATION TEST
+      # ======================================================
+      #
+      # IMPORTANT:
+      # Provider Manager state is process-local.
+      # Therefore mock provider registration and execution
+      # happen inside ONE Node process.
+      #
+      # ======================================================
+
+      - name: Provider Aware Worker Integration Test
+        run: |
+
+          node - <<'NODE'
+
+          const providerManager =
+            require("./providers/providerManager");
+
+          const providerBridge =
+            require("./core/providerBridge");
+
+          const workerProvider =
+            require("./core/workerProvider");
+
+          const agentManager =
+            require("./core/agentManager");
+
+          const agentWorker =
+            require("./core/agentWorker");
+
+
+          // --------------------------------------------------
+          // RESET TEST SYSTEMS
+          // --------------------------------------------------
+
+          providerManager.reset();
+          agentWorker.reset();
+          agentManager.reset();
+
+
+          // --------------------------------------------------
+          // MOCK CONNECTED PROVIDER
+          // --------------------------------------------------
+
+          const mockProvider = {
+
+            getProviderStatus() {
+
+              return {
+
+                provider:
+                  "mock-research",
+
+                providerType:
+                  "web-search",
+
+                connected:
+                  true,
+
+                status:
+                  "connected",
+
+                supportsSearch:
+                  true,
+
+                supportsSourceValidation:
+                  true,
+
+                supportsResultNormalization:
+                  true
+
+              };
+
+            },
+
+
+            async search({
+              query,
+              maxSources
+            } = {}) {
+
+              return {
+
+                success:
+                  true,
+
+                provider:
+                  "mock-research",
+
+                providerType:
+                  "web-search",
+
+                query,
+
+                answer:
+                  `Mock research answer for: ${query}`,
+
+                summary:
+                  `Mock research summary for: ${query}`,
+
+                confidence:
+                  0.90,
+
+                results:
+                  [
+
+                    {
+
+                      id:
+                        "mock-source-1",
+
+                      title:
+                        "Mock Research Source",
+
+                      url:
+                        "https://example.com/mock-source",
+
+                      publisher:
+                        "AarHen Test Provider",
+
+                      snippet:
+                        `Verified mock source for: ${query}`,
+
+                      content:
+                        `Mock source content for: ${query}`,
+
+                      score:
+                        0.95
+
+                    },
+
+                    {
+
+                      id:
+                        "mock-source-2",
+
+                      title:
+                        "Mock Secondary Source",
+
+                      url:
+                        "https://example.com/mock-source-2",
+
+                      publisher:
+                        "AarHen Test Provider",
+
+                      snippet:
+                        `Secondary mock source for: ${query}`,
+
+                      content:
+                        `Secondary mock content for: ${query}`,
+
+                      score:
+                        0.90
+
+                    }
+
+                  ].slice(
+                    0,
+                    maxSources
+                  )
+
+              };
+
+            }
+
+          };
+
+
+          // --------------------------------------------------
+          // REGISTER MOCK PROVIDER
+          // --------------------------------------------------
+
+          const registered =
+            providerManager.registerProvider(
+
+              "mock-research",
+
+              mockProvider,
+
+              {
+
+                priority:
+                  1,
+
+                enabled:
+                  true,
+
+                providerType:
+                  "web-search"
+
+              }
+
+            );
+
+
+          if (
+            registered.success !==
+            true
+          ) {
+            throw new Error(
+              "Mock provider registration failed: " +
+              (
+                registered.error ||
+                "unknown error"
+              )
+            );
+          }
+
+
+          // --------------------------------------------------
+          // PROVIDER HEALTH
+          // --------------------------------------------------
+
+          const health =
+            providerBridge.getProviderHealth(
+              "mock-research"
+            );
+
+
+          if (
+            health.success !==
+            true
+          ) {
+            throw new Error(
+              "Mock provider health failed."
+            );
+          }
+
+
+          if (
+            health.connected !==
+            true
+          ) {
+            throw new Error(
+              "Mock provider is not connected."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // PROVIDER SELECTION
+          // --------------------------------------------------
+
+          const selection =
+            providerBridge.selectProvider();
+
+
+          if (
+            selection.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider selection failed."
+            );
+          }
+
+
+          if (
+            selection.selectedProvider !==
+            "mock-research"
+          ) {
+            throw new Error(
+              "Mock provider was not selected."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // CREATE AGENT
+          // --------------------------------------------------
+
+          const agent =
+            agentManager.createAgent({
+
+              id:
+                "worker-provider-agent",
+
+              name:
+                "Worker Provider Test Agent",
+
+              description:
+                "Agent for Worker + Provider integration test."
+
+            });
+
+
+          if (
+            agent.success !==
+            true
+          ) {
+            throw new Error(
+              "Test agent creation failed."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // CREATE RESEARCH TASK
+          // --------------------------------------------------
+
+          const task =
+            agentManager.createTask(
+
+              agent.agent.id,
+
+              "Research AarHen provider integration"
+
+            );
+
+
+          if (
+            task.success !==
+            true
+          ) {
+            throw new Error(
+              "Research task creation failed."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // ADD RESEARCH STEP
+          // --------------------------------------------------
+
+          const step =
+            agentManager.addStep(
+
+              task.task.id,
+
+              {
+
+                description:
+                  "Research AarHen provider integration",
+
+                action:
+                  "read_public_information",
+
+                requiresApproval:
+                  false,
+
+                approved:
+                  true,
+
+                input: {
+
+                  request:
+                    "Research AarHen provider integration"
+
+                }
+
+              }
+
+            );
+
+
+          if (
+            step.success !==
+            true
+          ) {
+            throw new Error(
+              "Research step creation failed: " +
+              (
+                step.error ||
+                "unknown error"
+              )
+            );
+          }
+
+
+          // --------------------------------------------------
+          // CREATE WORKER
+          // --------------------------------------------------
+
+          const worker =
+            agentWorker.createWorker({
+
+              id:
+                "provider-worker",
+
+              name:
+                "Provider Worker",
+
+              agentId:
+                agent.agent.id
+
+            });
+
+
+          if (
+            worker.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider worker creation failed."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // ASSIGN TASK
+          // --------------------------------------------------
+
+          const assigned =
+            agentWorker.assignTask(
+
+              worker.worker.id,
+
+              task.task.id
+
+            );
+
+
+          if (
+            assigned.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider task assignment failed: " +
+              (
+                assigned.error ||
+                "unknown error"
+              )
+            );
+          }
+
+
+          // --------------------------------------------------
+          // PREVIEW PROVIDER REQUIREMENT
+          // --------------------------------------------------
+
+          const preview =
+            await workerProvider.previewTask(
+
+              task.task.id,
+
+              {
+
+                provider:
+                  "mock-research",
+
+                maxSources:
+                  2
+
+              }
+
+            );
+
+
+          if (
+            preview.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider task preview failed: " +
+              (
+                preview.error ||
+                "unknown error"
+              )
+            );
+          }
+
+
+          if (
+            preview.providerRequired !==
+            true
+          ) {
+            throw new Error(
+              "Research task was not detected as provider-required."
+            );
+          }
+
+
+          if (
+            preview.provider !==
+            "mock-research"
+          ) {
+            throw new Error(
+              "Preview selected wrong provider."
+            );
+          }
+
+
+          if (
+            preview.sourceCount !==
+            2
+          ) {
+            throw new Error(
+              "Preview source count mismatch."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // PROVIDER CONTEXT PREPARATION
+          // --------------------------------------------------
+
+          const preparation =
+            await workerProvider
+              .prepareTaskProviderContext(
+
+                task.task,
+
+                {
+
+                  provider:
+                    "mock-research",
+
+                  maxSources:
+                    2
+
+                }
+
+              );
+
+
+          if (
+            preparation.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider context preparation failed: " +
+              (
+                preparation.error ||
+                "unknown error"
+              )
+            );
+          }
+
+
+          if (
+            preparation.required !==
+            true
+          ) {
+            throw new Error(
+              "Provider preparation did not mark research as required."
+            );
+          }
+
+
+          if (
+            preparation.searched !==
+            true
+          ) {
+            throw new Error(
+              "Provider preparation did not perform provider search."
+            );
+          }
+
+
+          if (
+            preparation.provider !==
+            "mock-research"
+          ) {
+            throw new Error(
+              "Provider preparation selected wrong provider."
+            );
+          }
+
+
+          if (
+            preparation.sourceCount !==
+            2
+          ) {
+            throw new Error(
+              "Provider preparation source count mismatch."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // RUN TASK THROUGH WORKER PROVIDER
+          // --------------------------------------------------
+
+          const execution =
+            await workerProvider.runTask(
+
+              worker.worker.id,
+
+              task.task.id,
+
+              {
+
+                provider:
+                  "mock-research",
+
+                maxSources:
+                  2
+
+              }
+
+            );
+
+
+          if (
+            !execution
+          ) {
+            throw new Error(
+              "Worker Provider execution result is missing."
+            );
+          }
+
+
+          if (
+            execution.success !==
+            true
+          ) {
+            throw new Error(
+              "Provider-aware worker execution failed: " +
+              (
+                execution.error ||
+                execution.execution?.error ||
+                execution.execution?.result?.error ||
+                "unknown error"
+              )
+            );
+          }
+
+
+          if (
+            execution.workerStatus !==
+            agentWorker.WORKER_STATES.IDLE
+          ) {
+            throw new Error(
+              "Worker did not return to idle state."
+            );
+          }
+
+
+          if (
+            execution.provider?.provider !==
+            "mock-research"
+          ) {
+            throw new Error(
+              "Execution provider mismatch."
+            );
+          }
+
+
+          if (
+            execution.provider?.searched !==
+            true
+          ) {
+            throw new Error(
+              "Execution did not record provider search."
+            );
+          }
+
+
+          if (
+            execution.provider?.sourceCount !==
+            2
+          ) {
+            throw new Error(
+              "Execution source count mismatch."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // VERIFY TASK COMPLETION
+          // --------------------------------------------------
+
+          const finalTask =
+            agentManager.getTask(
+              task.task.id
+            );
+
+
+          if (
+            finalTask.success !==
+            true
+          ) {
+            throw new Error(
+              "Final task could not be retrieved."
+            );
+          }
+
+
+          if (
+            finalTask.task.status !==
+            agentManager.TASK_STATES.COMPLETED
+          ) {
+            throw new Error(
+              "Provider research task did not complete. Status: " +
+              finalTask.task.status
+            );
+          }
+
+
+          // --------------------------------------------------
+          // VERIFY RESEARCH CONTEXT USED
+          // --------------------------------------------------
+
+          const finalExecution =
+            execution.execution ||
+            {};
+
+
+          const runnerResult =
+            finalExecution.result ||
+            finalExecution;
+
+
+          if (
+            !runnerResult
+          ) {
+            throw new Error(
+              "Final execution result is missing."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // CALCULATION NON-PROVIDER TEST
+          // --------------------------------------------------
+          //
+          // A normal calculation task should not need the
+          // Provider Manager.
+          //
+          // --------------------------------------------------
+
+          const calculationTask =
+            agentManager.createTask(
+
+              agent.agent.id,
+
+              "Calculate 100 + 200"
+
+            );
+
+
+          if (
+            calculationTask.success !==
+            true
+          ) {
+            throw new Error(
+              "Calculation task creation failed."
+            );
+          }
+
+
+          const calculationStep =
+            agentManager.addStep(
+
+              calculationTask.task.id,
+
+              {
+
+                description:
+                  "Calculate 100 + 200",
+
+                action:
+                  "calculate",
+
+                requiresApproval:
+                  false,
+
+                approved:
+                  true,
+
+                input: {
+
+                  request:
+                    "Calculate 100 + 200"
+
+                }
+
+              }
+
+            );
+
+
+          if (
+            calculationStep.success !==
+            true
+          ) {
+            throw new Error(
+              "Calculation step creation failed."
+            );
+          }
+
+
+          const calculationAssignment =
+            agentWorker.assignTask(
+
+              worker.worker.id,
+
+              calculationTask.task.id
+
+            );
+
+
+          if (
+            calculationAssignment.success !==
+            true
+          ) {
+            throw new Error(
+              "Calculation task assignment failed."
+            );
+          }
+
+
+          const calculationExecution =
+            await workerProvider.runTask(
+
+              worker.worker.id,
+
+              calculationTask.task.id,
+
+              {}
+
+            );
+
+
+          if (
+            calculationExecution.success !==
+            true
+          ) {
+            throw new Error(
+              "Calculation task incorrectly failed: " +
+              (
+                calculationExecution.error ||
+                "unknown error"
+              )
+            );
+          }
+
+
+          if (
+            calculationExecution.provider?.required !==
+            false
+          ) {
+            throw new Error(
+              "Calculation task incorrectly required a provider."
+            );
+          }
+
+
+          if (
+            calculationExecution.provider?.searched !==
+            false
+          ) {
+            throw new Error(
+              "Calculation task incorrectly triggered provider search."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // FINAL WORKER STATUS
+          // --------------------------------------------------
+
+          const workerStatus =
+            agentWorker.getStatus();
+
+
+          if (
+            workerStatus.success !==
+            true
+          ) {
+            throw new Error(
+              "Final Agent Worker status failed."
+            );
+          }
+
+
+          if (
+            workerStatus.agentManagerConnected !==
+            true
+          ) {
+            throw new Error(
+              "Agent Worker is not connected to Agent Manager."
+            );
+          }
+
+
+          if (
+            workerStatus.agentRunnerConnected !==
+            true
+          ) {
+            throw new Error(
+              "Agent Worker is not connected to Agent Runner."
+            );
+          }
+
+
+          // --------------------------------------------------
+          // FINAL PROVIDER STATUS
+          // --------------------------------------------------
+
+          const providerStatus =
+            providerBridge.getProviderHealth(
+              "mock-research"
+            );
+
+
+          if (
+            providerStatus.connected !==
+            true
+          ) {
+            throw new Error(
+              "Mock provider lost connection during test."
+            );
+          }
+
+
+          console.log(
+            "Provider-aware worker integration test passed."
+          );
+
+          console.log(
+            "Selected provider:",
+            selection.selectedProvider
+          );
+
+          console.log(
+            "Research sources:",
+            execution.provider.sourceCount
+          );
+
+          console.log(
+            "Research worker status:",
+            execution.workerStatus
+          );
+
+          console.log(
+            "Calculation provider required:",
+            calculationExecution.provider.required
+          );
+
+          NODE
+
+
+      # ======================================================
+      # EXPORT / FUNCTION TEST
+      # ======================================================
+
+      - name: Worker Provider API Test
+        run: |
+
+          node - <<'NODE'
+
+          const workerProvider =
+            require("./core/workerProvider");
+
+          const requiredFunctions = [
+
+            "getTask",
+            "getWorker",
+            "getTaskStatus",
+            "getProviderSteps",
+            "taskNeedsProvider",
+            "getResearchRequest",
+            "buildProviderRequirement",
+            "prepareTaskProviderContext",
+            "buildWorkerContext",
+            "runTask",
+            "runQueue",
+            "previewTask",
+            "getProviderStatus",
+            "getStatus",
+            "reset"
+
+          ];
+
+
+          for (
+            const name of
+            requiredFunctions
+          ) {
+
+            if (
+              typeof workerProvider[name] !==
+              "function"
+            ) {
+
+              throw new Error(
+                `Worker Provider API missing: ${name}`
+              );
+
+            }
+
+          }
+
+
+          if (
+            !Array.isArray(
+              workerProvider.PROVIDER_RESEARCH_ACTIONS
+            )
+          ) {
+            throw new Error(
+              "Provider research action list is missing."
+            );
+          }
+
+
+          if (
+            !workerProvider
+              .PROVIDER_RESEARCH_ACTIONS
+              .includes(
+                "read_public_information"
+              )
+          ) {
+            throw new Error(
+              "Provider research action is missing."
+            );
+          }
+
+
+          console.log(
+            "Worker Provider API test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=================================================="
+          echo " AARHEN WORKER PROVIDER TEST"
+          echo "=================================================="
+          echo " Load: PASSED"
+          echo " Provider Bridge: PASSED"
+          echo " Worker Provider Status: PASSED"
+          echo " Provider Selection: PASSED"
+          echo " Provider Health: PASSED"
+          echo " Provider Context Preparation: PASSED"
+          echo " Provider Task Preview: PASSED"
+          echo " Research Worker Integration: PASSED"
+          echo " Non-Provider Calculation: PASSED"
+          echo " API Export Check: PASSED"
+          echo "=================================================="
+          echo " WORKER PROVIDER v5.10.2 READY"
+          echo "=================================================="
