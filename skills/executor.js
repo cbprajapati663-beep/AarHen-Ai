@@ -9,7 +9,6 @@ const handlers =
 const research =
     require("../engines/research");
 
-
 // ============================================================
 // EXECUTION CONTEXT
 // ============================================================
@@ -41,6 +40,15 @@ function prepareContext(intentData = {}) {
 
         thinkingContext,
 
+        // --------------------------------------------------------
+        // IMPORTANT:
+        // Preserve orchestrator research context.
+        // This prevents executor from performing another web search.
+        // --------------------------------------------------------
+
+        research:
+            context.research || null,
+
         selectedSkill:
             context.routing?.selectedSkill || null,
 
@@ -48,18 +56,9 @@ function prepareContext(intentData = {}) {
             context.routing || null,
 
         intent:
-            context.intent || null,
-
-        // ----------------------------------------------------
-        // IMPORTANT:
-        // Preserve research context injected by orchestrator.
-        // ----------------------------------------------------
-
-        research:
-            context.research || null
+            context.intent || null
     };
 }
-
 
 // ============================================================
 // CONTEXT SUMMARY
@@ -95,6 +94,13 @@ function createContextSummary(context = {}) {
             ? context.knowledge.verified
             : [];
 
+    const researchSources =
+        Array.isArray(
+            context.research?.sources
+        )
+            ? context.research.sources
+            : [];
+
     return {
 
         memoryCount:
@@ -109,6 +115,12 @@ function createContextSummary(context = {}) {
         verifiedKnowledgeCount:
             verifiedKnowledgeItems.length,
 
+        researchSourceCount:
+            researchSources.length,
+
+        hasResearchContext:
+            researchSources.length > 0,
+
         hasContext:
             memoryItems.length > 0 ||
             knowledgeItems.length > 0,
@@ -119,23 +131,25 @@ function createContextSummary(context = {}) {
     };
 }
 
-
 // ============================================================
-// RESEARCH SOURCE NORMALIZATION
+// NORMALIZE RESEARCH SOURCES
 // ============================================================
 
 function normalizeResearchSources(
-    rawSources = []
+    sources = []
 ) {
 
-    if (!Array.isArray(rawSources)) {
+    if (!Array.isArray(sources)) {
         return [];
     }
 
-    return rawSources
-        .filter(Boolean)
+    return sources
         .map(
             (item, index) => {
+
+                if (!item) {
+                    return null;
+                }
 
                 return {
 
@@ -145,8 +159,7 @@ function normalizeResearchSources(
 
                     title:
                         item.title ||
-                        item.name ||
-                        `Research Source ${index + 1}`,
+                        "Untitled source",
 
                     url:
                         item.url ||
@@ -162,12 +175,10 @@ function normalizeResearchSources(
                         item.publishedAt ||
                         item.publishedDate ||
                         item.published_date ||
-                        item.published_at ||
                         null,
 
                     content:
                         item.content ||
-                        item.text ||
                         item.snippet ||
                         item.description ||
                         "",
@@ -176,7 +187,6 @@ function normalizeResearchSources(
                         item.snippet ||
                         item.description ||
                         item.content ||
-                        item.text ||
                         "",
 
                     score:
@@ -185,12 +195,18 @@ function normalizeResearchSources(
                             : null
                 };
             }
-        );
+        )
+        .filter(Boolean);
 }
 
-
 // ============================================================
-// RESEARCH CONTEXT EXTRACTION
+// GET RESEARCH INPUT
+// ============================================================
+//
+// The orchestrator performs the actual web search.
+// The executor MUST consume that research result.
+//
+// No second web search is performed here.
 // ============================================================
 
 function getResearchInput(
@@ -201,84 +217,56 @@ function getResearchInput(
     const researchContext =
         context.research || {};
 
-    // --------------------------------------------------------
-    // Research object may exist in:
-    //
-    // context.research.result
-    // context.research
-    // intentData.research
-    // --------------------------------------------------------
-
-    const nestedResult =
-        researchContext.result ||
-        researchContext.research ||
-        intentData.research ||
-        null;
-
-    let rawSources = [];
-
-    if (
+    const rawSources =
         Array.isArray(
             researchContext.sources
         )
-    ) {
-
-        rawSources =
-            researchContext.sources;
-
-    } else if (
-        Array.isArray(
-            nestedResult?.sources
-        )
-    ) {
-
-        rawSources =
-            nestedResult.sources;
-
-    } else if (
-        Array.isArray(
-            nestedResult?.results
-        )
-    ) {
-
-        rawSources =
-            nestedResult.results;
-    }
-
+            ? researchContext.sources
+            : Array.isArray(
+                researchContext.results
+            )
+                ? researchContext.results
+                : [];
 
     const sources =
         normalizeResearchSources(
             rawSources
         );
 
-
     const query =
         researchContext.query ||
-        nestedResult?.query ||
         intentData.request ||
         "";
 
+    let confidence =
+        typeof researchContext.confidence === "number"
+            ? researchContext.confidence
+            : 0;
+
+    if (confidence > 1) {
+        confidence =
+            confidence / 100;
+    }
+
+    confidence =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                confidence
+            )
+        );
 
     const answer =
         researchContext.answer ||
-        nestedResult?.answer ||
-        nestedResult?.summary ||
+        researchContext.summary ||
+        researchContext.result?.answer ||
+        researchContext.result?.summary ||
         "";
-
 
     const provider =
         researchContext.provider ||
-        nestedResult?.provider ||
         "research-provider";
-
-
-    const suppliedConfidence =
-        typeof researchContext.confidence === "number"
-            ? researchContext.confidence
-            : typeof nestedResult?.confidence === "number"
-                ? nestedResult.confidence
-                : 0;
-
 
     return {
 
@@ -286,36 +274,36 @@ function getResearchInput(
 
         answer,
 
-        provider,
-
         sources,
 
         sourceCount:
             sources.length,
 
-        confidence:
-            Math.max(
-                0,
-                Math.min(
-                    1,
-                    suppliedConfidence
-                )
-            ),
+        confidence,
 
-        previousKnowledgeAvailable:
-            Boolean(
-                researchContext.previousKnowledgeAvailable ||
-                nestedResult?.previousKnowledgeAvailable
-            ),
+        provider,
 
-        previousVerifiedKnowledgeAvailable:
-            Boolean(
-                researchContext.previousVerifiedKnowledgeAvailable ||
-                nestedResult?.previousVerifiedKnowledgeAvailable
-            )
+        verificationStatus:
+            researchContext.verificationStatus ||
+            "review-required",
+
+        verified:
+            researchContext.verified === true,
+
+        verification:
+            researchContext.verification ||
+            null,
+
+        learning:
+            researchContext.learning ||
+            null,
+
+        researchStatus:
+            researchContext.researchStatus ||
+            researchContext.status ||
+            "review-required"
     };
 }
-
 
 // ============================================================
 // MAIN EXECUTOR
@@ -328,7 +316,9 @@ async function executeIntent(
     if (!intentData.success) {
 
         return {
+
             success: false,
+
             error:
                 "Invalid intent data."
         };
@@ -361,15 +351,19 @@ async function executeIntent(
     if (!engine) {
 
         return {
+
             success: false,
+
             error:
                 `No engine available for category: ${category}`,
+
             category,
+
             intent,
+
             contextSummary
         };
     }
-
 
     // ========================================================
     // FINANCE - EMI
@@ -406,14 +400,22 @@ async function executeIntent(
         if (missing.length > 0) {
 
             return {
+
                 success: false,
+
                 needsInput: true,
+
                 category,
+
                 intent,
+
                 parameters,
+
                 missingParameters:
                     missing,
+
                 contextSummary,
+
                 executionStatus:
                     "waiting-for-input"
             };
@@ -427,17 +429,23 @@ async function executeIntent(
             );
 
         return {
+
             success: true,
+
             category,
+
             intent,
+
             parameters,
+
             result,
+
             contextSummary,
+
             executionStatus:
                 "completed"
         };
     }
-
 
     // ========================================================
     // FINANCE - SIMPLE INTEREST
@@ -474,14 +482,22 @@ async function executeIntent(
         if (missing.length > 0) {
 
             return {
+
                 success: false,
+
                 needsInput: true,
+
                 category,
+
                 intent,
+
                 parameters,
+
                 missingParameters:
                     missing,
+
                 contextSummary,
+
                 executionStatus:
                     "waiting-for-input"
             };
@@ -495,37 +511,36 @@ async function executeIntent(
             );
 
         return {
+
             success: true,
+
             category,
+
             intent,
+
             parameters,
+
             result,
+
             contextSummary,
+
             executionStatus:
                 "completed"
         };
     }
 
-
     // ========================================================
     // WEB RESEARCH
     // ========================================================
 
-    if (
-        category === "research"
-    ) {
+    if (category === "research") {
 
         // ----------------------------------------------------
-        // IMPORTANT ARCHITECTURE RULE
-        // ----------------------------------------------------
+        // IMPORTANT:
+        // DO NOT call handlers.searchWeb() here.
         //
-        // The Master Orchestrator is responsible for live
-        // web research.
-        //
-        // The Executor must NOT perform a second web search.
-        //
-        // It consumes the already-collected research context,
-        // verifies it, and learns only when verification passes.
+        // The orchestrator already performed live research
+        // and injected the result into context.research.
         // ----------------------------------------------------
 
         const researchInput =
@@ -534,22 +549,19 @@ async function executeIntent(
                 intentData
             );
 
-
         const query =
-            researchInput.query ||
-            intentData.request ||
-            "";
-
+            researchInput.query;
 
         const sources =
             researchInput.sources;
 
-
         // ----------------------------------------------------
-        // Research source validation
+        // If orchestrator did not provide sources,
+        // fail safely instead of doing another search.
         // ----------------------------------------------------
 
         if (
+            !Array.isArray(sources) ||
             sources.length === 0
         ) {
 
@@ -564,6 +576,26 @@ async function executeIntent(
                 parameters,
 
                 contextSummary,
+
+                result: {
+
+                    success: false,
+
+                    query,
+
+                    sources: [],
+
+                    sourceCount: 0,
+
+                    confidence:
+                        researchInput.confidence,
+
+                    verificationStatus:
+                        "not-verified",
+
+                    error:
+                        "No research sources were provided by the research orchestrator."
+                },
 
                 research: {
 
@@ -581,22 +613,13 @@ async function executeIntent(
                     verificationStatus:
                         "not-verified",
 
-                    verified:
-                        false,
+                    verified: false,
 
-                    learning:
-                        null,
+                    provider:
+                        researchInput.provider,
 
                     error:
-                        "No research sources were available in the execution context."
-                },
-
-                result: {
-
-                    success: false,
-
-                    message:
-                        "Research was requested, but no source records reached the executor."
+                        "Research source context is empty."
                 },
 
                 executionStatus:
@@ -604,9 +627,42 @@ async function executeIntent(
             };
         }
 
+        // ----------------------------------------------------
+        // Provider confidence
+        // ----------------------------------------------------
+
+        let providerConfidence =
+            researchInput.confidence;
+
+        if (
+            providerConfidence <= 0
+        ) {
+
+            if (sources.length >= 2) {
+
+                providerConfidence =
+                    0.80;
+
+            } else if (
+                sources.length === 1
+            ) {
+
+                providerConfidence =
+                    0.60;
+            }
+        }
+
+        providerConfidence =
+            Math.max(
+                0,
+                Math.min(
+                    1,
+                    providerConfidence
+                )
+            );
 
         // ----------------------------------------------------
-        // Create Research Result
+        // Create research result
         // ----------------------------------------------------
 
         const researchResult =
@@ -617,15 +673,15 @@ async function executeIntent(
                 sources,
 
                 summary:
-                    researchInput.answer,
+                    researchInput.answer ||
+                    "",
 
                 confidence:
-                    researchInput.confidence
+                    providerConfidence
             });
 
-
         // ----------------------------------------------------
-        // Verify Research
+        // Verify research
         // ----------------------------------------------------
 
         const verificationResult =
@@ -641,9 +697,8 @@ async function executeIntent(
                     researchResult.confidence,
 
                 notes:
-                    "Verification based on the research sources collected by the Master Orchestrator."
+                    "Verification based on research sources supplied by the orchestrator."
             });
-
 
         // ----------------------------------------------------
         // Learning
@@ -651,17 +706,10 @@ async function executeIntent(
 
         let learningResult = null;
 
-
         if (
             verificationResult.verified &&
             researchResult.summary
         ) {
-
-            // ------------------------------------------------
-            // IMPORTANT:
-            // learnVerifiedResearch() requires the research
-            // record to explicitly carry verified state.
-            // ------------------------------------------------
 
             learningResult =
                 research.learnVerifiedResearch({
@@ -680,27 +728,16 @@ async function executeIntent(
                         "web-research",
 
                     confidence:
-                        verificationResult.confidence,
-
-                    verified:
-                        true,
-
-                    approved:
-                        true,
-
-                    learn:
-                        true
+                        verificationResult.confidence
                 });
         }
 
-
         // ----------------------------------------------------
-        // Final Verification Status
+        // Final verification status
         // ----------------------------------------------------
 
         let verificationStatus =
             "review-required";
-
 
         if (
             verificationResult.verified
@@ -717,34 +754,6 @@ async function executeIntent(
                 "partially-verified";
         }
 
-
-        // ----------------------------------------------------
-        // Learning Status
-        // ----------------------------------------------------
-
-        let learningStatus =
-            "not-learned";
-
-
-        if (
-            verificationResult.verified &&
-            learningResult
-        ) {
-
-            learningStatus =
-                "learned";
-        }
-
-
-        // ----------------------------------------------------
-        // Memory ID
-        // ----------------------------------------------------
-
-        const memoryId =
-            learningResult?.memoryId ||
-            null;
-
-
         // ----------------------------------------------------
         // STANDARDIZED RESEARCH OBJECT
         // ----------------------------------------------------
@@ -756,8 +765,8 @@ async function executeIntent(
             query,
 
             answer:
-                researchResult.summary ||
                 researchInput.answer ||
+                researchResult.summary ||
                 "",
 
             sources,
@@ -771,9 +780,7 @@ async function executeIntent(
             verificationStatus,
 
             verified:
-                Boolean(
-                    verificationResult.verified
-                ),
+                verificationResult.verified === true,
 
             provider:
                 researchInput.provider,
@@ -784,31 +791,23 @@ async function executeIntent(
             learning:
                 learningResult,
 
-            learningStatus,
-
-            memoryId,
+            responseTime:
+                null,
 
             previousKnowledgeAvailable:
-                researchInput
-                    .previousKnowledgeAvailable,
+                contextSummary.hasContext,
 
             previousVerifiedKnowledgeAvailable:
-                researchInput
-                    .previousVerifiedKnowledgeAvailable,
+                contextSummary.hasVerifiedContext,
 
             researchStatus:
                 verificationResult.verified
-                    ? (
-                        learningResult
-                            ? "research-verified-and-learned"
-                            : "research-verified-learning-failed"
-                    )
-                    : "research-completed-review-required"
+                    ? "verified"
+                    : "review-required"
         };
 
-
         // ----------------------------------------------------
-        // FINAL EXECUTION RESULT
+        // FINAL RESULT
         // ----------------------------------------------------
 
         return {
@@ -832,7 +831,8 @@ async function executeIntent(
             executionStatus:
                 verificationResult.verified
                     ? (
-                        learningResult
+                        learningResult &&
+                        learningResult.success
                             ? "research-verified-and-learned"
                             : "research-verified-learning-failed"
                     )
@@ -840,14 +840,11 @@ async function executeIntent(
         };
     }
 
-
     // ========================================================
     // KNOWLEDGE / RAG
     // ========================================================
 
-    if (
-        category === "knowledge"
-    ) {
+    if (category === "knowledge") {
 
         const query =
             intentData.request || "";
@@ -880,14 +877,11 @@ async function executeIntent(
         };
     }
 
-
     // ========================================================
     // CALCULATOR
     // ========================================================
 
-    if (
-        category === "calculation"
-    ) {
+    if (category === "calculation") {
 
         return {
 
@@ -912,14 +906,11 @@ async function executeIntent(
         };
     }
 
-
     // ========================================================
     // CODING
     // ========================================================
 
-    if (
-        category === "coding"
-    ) {
+    if (category === "coding") {
 
         const result =
             engine.analyzeCode(
@@ -946,14 +937,11 @@ async function executeIntent(
         };
     }
 
-
     // ========================================================
     // CYBERSECURITY
     // ========================================================
 
-    if (
-        category === "security"
-    ) {
+    if (category === "security") {
 
         const result =
             engine.classifyRequest(
@@ -980,20 +968,16 @@ async function executeIntent(
         };
     }
 
-
     // ========================================================
     // DATA ANALYSIS
     // ========================================================
 
-    if (
-        category === "data"
-    ) {
+    if (category === "data") {
 
         const result =
             engine.createSummary
                 ? engine.createSummary([])
                 : {
-
                     message:
                         "Data Analysis Engine connected."
                 };
@@ -1017,14 +1001,11 @@ async function executeIntent(
         };
     }
 
-
     // ========================================================
     // DOCUMENTS
     // ========================================================
 
-    if (
-        category === "documents"
-    ) {
+    if (category === "documents") {
 
         const result =
             engine.getSupportedTypes();
@@ -1048,14 +1029,11 @@ async function executeIntent(
         };
     }
 
-
     // ========================================================
     // HERITAGE AUTO FINANCE BUSINESS
     // ========================================================
 
-    if (
-        category === "business"
-    ) {
+    if (category === "business") {
 
         const result =
             engine.analyzeRequest(
@@ -1081,7 +1059,6 @@ async function executeIntent(
                 "business-analysis-completed"
         };
     }
-
 
     // ========================================================
     // DEFAULT
@@ -1110,7 +1087,6 @@ async function executeIntent(
     };
 }
 
-
 // ============================================================
 // ENGINE FUNCTIONS
 // ============================================================
@@ -1135,7 +1111,6 @@ function getEngineFunctions(
                 "function"
         );
 }
-
 
 // ============================================================
 // EXPORTS
