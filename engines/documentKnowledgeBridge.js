@@ -1,14 +1,15 @@
 // ============================================================
 // AARHEN CORE V5
 // DOCUMENT KNOWLEDGE BRIDGE
-// Version: 5.6.2
+// Version: 5.6.3
 //
-// Purpose:
-// - Search knowledge learned from documents
-// - Search normal learned knowledge
-// - Search document chunks
-// - Provide RAG-ready context
-// - Keep document ingestion separate from existing engines
+// Fix:
+// - Reliable document-result detection
+// - Does not depend only on source filename extension
+// - Supports document title/source/type/metadata detection
+// - Knowledge retrieval
+// - Document-only retrieval
+// - RAG context generation
 // ============================================================
 
 const learning =
@@ -18,7 +19,7 @@ const memoryManager =
     require("../core/memoryManager");
 
 const BRIDGE_VERSION =
-    "5.6.2";
+    "5.6.3";
 
 
 // ============================================================
@@ -26,6 +27,7 @@ const BRIDGE_VERSION =
 // ============================================================
 
 function safeString(value) {
+
     if (
         value === null ||
         value === undefined
@@ -38,17 +40,22 @@ function safeString(value) {
 
 
 function safeArray(value) {
+
     return Array.isArray(value)
         ? value
         : [];
 }
 
 
-function normalizeResultList(result) {
+function normalizeResultList(
+    result
+) {
 
     if (
         result &&
-        Array.isArray(result.results)
+        Array.isArray(
+            result.results
+        )
     ) {
         return result.results;
     }
@@ -69,11 +76,17 @@ function calculateDocumentScore(
 ) {
 
     const text =
-        `${item.title || ""} ${item.content || ""} ${item.source || ""}`
+        (
+            `${item.title || ""} ` +
+            `${item.content || ""} ` +
+            `${item.source || ""}`
+        )
             .toLowerCase();
 
     const queryWords =
-        safeString(query)
+        safeString(
+            query
+        )
             .toLowerCase()
             .split(/\s+/)
             .filter(
@@ -108,6 +121,154 @@ function calculateDocumentScore(
 
 
 // ============================================================
+// DOCUMENT DETECTION
+// ============================================================
+
+function isDocumentKnowledgeItem(
+    item = {}
+) {
+
+    const title =
+        safeString(
+            item.title
+        ).toLowerCase();
+
+    const source =
+        safeString(
+            item.source
+        ).toLowerCase();
+
+    const type =
+        safeString(
+            item.type
+        ).toLowerCase();
+
+    const sourceType =
+        safeString(
+            item.sourceType
+        ).toLowerCase();
+
+    const metadata =
+        item &&
+        typeof item.metadata === "object" &&
+        item.metadata !== null
+            ? item.metadata
+            : {};
+
+    const metadataType =
+        safeString(
+            metadata.documentType
+        ).toLowerCase();
+
+    const metadataName =
+        safeString(
+            metadata.documentName
+        ).toLowerCase();
+
+    // --------------------------------------------------------
+    // Explicit document markers
+    // --------------------------------------------------------
+
+    if (
+        type ===
+        "document_knowledge"
+    ) {
+        return true;
+    }
+
+    if (
+        sourceType
+    ) {
+        return true;
+    }
+
+    if (
+        metadataType
+    ) {
+        return true;
+    }
+
+    if (
+        metadataName
+    ) {
+        return true;
+    }
+
+    // --------------------------------------------------------
+    // File extensions
+    // --------------------------------------------------------
+
+    const documentExtensions = [
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".txt",
+        ".md",
+        ".markdown",
+        ".json",
+        ".rtf"
+    ];
+
+    if (
+        documentExtensions.some(
+            extension =>
+                source.endsWith(
+                    extension
+                )
+        )
+    ) {
+        return true;
+    }
+
+    if (
+        documentExtensions.some(
+            extension =>
+                title.includes(
+                    extension
+                )
+        )
+    ) {
+        return true;
+    }
+
+    // --------------------------------------------------------
+    // Document-generated title marker
+    //
+    // documentLearning.js creates:
+    // "filename - Document Knowledge"
+    // --------------------------------------------------------
+
+    if (
+        title.includes(
+            " - document knowledge"
+        )
+    ) {
+        return true;
+    }
+
+    // --------------------------------------------------------
+    // Explicit source markers
+    // --------------------------------------------------------
+
+    if (
+        source.includes(
+            "document"
+        ) ||
+        source.includes(
+            "uploaded-file"
+        ) ||
+        source.includes(
+            "file-ingestion"
+        )
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+
+// ============================================================
 // SEARCH LEARNED KNOWLEDGE
 // ============================================================
 
@@ -117,7 +278,9 @@ function searchKnowledge(
 ) {
 
     const cleanQuery =
-        safeString(query);
+        safeString(
+            query
+        );
 
     if (!cleanQuery) {
 
@@ -125,11 +288,9 @@ function searchKnowledge(
 
             success: false,
 
-            query:
-                "",
+            query: "",
 
-            count:
-                0,
+            count: 0,
 
             results: [],
 
@@ -169,13 +330,27 @@ function searchKnowledge(
 
                     ...item,
 
+                    documentDetected:
+                        isDocumentKnowledgeItem(
+                            item
+                        ),
+
                     documentSource:
-                        item.source ||
-                        item.metadata?.documentName ||
+                        safeString(
+                            item.source
+                        ) ||
+                        safeString(
+                            item.metadata?.documentName
+                        ) ||
                         null,
 
                     documentType:
-                        item.metadata?.documentType ||
+                        safeString(
+                            item.sourceType
+                        ) ||
+                        safeString(
+                            item.metadata?.documentType
+                        ) ||
                         null,
 
                     relevance:
@@ -223,8 +398,7 @@ function searchKnowledge(
             query:
                 cleanQuery,
 
-            count:
-                0,
+            count: 0,
 
             results: [],
 
@@ -248,7 +422,9 @@ function searchMemory(
 ) {
 
     const cleanQuery =
-        safeString(query);
+        safeString(
+            query
+        );
 
     if (!cleanQuery) {
 
@@ -256,11 +432,9 @@ function searchMemory(
 
             success: false,
 
-            query:
-                "",
+            query: "",
 
-            count:
-                0,
+            count: 0,
 
             results: [],
 
@@ -283,7 +457,10 @@ function searchMemory(
         const result =
             memoryManager.recall(
                 cleanQuery,
-                finalLimit
+                {
+                    limit:
+                        finalLimit
+                }
             );
 
         const results =
@@ -316,8 +493,7 @@ function searchMemory(
             query:
                 cleanQuery,
 
-            count:
-                0,
+            count: 0,
 
             results: [],
 
@@ -364,41 +540,26 @@ function searchDocuments(
     const documentResults =
         safeArray(
             result.results
-        ).filter(
-            item => {
-
-                const source =
-                    safeString(
-                        item.source
-                    ).toLowerCase();
-
-                const type =
-                    safeString(
-                        item.metadata?.documentType
-                    ).toLowerCase();
-
-                return (
-                    source.endsWith(".pdf") ||
-                    source.endsWith(".docx") ||
-                    source.endsWith(".txt") ||
-                    source.endsWith(".md") ||
-                    source.endsWith(".markdown") ||
-                    source.endsWith(".json") ||
-                    Boolean(type)
-                );
-            }
         )
-        .slice(
-            0,
-            finalLimit
-        );
+            .filter(
+                item =>
+                    isDocumentKnowledgeItem(
+                        item
+                    )
+            )
+            .slice(
+                0,
+                finalLimit
+            );
 
     return {
 
         success: true,
 
         query:
-            safeString(query),
+            safeString(
+                query
+            ),
 
         count:
             documentResults.length,
@@ -422,7 +583,9 @@ function buildRagContext(
 ) {
 
     const cleanQuery =
-        safeString(query);
+        safeString(
+            query
+        );
 
     if (!cleanQuery) {
 
@@ -430,11 +593,9 @@ function buildRagContext(
 
             success: false,
 
-            query:
-                "",
+            query: "",
 
-            context:
-                "",
+            context: "",
 
             results: [],
 
@@ -446,29 +607,35 @@ function buildRagContext(
     const knowledgeResult =
         searchKnowledge(
             cleanQuery,
-            options.knowledgeLimit || 5
+            options.knowledgeLimit ||
+                5
         );
 
     const documentResult =
         searchDocuments(
             cleanQuery,
-            options.documentLimit || 5
+            options.documentLimit ||
+                5
         );
 
     const memoryResult =
         options.includeMemory === false
+
             ? {
                 success: true,
                 results: []
             }
+
             : searchMemory(
                 cleanQuery,
-                options.memoryLimit || 5
+                options.memoryLimit ||
+                    5
             );
 
     const combined = [];
 
-    const seen = new Set();
+    const seen =
+        new Set();
 
     function addResults(
         list,
@@ -476,12 +643,17 @@ function buildRagContext(
     ) {
 
         for (
-            const item of safeArray(list)
+            const item of
+            safeArray(list)
         ) {
 
             const key =
                 item.id ||
-                `${layer}:${item.title || ""}:${item.content || ""}`;
+                (
+                    `${layer}:` +
+                    `${item.title || ""}:` +
+                    `${item.content || ""}`
+                );
 
             if (
                 seen.has(key)
@@ -517,7 +689,10 @@ function buildRagContext(
     );
 
     combined.sort(
-        (a, b) =>
+        (
+            a,
+            b
+        ) =>
             Number(
                 b.relevance || 0
             ) -
@@ -544,36 +719,42 @@ function buildRagContext(
         );
 
     const contextParts =
-        finalResults
-            .map(
-                (
-                    item,
-                    index
-                ) => {
+        finalResults.map(
+            (
+                item,
+                index
+            ) => {
 
-                    const title =
-                        safeString(
-                            item.title
-                        ) ||
-                        `Knowledge ${index + 1}`;
+                const title =
+                    safeString(
+                        item.title
+                    ) ||
+                    `Knowledge ${index + 1}`;
 
-                    const content =
-                        safeString(
-                            item.content
-                        );
-
-                    const source =
-                        safeString(
-                            item.source
-                        );
-
-                    return (
-                        `[${index + 1}] ${title}\n` +
-                        `Source: ${source}\n` +
-                        `Content: ${content}`
+                const content =
+                    safeString(
+                        item.content
                     );
-                }
-            );
+
+                const source =
+                    safeString(
+                        item.source
+                    );
+
+                const layer =
+                    safeString(
+                        item.retrievalLayer
+                    ) ||
+                    "knowledge";
+
+                return (
+                    `[${index + 1}] ${title}\n` +
+                    `Layer: ${layer}\n` +
+                    `Source: ${source}\n` +
+                    `Content: ${content}`
+                );
+            }
+        );
 
     return {
 
@@ -618,11 +799,7 @@ function buildRagContext(
 
 
 // ============================================================
-// DOCUMENT QUESTION
-//
-// This does retrieval only.
-// It does NOT fabricate an answer.
-// The reasoning/response layer can consume the context.
+// PREPARE QUESTION CONTEXT
 // ============================================================
 
 function prepareQuestionContext(
@@ -647,7 +824,9 @@ function prepareQuestionContext(
         success: true,
 
         question:
-            safeString(question),
+            safeString(
+                question
+            ),
 
         context:
             rag.context,
@@ -663,7 +842,9 @@ function prepareQuestionContext(
 
         status:
             rag.count > 0
+
                 ? "question-context-ready"
+
                 : "no-relevant-knowledge"
     };
 }
@@ -698,6 +879,12 @@ function getStatus() {
 
             "document-only-filtering",
 
+            "document-type-detection",
+
+            "document-source-detection",
+
+            "document-title-detection",
+
             "rag-context-building",
 
             "duplicate-result-filtering",
@@ -725,11 +912,34 @@ function getStatus() {
                 true
         },
 
+        documentDetection: {
+
+            explicitType:
+                true,
+
+            sourceType:
+                true,
+
+            metadata:
+                true,
+
+            fileExtension:
+                true,
+
+            generatedDocumentTitle:
+                true,
+
+            documentSourceMarker:
+                true
+        },
+
         pipeline: [
 
             "user-question",
 
             "knowledge-search",
+
+            "document-detection",
 
             "document-filter",
 
@@ -757,7 +967,11 @@ module.exports = {
 
     safeArray,
 
+    normalizeResultList,
+
     calculateDocumentScore,
+
+    isDocumentKnowledgeItem,
 
     searchKnowledge,
 
