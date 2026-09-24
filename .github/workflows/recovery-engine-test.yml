@@ -1,0 +1,1423 @@
+name: AarHen Recovery Engine Test
+
+on:
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+jobs:
+
+  recovery-engine-test:
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD RECOVERY ENGINE
+      # ======================================================
+
+      - name: Load Recovery Engine
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+
+          if (!recovery) {
+
+            throw new Error(
+              "Recovery Engine could not be loaded."
+            );
+
+          }
+
+
+          if (
+            recovery.RECOVERY_ENGINE_VERSION !==
+            "5.12.0"
+          ) {
+
+            throw new Error(
+              "Recovery Engine version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery Engine loaded successfully."
+          );
+
+
+          console.log(
+            "Version:",
+            recovery.RECOVERY_ENGINE_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Recovery Engine Status Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+
+          const status =
+            recovery.getStatus();
+
+
+          if (
+            status.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Engine status is unhealthy."
+            );
+
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Recovery Engine is not active."
+            );
+
+          }
+
+
+          if (
+            status.version !==
+            "5.12.0"
+          ) {
+
+            throw new Error(
+              "Recovery Engine status version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.agentManager?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Engine is not connected to Agent Manager."
+            );
+
+          }
+
+
+          if (
+            status.agentRunner?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Engine is not connected to Agent Runner."
+            );
+
+          }
+
+
+          if (
+            status.autonomousSafetyGuard?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Engine is not connected to Autonomous Safety Guard."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery Engine status test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FAILURE CLASSIFICATION TEST
+      # ======================================================
+
+      - name: Failure Classification Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+
+          const transient =
+            recovery.classifyFailure({
+
+              success:
+                false,
+
+              error:
+                "Temporary provider failure.",
+
+              executionStatus:
+                "provider-error"
+
+            });
+
+
+          if (
+            transient.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Transient classification failed."
+            );
+
+          }
+
+
+          if (
+            transient.classification !==
+            recovery.FAILURE_CLASSES.PROVIDER
+          ) {
+
+            throw new Error(
+              "Provider failure classification mismatch."
+            );
+
+          }
+
+
+          if (
+            transient.retryable !==
+            true
+          ) {
+
+            throw new Error(
+              "Provider failure should be retryable."
+            );
+
+          }
+
+
+          const timeout =
+            recovery.classifyFailure({
+
+              success:
+                false,
+
+              error:
+                "Request timed out.",
+
+              executionStatus:
+                "timeout"
+
+            });
+
+
+          if (
+            timeout.classification !==
+            recovery.FAILURE_CLASSES.TIMEOUT
+          ) {
+
+            throw new Error(
+              "Timeout classification mismatch."
+            );
+
+          }
+
+
+          if (
+            timeout.retryable !==
+            true
+          ) {
+
+            throw new Error(
+              "Timeout should be retryable."
+            );
+
+          }
+
+
+          const permanent =
+            recovery.classifyFailure({
+
+              success:
+                false,
+
+              error:
+                "Unknown action.",
+
+              executionStatus:
+                "unknown-action"
+
+            });
+
+
+          if (
+            permanent.classification !==
+            recovery.FAILURE_CLASSES.PERMANENT
+          ) {
+
+            throw new Error(
+              "Permanent failure classification mismatch."
+            );
+
+          }
+
+
+          if (
+            permanent.retryable !==
+            false
+          ) {
+
+            throw new Error(
+              "Permanent failure must not be retryable."
+            );
+
+          }
+
+
+          console.log(
+            "Failure classification test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # APPROVAL SAFETY TEST
+      # ======================================================
+
+      - name: Approval Must Never Retry Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+
+          const decision =
+            recovery.getRecoveryDecision(
+
+              {
+
+                success:
+                  false,
+
+                requiresApproval:
+                  true,
+
+                executionStatus:
+                  "approval-required",
+
+                error:
+                  "Action requires approval."
+
+              },
+
+              1
+
+            );
+
+
+          if (
+            decision.retry !==
+            false
+          ) {
+
+            throw new Error(
+              "Approval-required execution was incorrectly marked retryable."
+            );
+
+          }
+
+
+          if (
+            decision.classification !==
+            recovery.FAILURE_CLASSES.APPROVAL
+          ) {
+
+            throw new Error(
+              "Approval failure classification mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Approval safety test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STOP SAFETY TEST
+      # ======================================================
+
+      - name: STOP Must Never Retry Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+
+          const decision =
+            recovery.getRecoveryDecision(
+
+              {
+
+                success:
+                  false,
+
+                stopped:
+                  true,
+
+                executionStatus:
+                  "autonomous-stop",
+
+                error:
+                  "Emergency STOP activated."
+
+              },
+
+              1
+
+            );
+
+
+          if (
+            decision.retry !==
+            false
+          ) {
+
+            throw new Error(
+              "STOP state was incorrectly marked retryable."
+            );
+
+          }
+
+
+          if (
+            decision.classification !==
+            recovery.FAILURE_CLASSES.STOP
+          ) {
+
+            throw new Error(
+              "STOP classification mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "STOP safety test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SAFETY GUARD TEST
+      # ======================================================
+
+      - name: Safety Guard Failure Must Never Retry Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+
+          const decision =
+            recovery.getRecoveryDecision(
+
+              {
+
+                success:
+                  false,
+
+                blocked:
+                  true,
+
+                safetyGuard: {
+
+                  allowed:
+                    false
+
+                },
+
+                executionStatus:
+                  "autonomous-guard-blocked",
+
+                error:
+                  "Autonomous Safety Guard blocked execution."
+
+              },
+
+              1
+
+            );
+
+
+          if (
+            decision.retry !==
+            false
+          ) {
+
+            throw new Error(
+              "Safety Guard block was incorrectly marked retryable."
+            );
+
+          }
+
+
+          if (
+            decision.classification !==
+            recovery.FAILURE_CLASSES.SAFETY
+          ) {
+
+            throw new Error(
+              "Safety Guard failure classification mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Safety Guard non-retry test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RETRY DECISION TEST
+      # ======================================================
+
+      - name: Retry Decision Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+
+          const decision =
+            recovery.getRecoveryDecision(
+
+              {
+
+                success:
+                  false,
+
+                error:
+                  "Temporary network connection failure.",
+
+                executionStatus:
+                  "network-error"
+
+              },
+
+              1,
+
+              {
+
+                maxAttempts:
+                  3,
+
+                baseDelayMs:
+                  0,
+
+                maxDelayMs:
+                  100
+
+              }
+
+            );
+
+
+          if (
+            decision.retry !==
+            true
+          ) {
+
+            throw new Error(
+              "Retryable network failure was not marked retryable."
+            );
+
+          }
+
+
+          if (
+            decision.classification !==
+            recovery.FAILURE_CLASSES.NETWORK
+          ) {
+
+            throw new Error(
+              "Network classification mismatch."
+            );
+
+          }
+
+
+          if (
+            decision.nextAttempt !==
+            2
+          ) {
+
+            throw new Error(
+              "Next retry attempt should be 2."
+            );
+
+          }
+
+
+          if (
+            decision.attemptsRemaining !==
+            2
+          ) {
+
+            throw new Error(
+              "Remaining attempt count mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Retry decision test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RETRY EXECUTION TEST
+      # ======================================================
+
+      - name: Controlled Retry Execution Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const recovery =
+              require("./core/recoveryEngine");
+
+
+            let calls =
+              0;
+
+
+            const runner =
+              async () => {
+
+                calls +=
+                  1;
+
+
+                if (
+                  calls ===
+                  1
+                ) {
+
+                  return {
+
+                    success:
+                      false,
+
+                    error:
+                      "Temporary network failure.",
+
+                    executionStatus:
+                      "network-error"
+
+                  };
+
+                }
+
+
+                return {
+
+                  success:
+                    true,
+
+                  output:
+                    "recovered-successfully",
+
+                  executionStatus:
+                    "completed"
+
+                };
+
+              };
+
+
+            const recoveryRunner =
+              recovery.createRecoveryRunner(
+
+                runner,
+
+                {
+
+                  maxAttempts:
+                    3,
+
+                  baseDelayMs:
+                    0,
+
+                  maxDelayMs:
+                    100
+
+                }
+
+              );
+
+
+            const result =
+              await recoveryRunner({});
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery runner did not recover successfully: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            if (
+              calls !==
+              2
+            ) {
+
+              throw new Error(
+                "Recovery runner should execute exactly 2 attempts."
+              );
+
+            }
+
+
+            if (
+              result.recovery?.recovered !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery metadata did not report recovered=true."
+              );
+
+            }
+
+
+            if (
+              result.recovery?.attempts !==
+              2
+            ) {
+
+              throw new Error(
+                "Recovery attempt count mismatch."
+              );
+
+            }
+
+
+            if (
+              !Array.isArray(
+                result.recovery?.history
+              )
+            ) {
+
+              throw new Error(
+                "Recovery history is missing."
+              );
+
+            }
+
+
+            if (
+              result.recovery.history.length !==
+              1
+            ) {
+
+              throw new Error(
+                "Recovery history should contain one failed attempt."
+              );
+
+            }
+
+
+            console.log(
+              "Controlled retry execution test passed."
+            );
+
+
+            console.log(
+              JSON.stringify(
+                result.recovery,
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # RETRY EXHAUSTION TEST
+      # ======================================================
+
+      - name: Retry Exhaustion Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const recovery =
+              require("./core/recoveryEngine");
+
+
+            let calls =
+              0;
+
+
+            const runner =
+              async () => {
+
+                calls +=
+                  1;
+
+
+                return {
+
+                  success:
+                    false,
+
+                  error:
+                    "Temporary provider unavailable.",
+
+                  executionStatus:
+                    "provider-error"
+
+                };
+
+              };
+
+
+            const recoveryRunner =
+              recovery.createRecoveryRunner(
+
+                runner,
+
+                {
+
+                  maxAttempts:
+                    3,
+
+                  baseDelayMs:
+                    0,
+
+                  maxDelayMs:
+                    100
+
+                }
+
+              );
+
+
+            const result =
+              await recoveryRunner({});
+
+
+            if (
+              result.success !==
+              false
+            ) {
+
+              throw new Error(
+                "Exhausted recovery should fail."
+              );
+
+            }
+
+
+            if (
+              calls !==
+              3
+            ) {
+
+              throw new Error(
+                "Recovery should stop exactly at maxAttempts."
+              );
+
+            }
+
+
+            if (
+              result.recovery?.attempts !==
+              3
+            ) {
+
+              throw new Error(
+                "Exhausted attempt count mismatch."
+              );
+
+            }
+
+
+            if (
+              result.recovery?.exhausted !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery exhaustion was not reported."
+              );
+
+            }
+
+
+            if (
+              result.recovery?.history?.length !==
+              3
+            ) {
+
+              throw new Error(
+                "Recovery history should contain all attempts."
+              );
+
+            }
+
+
+            console.log(
+              "Retry exhaustion test passed."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # AGENT MANAGER INTEGRATION TEST
+      # ======================================================
+
+      - name: Agent Manager Recovery Integration Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const recovery =
+              require("./core/recoveryEngine");
+
+            const agentManager =
+              require("./core/agentManager");
+
+
+            agentManager.reset();
+
+
+            const agentResult =
+              agentManager.createAgent({
+
+                id:
+                  "recovery-test-agent",
+
+                name:
+                  "Recovery Test Agent"
+
+              });
+
+
+            if (
+              agentResult.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery test agent creation failed."
+              );
+
+            }
+
+
+            const taskResult =
+              agentManager.createTask(
+
+                "recovery-test-agent",
+
+                "Calculate 10 + 20",
+
+                {
+
+                  id:
+                    "recovery-integration-task",
+
+                  maxRetries:
+                    0
+
+                }
+
+              );
+
+
+            if (
+              taskResult.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery integration task creation failed."
+              );
+
+            }
+
+
+            const stepResult =
+              agentManager.addStep(
+
+                "recovery-integration-task",
+
+                {
+
+                  id:
+                    "recovery-integration-step",
+
+                  name:
+                    "Recovery Calculation",
+
+                  description:
+                    "Test recovery around controlled execution.",
+
+                  action:
+                    "calculate",
+
+                  approved:
+                    true,
+
+                  maxRetries:
+                    0,
+
+                  input: {
+
+                    request:
+                      "Calculate 10 + 20"
+
+                  }
+
+                }
+
+              );
+
+
+            if (
+              stepResult.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery integration step creation failed."
+              );
+
+            }
+
+
+            let calls =
+              0;
+
+
+            const runner =
+              async () => {
+
+                calls +=
+                  1;
+
+
+                if (
+                  calls ===
+                  1
+                ) {
+
+                  return {
+
+                    success:
+                      false,
+
+                    error:
+                      "Temporary network failure.",
+
+                    executionStatus:
+                      "network-error"
+
+                  };
+
+                }
+
+
+                return {
+
+                  success:
+                    true,
+
+                  action:
+                    "calculate",
+
+                  result: {
+
+                    value:
+                      30
+
+                  },
+
+                  executionStatus:
+                    "completed"
+
+                };
+
+              };
+
+
+            const result =
+              await recovery.runTask(
+
+                "recovery-integration-task",
+
+                runner,
+
+                {
+
+                  maxAttempts:
+                    3,
+
+                  baseDelayMs:
+                    0,
+
+                  maxDelayMs:
+                    100,
+
+                  maxIterations:
+                    10
+
+                }
+
+              );
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Agent Manager recovery integration failed: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            if (
+              calls !==
+              2
+            ) {
+
+              throw new Error(
+                "Agent Manager recovery integration should use two runner attempts."
+              );
+
+            }
+
+
+            if (
+              result.task?.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Recovered task did not reach COMPLETED state."
+              );
+
+            }
+
+
+            if (
+              result.task?.steps?.[0]?.status !==
+              agentManager.STEP_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Recovered step did not reach COMPLETED state."
+              );
+
+            }
+
+
+            console.log(
+              "Agent Manager recovery integration test passed."
+            );
+
+
+            console.log(
+              JSON.stringify(
+                result.task,
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # REAL AGENT RUNNER CONNECTION TEST
+      # ======================================================
+
+      - name: Recovery to Agent Runner Connection Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+          const runner =
+            require("./core/agentRunner");
+
+
+          const recoveryStatus =
+            recovery.getStatus();
+
+
+          if (
+            recoveryStatus.agentRunner?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Engine is not connected to Agent Runner."
+            );
+
+          }
+
+
+          if (
+            recoveryStatus.agentRunner?.version !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Recovery Engine is connected to unexpected Agent Runner version."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery-to-Agent-Runner connection test passed."
+          );
+
+          console.log(
+            "Agent Runner:",
+            runner.AGENT_RUNNER_VERSION
+          );
+
+          console.log(
+            "Recovery Engine:",
+            recovery.RECOVERY_ENGINE_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL HEALTH TEST
+      # ======================================================
+
+      - name: Final Recovery Health Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recovery =
+            require("./core/recoveryEngine");
+
+          const guard =
+            require("./core/autonomousGuard");
+
+
+          const status =
+            recovery.getStatus();
+
+          const guardStatus =
+            guard.getStatus();
+
+
+          if (
+            status.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Recovery Engine health check failed."
+            );
+
+          }
+
+
+          if (
+            guardStatus.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Autonomous Safety Guard is not active."
+            );
+
+          }
+
+
+          if (
+            status.autonomousSafetyGuard?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Engine Guard connection failed."
+            );
+
+          }
+
+
+          console.log(
+            "Final Recovery health test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=============================================="
+          echo " AARHEN RECOVERY ENGINE TEST"
+          echo "=============================================="
+          echo " Recovery Engine Load: PASSED"
+          echo " Status: PASSED"
+          echo " Failure Classification: PASSED"
+          echo " Approval Protection: PASSED"
+          echo " STOP Protection: PASSED"
+          echo " Safety Guard Protection: PASSED"
+          echo " Retry Decision: PASSED"
+          echo " Controlled Retry: PASSED"
+          echo " Retry Exhaustion: PASSED"
+          echo " Agent Manager Integration: PASSED"
+          echo " Agent Runner Connection: PASSED"
+          echo " Final Health: PASSED"
+          echo "=============================================="
+          echo " RECOVERY ENGINE v5.12.0"
+          echo "=============================================="
+          echo " CONTROLLED RECOVERY READY"
+          echo "=============================================="
