@@ -1280,6 +1280,11 @@ async function executeRequest(
 
         },
 
+        error:
+            execution?.error ||
+            execution?.result?.error ||
+            null,
+
         result:
             execution || null
 
