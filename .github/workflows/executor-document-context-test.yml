@@ -1,0 +1,843 @@
+name: AarHen Executor Document Context Test
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  executor-document-context:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD EXECUTOR
+      # ======================================================
+
+      - name: Load Skill Executor
+        run: |
+          node - <<'NODE'
+
+          const executor =
+            require("./skills/executor");
+
+          if (!executor) {
+            throw new Error(
+              "skills/executor.js could not be loaded."
+            );
+          }
+
+          console.log(
+            "Skill Executor loaded successfully."
+          );
+
+          console.log(
+            "Version:",
+            executor.EXECUTOR_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # EXECUTOR STATUS
+      # ======================================================
+
+      - name: Executor Status Test
+        run: |
+          node - <<'NODE'
+
+          const executor =
+            require("./skills/executor");
+
+          const status =
+            executor.getStatus();
+
+          if (!status) {
+            throw new Error(
+              "Executor status missing."
+            );
+          }
+
+          if (
+            status.success !== true
+          ) {
+            throw new Error(
+              "Executor status is not healthy."
+            );
+          }
+
+          if (
+            status.status !== "active"
+          ) {
+            throw new Error(
+              "Executor is not active."
+            );
+          }
+
+          if (
+            status.documentSystem?.connected !== true
+          ) {
+            throw new Error(
+              "Document system is not connected."
+            );
+          }
+
+          if (
+            status.researchSystem?.secondSearch !== false
+          ) {
+            throw new Error(
+              "Executor may perform a second web search."
+            );
+          }
+
+          console.log(
+            "Executor status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PREPARE CONTEXT TEST
+      # ======================================================
+
+      - name: Prepare Document Context Test
+        run: |
+          node - <<'NODE'
+
+          const executor =
+            require("./skills/executor");
+
+
+          const input = {
+
+            success:
+              true,
+
+            request:
+              "What does my document say about vehicle finance?",
+
+            category:
+              "knowledge",
+
+            intent:
+              "knowledge_search",
+
+            parameters:
+              {},
+
+            context: {
+
+              brain: {
+
+                memory: {
+
+                  related: [
+                    {
+                      title:
+                        "Existing memory"
+                    }
+                  ]
+
+                },
+
+                knowledge: {
+
+                  related: [
+                    {
+                      title:
+                        "Existing knowledge"
+                    }
+                  ],
+
+                  verified: []
+
+                }
+
+              },
+
+
+              documentAware:
+                true,
+
+              documentKnowledgeEnabled:
+                true,
+
+              documentKnowledge: [
+
+                {
+
+                  title:
+                    "Vehicle Finance Document",
+
+                  content:
+                    "Vehicle finance document test knowledge.",
+
+                  source:
+                    "vehicle-finance-test.txt"
+
+                }
+
+              ],
+
+
+              documentRag: {
+
+                available:
+                  true,
+
+                context:
+                  "Vehicle finance RAG test context."
+
+              },
+
+
+              documentDocuments: {
+
+                results: [
+
+                  {
+
+                    title:
+                      "vehicle-finance-test.txt",
+
+                    source:
+                      "vehicle-finance-test.txt"
+
+                  }
+
+                ],
+
+                count:
+                  1,
+
+                available:
+                  true
+
+              },
+
+
+              answerContext:
+                "Vehicle finance answer context.",
+
+
+              knowledgeContext: {
+
+                source:
+                  "AarHen Document Knowledge"
+
+              },
+
+
+              routing: {
+
+                selectedSkill:
+                  "knowledge"
+
+              }
+
+            }
+
+          };
+
+
+          const context =
+            executor.prepareContext(
+              input
+            );
+
+
+          if (!context) {
+            throw new Error(
+              "Prepared context is missing."
+            );
+          }
+
+
+          if (
+            context.documentAware !== true
+          ) {
+            throw new Error(
+              "documentAware flag was not preserved."
+            );
+          }
+
+
+          if (
+            context.documentKnowledgeEnabled !== true
+          ) {
+            throw new Error(
+              "documentKnowledgeEnabled flag missing."
+            );
+          }
+
+
+          if (
+            !Array.isArray(
+              context.documentKnowledge
+            )
+          ) {
+            throw new Error(
+              "documentKnowledge is not an array."
+            );
+          }
+
+
+          if (
+            context.documentKnowledge.length !== 1
+          ) {
+            throw new Error(
+              "Document knowledge count mismatch."
+            );
+          }
+
+
+          if (
+            !context.documentRag
+          ) {
+            throw new Error(
+              "documentRag was not preserved."
+            );
+          }
+
+
+          if (
+            !context.documentDocuments
+          ) {
+            throw new Error(
+              "documentDocuments was not preserved."
+            );
+          }
+
+
+          if (
+            context.documentDocuments.count !== 1
+          ) {
+            throw new Error(
+              "Document count mismatch."
+            );
+          }
+
+
+          if (
+            context.answerContext !==
+            "Vehicle finance answer context."
+          ) {
+            throw new Error(
+              "answerContext was not preserved."
+            );
+          }
+
+
+          if (
+            !context.knowledgeContext
+          ) {
+            throw new Error(
+              "knowledgeContext was not preserved."
+            );
+          }
+
+
+          console.log(
+            "Executor document context test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CONTEXT SUMMARY TEST
+      # ======================================================
+
+      - name: Executor Context Summary Test
+        run: |
+          node - <<'NODE'
+
+          const executor =
+            require("./skills/executor");
+
+
+          const summary =
+            executor.createContextSummary({
+
+              memory: {
+
+                related: [
+                  {
+                    title:
+                      "Memory 1"
+                  }
+                ],
+
+                verified: [
+                  {
+                    title:
+                      "Verified memory"
+                  }
+                ]
+
+              },
+
+
+              knowledge: {
+
+                related: [
+                  {
+                    title:
+                      "Knowledge 1"
+                  }
+                ],
+
+                verified: []
+
+              },
+
+
+              documentAware:
+                true,
+
+
+              documentKnowledge: [
+
+                {
+                  title:
+                    "Document knowledge 1"
+                },
+
+                {
+                  title:
+                    "Document knowledge 2"
+                }
+
+              ],
+
+
+              documentDocuments: {
+
+                results: [
+                  {
+                    title:
+                      "document-1.txt"
+                  }
+                ],
+
+                count:
+                  1
+
+              },
+
+
+              answerContext:
+                "Document answer context.",
+
+
+              research: {
+
+                sources: [
+
+                  {
+                    title:
+                      "Research source"
+                  }
+
+                ]
+
+              }
+
+            });
+
+
+          if (!summary) {
+            throw new Error(
+              "Context summary missing."
+            );
+          }
+
+
+          if (
+            summary.memoryCount !== 1
+          ) {
+            throw new Error(
+              "Memory count mismatch."
+            );
+          }
+
+
+          if (
+            summary.verifiedMemoryCount !== 1
+          ) {
+            throw new Error(
+              "Verified memory count mismatch."
+            );
+          }
+
+
+          if (
+            summary.knowledgeCount !== 1
+          ) {
+            throw new Error(
+              "Knowledge count mismatch."
+            );
+          }
+
+
+          if (
+            summary.documentKnowledgeCount !== 2
+          ) {
+            throw new Error(
+              "Document knowledge count mismatch."
+            );
+          }
+
+
+          if (
+            summary.documentCount !== 1
+          ) {
+            throw new Error(
+              "Document count mismatch."
+            );
+          }
+
+
+          if (
+            summary.hasDocumentContext !== true
+          ) {
+            throw new Error(
+              "Document context was not detected."
+            );
+          }
+
+
+          if (
+            summary.hasDocumentAnswerContext !== true
+          ) {
+            throw new Error(
+              "Document answer context was not detected."
+            );
+          }
+
+
+          if (
+            summary.researchSourceCount !== 1
+          ) {
+            throw new Error(
+              "Research source count mismatch."
+            );
+          }
+
+
+          console.log(
+            "Executor context summary test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RESEARCH INPUT TEST
+      # ======================================================
+
+      - name: Research Context Consumption Test
+        run: |
+          node - <<'NODE'
+
+          const executor =
+            require("./skills/executor");
+
+
+          const result =
+            executor.getResearchInput(
+
+              {
+
+                research: {
+
+                  query:
+                    "AarHen test research",
+
+                  answer:
+                    "Test answer.",
+
+                  sources: [
+
+                    {
+
+                      title:
+                        "Test Source",
+
+                      url:
+                        "https://example.com",
+
+                      publisher:
+                        "Test Publisher",
+
+                      score:
+                        0.90
+
+                    }
+
+                  ],
+
+                  confidence:
+                    0.88,
+
+                  provider:
+                    "test-provider",
+
+                  verificationStatus:
+                    "verified",
+
+                  verified:
+                    true
+
+                }
+
+              },
+
+              {
+
+                request:
+                  "AarHen test research"
+
+              }
+
+            );
+
+
+          if (!result) {
+            throw new Error(
+              "Research input result missing."
+            );
+          }
+
+
+          if (
+            result.sources.length !== 1
+          ) {
+            throw new Error(
+              "Research source was not consumed."
+            );
+          }
+
+
+          if (
+            result.confidence !== 0.88
+          ) {
+            throw new Error(
+              "Research confidence mismatch."
+            );
+          }
+
+
+          if (
+            result.verified !== true
+          ) {
+            throw new Error(
+              "Research verification state lost."
+            );
+          }
+
+
+          if (
+            result.provider !==
+            "test-provider"
+          ) {
+            throw new Error(
+              "Research provider mismatch."
+            );
+          }
+
+
+          console.log(
+            "Research context consumption test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DOCUMENT SUMMARY API
+      # ======================================================
+
+      - name: Document Context Summary API Test
+        run: |
+          node - <<'NODE'
+
+          const executor =
+            require("./skills/executor");
+
+
+          const result =
+            executor.getDocumentContextSummary({
+
+              documentAware:
+                true,
+
+              documentKnowledge: [
+
+                {
+                  title:
+                    "Test knowledge"
+                }
+
+              ],
+
+              documentDocuments: {
+
+                results: [
+
+                  {
+                    title:
+                      "test-document.txt"
+                  }
+
+                ],
+
+                count:
+                  1
+
+              },
+
+              documentRag: {
+
+                available:
+                  true
+
+              },
+
+              answerContext:
+                "Test answer context."
+
+            });
+
+
+          if (!result) {
+            throw new Error(
+              "Document summary result missing."
+            );
+          }
+
+
+          if (
+            result.enabled !== true
+          ) {
+            throw new Error(
+              "Document system should be enabled."
+            );
+          }
+
+
+          if (
+            result.aware !== true
+          ) {
+            throw new Error(
+              "Document-aware mode missing."
+            );
+          }
+
+
+          if (
+            result.knowledgeCount !== 1
+          ) {
+            throw new Error(
+              "Document knowledge count mismatch."
+            );
+          }
+
+
+          if (
+            result.documentCount !== 1
+          ) {
+            throw new Error(
+              "Document count mismatch."
+            );
+          }
+
+
+          if (
+            result.ragAvailable !== true
+          ) {
+            throw new Error(
+              "RAG availability missing."
+            );
+          }
+
+
+          if (
+            result.answerContextAvailable !== true
+          ) {
+            throw new Error(
+              "Answer context availability missing."
+            );
+          }
+
+
+          if (
+            result.detected !== true
+          ) {
+            throw new Error(
+              "Document detection failed."
+            );
+          }
+
+
+          console.log(
+            "Document context summary API test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN EXECUTOR DOCUMENT CONTEXT TEST"
+          echo "=============================================="
+          echo " Executor Load: PASSED"
+          echo " Executor Status: PASSED"
+          echo " Document Context: PASSED"
+          echo " Document Knowledge: PASSED"
+          echo " Document RAG: PASSED"
+          echo " Answer Context: PASSED"
+          echo " Context Summary: PASSED"
+          echo " Research Context: PASSED"
+          echo " Second Web Search: DISABLED"
+          echo "=============================================="
+          echo " EXECUTOR DOCUMENT CONTEXT READY"
+          echo "=============================================="
