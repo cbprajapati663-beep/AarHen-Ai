@@ -1,0 +1,111 @@
+name: AarHen Checkpoint Resume Plan Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-resume-plan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify checkpoint preserves completed and pending steps
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const engine = require("./core/checkpointEngine");
+
+          manager.reset();
+          engine.reset();
+
+          const agent = manager.createAgent({
+            id: "resume-plan-agent",
+            name: "Checkpoint Resume Plan Agent"
+          });
+          if (!agent.success) throw new Error("Agent creation failed.");
+
+          const created = manager.createTask(
+            "resume-plan-agent",
+            "Complete a two-step task",
+            { id: "resume-plan-task", maxRetries: 0 }
+          );
+          if (!created.success) throw new Error("Task creation failed.");
+
+          const steps = manager.addSteps("resume-plan-task", [
+            {
+              id: "resume-plan-step-1",
+              name: "Completed step",
+              description: "Already completed work",
+              action: "calculate",
+              input: { request: "1 + 1" }
+            },
+            {
+              id: "resume-plan-step-2",
+              name: "Pending step",
+              description: "Work remaining after restart",
+              action: "calculate",
+              input: { request: "2 + 2" }
+            }
+          ]);
+          if (!steps.success) throw new Error("Step setup failed.");
+
+          const completed = manager.completeStep(
+            "resume-plan-task",
+            "resume-plan-step-1",
+            { value: 2 }
+          );
+          if (!completed.success) throw new Error("Could not mark first step completed.");
+
+          const started = manager.startTask("resume-plan-task");
+          if (!started.success) throw new Error("Task could not enter running state.");
+
+          const saved = engine.saveTaskCheckpoint("resume-plan-task", {
+            reason: "Simulated interruption after first step"
+          });
+          if (!saved.success) throw new Error("Checkpoint save failed.");
+
+          const candidate = engine.getRecoveryCandidate("resume-plan-task");
+          if (!candidate.success || candidate.recoverable !== true) {
+            throw new Error("Partial task checkpoint should be recoverable.");
+          }
+
+          const plan = engine.buildRecoveryPlan("resume-plan-task");
+          if (!plan.success || plan.recoverable !== true) {
+            throw new Error("Recovery plan was not created.");
+          }
+          if (plan.plan.action !== "resume-from-checkpoint") {
+            throw new Error("Unexpected recovery action: " + plan.plan.action);
+          }
+          if (plan.plan.completedSteps !== 1) {
+            throw new Error("Completed step count was not preserved.");
+          }
+          if (plan.plan.pendingSteps !== 1) {
+            throw new Error("Pending step count was not preserved.");
+          }
+          if (candidate.checkpoint.task.steps[0].status !== "completed") {
+            throw new Error("Completed step status was not preserved.");
+          }
+          if (candidate.checkpoint.task.steps[1].status !== "pending") {
+            throw new Error("Pending step status was not preserved.");
+          }
+
+          console.log("Checkpoint resume-plan preservation test passed.");
+          console.log(JSON.stringify({
+            action: plan.plan.action,
+            completedSteps: plan.plan.completedSteps,
+            pendingSteps: plan.plan.pendingSteps,
+            checkpointId: plan.plan.checkpointId
+          }, null, 2));
+          NODE
