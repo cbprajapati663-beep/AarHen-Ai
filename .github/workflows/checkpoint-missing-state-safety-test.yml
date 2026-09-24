@@ -1,0 +1,82 @@
+name: AarHen Checkpoint Missing-State Safety Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-missing-state-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify missing checkpoint and invalid task handling
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "missing-state-agent",
+            name: "Checkpoint missing-state safety test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "missing-state-agent",
+            "Inspect task without a checkpoint",
+            { id: "missing-state-task" }
+          );
+          assert(created.success, "Task creation failed.");
+
+          const comparison = bridge.compareWithCheckpoint("missing-state-task");
+          assert(comparison.success, "Comparison should handle a missing checkpoint.");
+          assert(comparison.checkpointExists === false, "Missing checkpoint was reported as existing.");
+          assert(comparison.changed === false, "Missing checkpoint should not be reported as drift.");
+          assert(Array.isArray(comparison.differences) && comparison.differences.length === 0,
+            "Missing checkpoint should return an empty differences list.");
+
+          const inspection = bridge.inspectTask("missing-state-task");
+          assert(inspection.success, "Inspection should handle a task without a checkpoint.");
+          assert(inspection.checkpointExists === false, "Inspection incorrectly reported a checkpoint.");
+          assert(inspection.latestCheckpoint === null, "Inspection should return null latest checkpoint.");
+          assert(inspection.recoveryCandidate && inspection.recoveryCandidate.recoverable === false,
+            "Task without a checkpoint must not be recoverable.");
+          assert(inspection.recoveryPlan && inspection.recoveryPlan.recoverable === false,
+            "Task without a checkpoint must not produce a recoverable plan.");
+
+          const unknown = bridge.compareWithCheckpoint("missing-state-unknown-task");
+          assert(unknown.success === false, "Unknown task comparison should fail safely.");
+          assert(unknown.task === null, "Unknown task comparison should not return a task.");
+
+          const blank = bridge.compareWithCheckpoint("   ");
+          assert(blank.success === false, "Blank task ID comparison should fail safely.");
+
+          const liveTask = manager.getTask("missing-state-task");
+          assert(liveTask.success, "Live task disappeared during inspection.");
+          assert(liveTask.task.status === created.task.status, "Inspection changed live task status.");
+
+          console.log("Checkpoint missing-state safety tests passed.");
+          console.log(JSON.stringify({
+            missingCheckpointExists: comparison.checkpointExists,
+            missingCheckpointChanged: comparison.changed,
+            inspectionCheckpointExists: inspection.checkpointExists,
+            inspectionRecoverable: inspection.recoveryPlan.recoverable,
+            unknownTaskRejected: !unknown.success,
+            blankTaskIdRejected: !blank.success,
+            liveTaskStatus: liveTask.task.status
+          }, null, 2));
+          NODE
