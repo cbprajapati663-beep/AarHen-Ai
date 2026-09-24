@@ -1,0 +1,47 @@
+name: AarHen Checkpoint Store Persistence Adapter Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-store:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify durable store behavior and path safety
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const assert = require("node:assert/strict");
+          const fs = require("node:fs");
+          const os = require("node:os");
+          const path = require("node:path");
+          const { createCheckpointStore } = require("./core/checkpointStore");
+
+          const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoints-"));
+          try {
+            const store = createCheckpointStore({ directory: path.join(root, "store") });
+            const sample = { id: "cp-test-01", taskId: "task-1", state: "active", nested: { value: 7 } };
+
+            assert.deepEqual(store.save(sample), { success: true, id: sample.id });
+            assert.deepEqual(store.get(sample.id), sample);
+            assert.equal(store.list().length, 1);
+
+            sample.nested.value = 99;
+            assert.equal(store.get("cp-test-01").nested.value, 7, "Persisted data must not alias caller objects.");
+            assert.equal(store.remove("cp-test-01").deleted, true);
+            assert.equal(store.remove("cp-test-01").deleted, false);
+            assert.equal(store.get("cp-test-01"), null);
+            assert.throws(() => store.get("../outside"), /valid checkpoint ID/);
+            assert.throws(() => store.save({ id: "../outside" }), /valid checkpoint ID/);
+            assert.equal(fs.existsSync(path.join(root, "outside.json")), false);
+            console.log("Checkpoint store persistence adapter tests passed.");
+          } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+          }
+          NODE
