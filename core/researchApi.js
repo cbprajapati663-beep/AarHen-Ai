@@ -53,7 +53,12 @@ async function searchWeb(data = {}) {
                     request.query,
 
                 maxSources:
-                    request.maxSources
+                    request.maxSources,
+
+                provider:
+                    data.provider ||
+                    data.researchProvider ||
+                    null
             });
 
         if (
