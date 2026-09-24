@@ -115,14 +115,7 @@ const STEP_STATES = Object.freeze({
 
 
 // ============================================================
-// MEMORY STORE
-// ============================================================
-//
-// Version 5.8.0 intentionally uses an in-memory store.
-//
-// This gives AarHen a stable Agent API first.
-// Persistent storage will be connected later to the
-// long-term memory / database layer.
+// IN-MEMORY STORE
 // ============================================================
 
 const agents =
@@ -163,9 +156,14 @@ function safeString(value) {
 }
 
 
-function createId(
-    prefix
-) {
+function now() {
+
+    return new Date()
+        .toISOString();
+}
+
+
+function createId(prefix) {
 
     return (
         prefix +
@@ -179,16 +177,7 @@ function createId(
 }
 
 
-function now() {
-
-    return new Date()
-        .toISOString();
-}
-
-
-function normalizePriority(
-    priority
-) {
+function normalizePriority(priority) {
 
     const value =
         safeString(
@@ -214,9 +203,7 @@ function normalizePriority(
 }
 
 
-function normalizeMaxRetries(
-    value
-) {
+function normalizeMaxRetries(value) {
 
     const number =
         Number(value);
@@ -230,15 +217,15 @@ function normalizeMaxRetries(
     }
 
     return Math.min(
-        Math.floor(number),
+        Math.floor(
+            number
+        ),
         10
     );
 }
 
 
-function isTerminalTask(
-    status
-) {
+function isTerminalTask(status) {
 
     return [
 
@@ -253,9 +240,7 @@ function isTerminalTask(
 }
 
 
-function isTerminalStep(
-    status
-) {
+function isTerminalStep(status) {
 
     return [
 
@@ -270,13 +255,35 @@ function isTerminalStep(
 }
 
 
+function clone(value) {
+
+    if (
+        value === undefined
+    ) {
+
+        return undefined;
+    }
+
+    try {
+
+        return JSON.parse(
+            JSON.stringify(
+                value
+            )
+        );
+
+    } catch {
+
+        return value;
+    }
+}
+
+
 // ============================================================
 // PERMISSION RESOLUTION
 // ============================================================
 
-function resolveStepPermission(
-    step = {}
-) {
+function resolveStepPermission(step = {}) {
 
     const action =
         safeString(
@@ -284,10 +291,12 @@ function resolveStepPermission(
         ) ||
         "execute_external_code";
 
+
     const permission =
         permissions.check(
             action
         );
+
 
     return {
 
@@ -301,6 +310,7 @@ function resolveStepPermission(
 
         approved:
             permission.requiresApproval !== true
+
     };
 }
 
@@ -309,14 +319,13 @@ function resolveStepPermission(
 // CREATE AGENT
 // ============================================================
 
-function createAgent(
-    options = {}
-) {
+function createAgent(options = {}) {
 
     const config =
         safeObject(
             options
         );
+
 
     const id =
         safeString(
@@ -325,6 +334,7 @@ function createAgent(
         createId(
             "agent"
         );
+
 
     if (
         agents.has(id)
@@ -345,6 +355,7 @@ function createAgent(
 
     const timestamp =
         now();
+
 
     const agent = {
 
@@ -416,19 +427,19 @@ function createAgent(
 // GET AGENT
 // ============================================================
 
-function getAgent(
-    agentId
-) {
+function getAgent(agentId) {
 
     const id =
         safeString(
             agentId
         );
 
+
     const agent =
         agents.get(
             id
         );
+
 
     if (!agent) {
 
@@ -495,10 +506,12 @@ function createTask(
             agentId
         );
 
+
     const agent =
         agents.get(
             id
         );
+
 
     if (!agent) {
 
@@ -519,6 +532,7 @@ function createTask(
         safeString(
             input
         );
+
 
     if (!request) {
 
@@ -544,6 +558,7 @@ function createTask(
     const timestamp =
         now();
 
+
     const taskId =
         safeString(
             config.id
@@ -554,7 +569,9 @@ function createTask(
 
 
     if (
-        tasks.has(taskId)
+        tasks.has(
+            taskId
+        )
     ) {
 
         return {
@@ -672,8 +689,10 @@ function createTask(
         taskId
     );
 
+
     agent.state =
         AGENT_STATES.READY;
+
 
     agent.updatedAt =
         timestamp;
@@ -695,19 +714,19 @@ function createTask(
 // GET TASK
 // ============================================================
 
-function getTask(
-    taskId
-) {
+function getTask(taskId) {
 
     const id =
         safeString(
             taskId
         );
 
+
     const task =
         tasks.get(
             id
         );
+
 
     if (!task) {
 
@@ -740,9 +759,7 @@ function getTask(
 // LIST TASKS
 // ============================================================
 
-function listTasks(
-    agentId = null
-) {
+function listTasks(agentId = null) {
 
     let list =
         Array.from(
@@ -750,19 +767,21 @@ function listTasks(
         );
 
 
-    if (
+    const filterAgent =
         safeString(
             agentId
-        )
+        );
+
+
+    if (
+        filterAgent
     ) {
 
         list =
             list.filter(
                 task =>
                     task.agentId ===
-                    safeString(
-                        agentId
-                    )
+                    filterAgent
             );
     }
 
@@ -797,6 +816,7 @@ function addStep(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -916,7 +936,9 @@ function addStep(
         status:
             requiresApproval &&
             input.approved !== true
+
                 ? STEP_STATES.WAITING_APPROVAL
+
                 : STEP_STATES.PENDING,
 
         retries:
@@ -959,13 +981,13 @@ function addStep(
         normalizedStep
     );
 
+
     task.updatedAt =
         now();
 
 
     if (
-        normalizedStep
-            .requiresApproval
+        normalizedStep.requiresApproval
     ) {
 
         task.approvalRequired =
@@ -1007,6 +1029,7 @@ function addSteps(
             steps
         );
 
+
     const results = [];
 
 
@@ -1020,9 +1043,11 @@ function addSteps(
                 step
             );
 
+
         results.push(
             result
         );
+
 
         if (
             !result.success
@@ -1050,13 +1075,6 @@ function addSteps(
 // ============================================================
 // PLAN TASK
 // ============================================================
-//
-// This method accepts a ready plan from a planner/Brain.
-// It deliberately does not pretend to generate advanced
-// reasoning by itself.
-//
-// A future planner engine can call this method.
-// ============================================================
 
 function planTask(
     taskId,
@@ -1069,6 +1087,7 @@ function planTask(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -1101,6 +1120,7 @@ function planTask(
     task.status =
         TASK_STATES.PLANNING;
 
+
     task.updatedAt =
         now();
 
@@ -1117,6 +1137,11 @@ function planTask(
 
         task.status =
             TASK_STATES.READY;
+
+
+        task.updatedAt =
+            now();
+
 
         return {
 
@@ -1147,11 +1172,14 @@ function planTask(
         task.status =
             TASK_STATES.FAILED;
 
+
         task.error =
             "Task planning failed.";
 
+
         task.updatedAt =
             now();
+
 
         return {
 
@@ -1185,8 +1213,11 @@ function planTask(
 
     task.status =
         needsApproval
+
             ? TASK_STATES.WAITING_APPROVAL
+
             : TASK_STATES.READY;
+
 
     task.updatedAt =
         now();
@@ -1208,9 +1239,7 @@ function planTask(
 // APPROVE TASK
 // ============================================================
 
-function approveTask(
-    taskId
-) {
+function approveTask(taskId) {
 
     const task =
         tasks.get(
@@ -1218,6 +1247,7 @@ function approveTask(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -1262,6 +1292,7 @@ function approveTask(
             step.approved =
                 true;
 
+
             if (
                 step.status ===
                 STEP_STATES.WAITING_APPROVAL
@@ -1277,8 +1308,10 @@ function approveTask(
     task.approvalRequired =
         false;
 
+
     task.status =
         TASK_STATES.READY;
+
 
     task.updatedAt =
         now();
@@ -1314,6 +1347,7 @@ function approveStep(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -1411,9 +1445,7 @@ function approveStep(
 // START TASK
 // ============================================================
 
-function startTask(
-    taskId
-) {
+function startTask(taskId) {
 
     const task =
         tasks.get(
@@ -1421,6 +1453,7 @@ function startTask(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -1476,8 +1509,10 @@ function startTask(
         task.status =
             TASK_STATES.WAITING_APPROVAL;
 
+
         task.updatedAt =
             now();
+
 
         return {
 
@@ -1510,8 +1545,10 @@ function startTask(
         task.status =
             TASK_STATES.WAITING_APPROVAL;
 
+
         task.updatedAt =
             now();
+
 
         return {
 
@@ -1532,15 +1569,19 @@ function startTask(
     task.status =
         TASK_STATES.RUNNING;
 
+
     task.stopRequested =
         false;
+
 
     task.pauseRequested =
         false;
 
+
     task.startedAt =
         task.startedAt ||
         now();
+
 
     task.updatedAt =
         now();
@@ -1549,8 +1590,10 @@ function startTask(
     agent.state =
         AGENT_STATES.WORKING;
 
+
     agent.activeTaskId =
         task.id;
+
 
     agent.updatedAt =
         now();
@@ -1576,10 +1619,17 @@ function startTask(
 // ============================================================
 // PAUSE TASK
 // ============================================================
+// IMPORTANT FIX:
+//
+// A task can now be paused from:
+// - READY
+// - RUNNING
+//
+// This is required for autonomous task control before
+// execution has started.
+// ============================================================
 
-function pauseTask(
-    taskId
-) {
+function pauseTask(taskId) {
 
     const task =
         tasks.get(
@@ -1587,6 +1637,7 @@ function pauseTask(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -1611,7 +1662,39 @@ function pauseTask(
             success: false,
 
             error:
-                "Task is already stopped."
+                "Task is already in a terminal state."
+        };
+    }
+
+
+    if (
+        task.status ===
+        TASK_STATES.WAITING_APPROVAL
+    ) {
+
+        return {
+
+            success: false,
+
+            error:
+                "Task is waiting for approval and cannot be paused."
+        };
+    }
+
+
+    if (
+        task.status !==
+            TASK_STATES.READY &&
+        task.status !==
+            TASK_STATES.RUNNING
+    ) {
+
+        return {
+
+            success: false,
+
+            error:
+                "Task cannot be paused from its current state."
         };
     }
 
@@ -1620,14 +1703,8 @@ function pauseTask(
         true;
 
 
-    if (
-        task.status ===
-        TASK_STATES.RUNNING
-    ) {
-
-        task.status =
-            TASK_STATES.PAUSED;
-    }
+    task.status =
+        TASK_STATES.PAUSED;
 
 
     task.updatedAt =
@@ -1655,9 +1732,7 @@ function pauseTask(
 // RESUME TASK
 // ============================================================
 
-function resumeTask(
-    taskId
-) {
+function resumeTask(taskId) {
 
     const task =
         tasks.get(
@@ -1665,6 +1740,7 @@ function resumeTask(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -1696,8 +1772,10 @@ function resumeTask(
     task.pauseRequested =
         false;
 
+
     task.status =
         TASK_STATES.RUNNING;
+
 
     task.updatedAt =
         now();
@@ -1736,6 +1814,7 @@ function stopTask(
             )
         );
 
+
     if (!task) {
 
         return {
@@ -1772,14 +1851,22 @@ function stopTask(
     task.stopRequested =
         true;
 
+
+    task.pauseRequested =
+        false;
+
+
     task.status =
         TASK_STATES.STOPPED;
+
 
     task.stoppedAt =
         now();
 
+
     task.completedAt =
         null;
+
 
     task.error =
         safeString(
@@ -1841,6 +1928,7 @@ function cancelTask(
             )
         );
 
+
     if (!task) {
 
         return {
@@ -1872,11 +1960,21 @@ function cancelTask(
     task.status =
         TASK_STATES.CANCELLED;
 
+
+    task.pauseRequested =
+        false;
+
+
+    task.stopRequested =
+        false;
+
+
     task.error =
         safeString(
             reason
         ) ||
         "Task cancelled.";
+
 
     task.updatedAt =
         now();
@@ -1903,9 +2001,7 @@ function cancelTask(
 // GET NEXT EXECUTABLE STEP
 // ============================================================
 
-function getNextStep(
-    taskId
-) {
+function getNextStep(taskId) {
 
     const task =
         tasks.get(
@@ -1913,6 +2009,7 @@ function getNextStep(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -2039,6 +2136,7 @@ function startStep(
             )
         );
 
+
     if (!task) {
 
         return {
@@ -2081,11 +2179,14 @@ function startStep(
         step.status =
             STEP_STATES.WAITING_APPROVAL;
 
+
         task.approvalRequired =
             true;
 
+
         task.status =
             TASK_STATES.WAITING_APPROVAL;
+
 
         task.updatedAt =
             now();
@@ -2122,7 +2223,9 @@ function startStep(
 
 
     if (
-        task.pauseRequested
+        task.pauseRequested ||
+        task.status ===
+        TASK_STATES.PAUSED
     ) {
 
         return {
@@ -2141,20 +2244,30 @@ function startStep(
     step.status =
         STEP_STATES.RUNNING;
 
+
     step.startedAt =
         now();
+
 
     task.currentStepIndex =
         step.index;
 
+
     task.currentStepId =
         step.id;
+
 
     task.status =
         TASK_STATES.RUNNING;
 
+
     task.updatedAt =
         now();
+
+
+    updateAgentStateFromTask(
+        task
+    );
 
 
     return {
@@ -2190,6 +2303,7 @@ function completeStep(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -2228,14 +2342,18 @@ function completeStep(
     step.status =
         STEP_STATES.COMPLETED;
 
+
     step.result =
         result;
+
 
     step.error =
         null;
 
+
     step.completedAt =
         now();
+
 
     task.updatedAt =
         now();
@@ -2255,13 +2373,16 @@ function completeStep(
         task.status =
             TASK_STATES.COMPLETED;
 
+
         task.result =
             buildTaskResult(
                 task
             );
 
+
         task.completedAt =
             now();
+
 
         task.currentStepId =
             null;
@@ -2311,6 +2432,7 @@ function failStep(
             )
         );
 
+
     if (!task) {
 
         return {
@@ -2347,6 +2469,7 @@ function failStep(
 
     step.retries += 1;
 
+
     step.error =
         safeString(
             error
@@ -2362,7 +2485,9 @@ function failStep(
         step.status =
             STEP_STATES.PENDING;
 
+
         task.retries += 1;
+
 
         task.status =
             TASK_STATES.RUNNING;
@@ -2372,8 +2497,10 @@ function failStep(
         step.status =
             STEP_STATES.FAILED;
 
+
         task.status =
             TASK_STATES.FAILED;
+
 
         task.error =
             step.error;
@@ -2426,6 +2553,7 @@ function skipStep(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -2480,13 +2608,16 @@ function skipStep(
     step.status =
         STEP_STATES.SKIPPED;
 
+
     step.error =
         safeString(
             reason
         );
 
+
     step.completedAt =
         now();
+
 
     task.updatedAt =
         now();
@@ -2512,17 +2643,6 @@ function skipStep(
 // ============================================================
 // EXECUTE NEXT STEP
 // ============================================================
-//
-// `runner` is supplied by the controlled execution layer.
-//
-// Example runner signature:
-//
-// async ({ task, step }) => {
-//     return { success: true, data: ... };
-// }
-//
-// The Agent Manager never executes arbitrary code by itself.
-// ============================================================
 
 async function executeNextStep(
     taskId,
@@ -2535,6 +2655,7 @@ async function executeNextStep(
                 taskId
             )
         );
+
 
     if (!task) {
 
@@ -2582,13 +2703,16 @@ async function executeNextStep(
         task.status =
             TASK_STATES.COMPLETED;
 
+
         task.result =
             buildTaskResult(
                 task
             );
 
+
         task.completedAt =
             now();
+
 
         task.updatedAt =
             now();
@@ -2668,11 +2792,16 @@ async function executeNextStep(
 
             const failure =
                 failStep(
+
                     task.id,
+
                     stepId,
+
                     result?.error ||
                     "Step execution failed."
+
                 );
+
 
             return {
 
@@ -2691,9 +2820,13 @@ async function executeNextStep(
 
         const completed =
             completeStep(
+
                 task.id,
+
                 stepId,
+
                 result
+
             );
 
 
@@ -2718,9 +2851,13 @@ async function executeNextStep(
 
         const failure =
             failStep(
+
                 task.id,
+
                 stepId,
+
                 error.message
+
             );
 
 
@@ -2742,14 +2879,6 @@ async function executeNextStep(
 
 // ============================================================
 // RUN TASK
-// ============================================================
-//
-// This repeatedly invokes the controlled runner until:
-// - task completes
-// - task pauses
-// - task stops
-// - task waits for approval
-// - task fails
 // ============================================================
 
 async function runTask(
@@ -2966,6 +3095,7 @@ async function runTask(
                     task.id
                 );
 
+
             if (
                 latest &&
                 latest.status ===
@@ -3014,14 +3144,13 @@ async function runTask(
 // UPDATE AGENT STATE
 // ============================================================
 
-function updateAgentStateFromTask(
-    task
-) {
+function updateAgentStateFromTask(task) {
 
     const agent =
         agents.get(
             task.agentId
         );
+
 
     if (!agent) {
 
@@ -3037,6 +3166,7 @@ function updateAgentStateFromTask(
         agent.state =
             AGENT_STATES.WORKING;
 
+
         agent.activeTaskId =
             task.id;
 
@@ -3047,6 +3177,7 @@ function updateAgentStateFromTask(
 
         agent.state =
             AGENT_STATES.PAUSED;
+
 
         agent.activeTaskId =
             task.id;
@@ -3061,6 +3192,7 @@ function updateAgentStateFromTask(
         agent.state =
             AGENT_STATES.STOPPED;
 
+
         agent.activeTaskId =
             null;
 
@@ -3071,6 +3203,7 @@ function updateAgentStateFromTask(
 
         agent.state =
             AGENT_STATES.COMPLETED;
+
 
         agent.activeTaskId =
             null;
@@ -3083,6 +3216,7 @@ function updateAgentStateFromTask(
         agent.state =
             AGENT_STATES.ERROR;
 
+
         agent.activeTaskId =
             null;
 
@@ -3090,6 +3224,7 @@ function updateAgentStateFromTask(
 
         agent.state =
             AGENT_STATES.READY;
+
 
         agent.activeTaskId =
             task.id;
@@ -3105,9 +3240,7 @@ function updateAgentStateFromTask(
 // BUILD TASK RESULT
 // ============================================================
 
-function buildTaskResult(
-    task
-) {
+function buildTaskResult(task) {
 
     return {
 
@@ -3124,13 +3257,11 @@ function buildTaskResult(
             task.status,
 
         completedSteps:
-            task.steps
-                .filter(
-                    step =>
-                        step.status ===
-                        STEP_STATES.COMPLETED
-                )
-                .length,
+            task.steps.filter(
+                step =>
+                    step.status ===
+                    STEP_STATES.COMPLETED
+            ).length,
 
         totalSteps:
             task.steps.length,
@@ -3153,6 +3284,7 @@ function buildTaskResult(
 
                     result:
                         step.result
+
                 })
             ),
 
@@ -3166,19 +3298,19 @@ function buildTaskResult(
 // DELETE TASK
 // ============================================================
 
-function deleteTask(
-    taskId
-) {
+function deleteTask(taskId) {
 
     const id =
         safeString(
             taskId
         );
 
+
     const task =
         tasks.get(
             id
         );
+
 
     if (!task) {
 
@@ -3226,6 +3358,7 @@ function deleteTask(
                     item !== id
             );
 
+
         if (
             agent.activeTaskId ===
             id
@@ -3234,6 +3367,7 @@ function deleteTask(
             agent.activeTaskId =
                 null;
         }
+
 
         agent.updatedAt =
             now();
@@ -3254,19 +3388,19 @@ function deleteTask(
 // DELETE AGENT
 // ============================================================
 
-function deleteAgent(
-    agentId
-) {
+function deleteAgent(agentId) {
 
     const id =
         safeString(
             agentId
         );
 
+
     const agent =
         agents.get(
             id
         );
+
 
     if (!agent) {
 
@@ -3321,9 +3455,6 @@ function deleteAgent(
 
 // ============================================================
 // RESET STORE
-// ============================================================
-//
-// Primarily useful for tests.
 // ============================================================
 
 function reset() {
@@ -3402,37 +3533,6 @@ function getStatus() {
                     TASK_STATES.FAILED
             ).length
     };
-}
-
-
-// ============================================================
-// CLONE
-// ============================================================
-
-function clone(
-    value
-) {
-
-    if (
-        value === undefined
-    ) {
-
-        return undefined;
-    }
-
-
-    try {
-
-        return JSON.parse(
-            JSON.stringify(
-                value
-            )
-        );
-
-    } catch {
-
-        return value;
-    }
 }
 
 
