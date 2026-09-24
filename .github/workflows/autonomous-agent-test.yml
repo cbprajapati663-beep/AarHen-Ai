@@ -1,0 +1,871 @@
+name: AarHen Autonomous Agent Test
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  autonomous-agent-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD CONTROLLER
+      # ======================================================
+
+      - name: Load Autonomous Agent
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          if (!autonomousAgent) {
+            throw new Error(
+              "core/autonomousAgent.js could not be loaded."
+            );
+          }
+
+          if (
+            autonomousAgent.AUTONOMOUS_AGENT_VERSION !==
+            "5.8.3"
+          ) {
+            throw new Error(
+              "Autonomous Agent version mismatch."
+            );
+          }
+
+          console.log(
+            "Autonomous Agent loaded successfully."
+          );
+
+          console.log(
+            "Version:",
+            autonomousAgent.AUTONOMOUS_AGENT_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Autonomous Agent Status Test
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          const status =
+            autonomousAgent.getStatus();
+
+          if (!status) {
+            throw new Error(
+              "Autonomous Agent status missing."
+            );
+          }
+
+          if (
+            status.success !== true
+          ) {
+            throw new Error(
+              "Autonomous Agent status is not healthy."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Autonomous Agent is not active."
+            );
+          }
+
+          if (
+            status.systems?.agentManager?.connected !==
+            true
+          ) {
+            throw new Error(
+              "Agent Manager is not connected."
+            );
+          }
+
+          if (
+            status.systems?.agentPlanner?.connected !==
+            true
+          ) {
+            throw new Error(
+              "Agent Planner is not connected."
+            );
+          }
+
+          if (
+            status.systems?.agentRunner?.connected !==
+            true
+          ) {
+            throw new Error(
+              "Agent Runner is not connected."
+            );
+          }
+
+          console.log(
+            "Autonomous Agent status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DEFAULT AGENT TEST
+      # ======================================================
+
+      - name: Default Agent Test
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          autonomousAgent.reset();
+
+          const result =
+            autonomousAgent.getDefaultAgent();
+
+          if (
+            result.success !== false
+          ) {
+            throw new Error(
+              "Default agent should not exist after reset."
+            );
+          }
+
+          const resolved =
+            autonomousAgent.createTask(
+              "Calculate 10 + 20"
+            );
+
+          if (
+            resolved.success !== true
+          ) {
+            throw new Error(
+              "Default agent creation through createTask failed."
+            );
+          }
+
+          if (
+            !resolved.agent
+          ) {
+            throw new Error(
+              "Resolved default agent is missing."
+            );
+          }
+
+          if (
+            resolved.agent.type !==
+            "autonomous"
+          ) {
+            throw new Error(
+              "Default agent type mismatch."
+            );
+          }
+
+          console.log(
+            "Default Agent test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PLAN REQUEST TEST
+      # ======================================================
+
+      - name: Plan Request Test
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          const result =
+            autonomousAgent.planRequest(
+              "Calculate 25 + 75"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Autonomous Agent planning failed."
+            );
+          }
+
+          if (
+            result.category !==
+            "calculation"
+          ) {
+            throw new Error(
+              "Planning category mismatch."
+            );
+          }
+
+          if (
+            result.plan.length !== 1
+          ) {
+            throw new Error(
+              "Expected one calculation step."
+            );
+          }
+
+          if (
+            result.plan[0].action !==
+            "calculate"
+          ) {
+            throw new Error(
+              "Calculation action mismatch."
+            );
+          }
+
+          console.log(
+            "Plan Request test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # TASK CREATION TEST
+      # ======================================================
+
+      - name: Task Creation Test
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          autonomousAgent.reset();
+
+          const result =
+            autonomousAgent.createTask(
+              "Calculate 50 + 50"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Autonomous Agent task creation failed."
+            );
+          }
+
+          if (
+            !result.task
+          ) {
+            throw new Error(
+              "Created task is missing."
+            );
+          }
+
+          if (
+            !result.task.id
+          ) {
+            throw new Error(
+              "Task ID is missing."
+            );
+          }
+
+          if (
+            result.task.steps.length !== 1
+          ) {
+            throw new Error(
+              "Expected one planned task step."
+            );
+          }
+
+          if (
+            result.task.steps[0].action !==
+            "calculate"
+          ) {
+            throw new Error(
+              "Task action mismatch."
+            );
+          }
+
+          if (
+            result.task.status !==
+            "ready"
+          ) {
+            throw new Error(
+              "Calculation task should be ready."
+            );
+          }
+
+          console.log(
+            "Task Creation test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CONTROLLED EXECUTION TEST
+      # ======================================================
+
+      - name: Controlled Autonomous Execution Test
+        run: |
+          node - <<'NODE'
+
+          (async () => {
+
+            const autonomousAgent =
+              require("./core/autonomousAgent");
+
+            autonomousAgent.reset();
+
+            const result =
+              await autonomousAgent.executeRequest(
+                "Calculate 10 + 20"
+              );
+
+            if (
+              result.success !== true
+            ) {
+              throw new Error(
+                "Autonomous execution failed: " +
+                (
+                  result.execution?.error ||
+                  result.execution?.runner?.result?.error ||
+                  JSON.stringify(
+                    result.execution ||
+                    {}
+                  )
+                )
+              );
+            }
+
+            if (
+              !result.task
+            ) {
+              throw new Error(
+                "Executed task is missing."
+              );
+            }
+
+            if (
+              result.task.status !==
+              "completed"
+            ) {
+              throw new Error(
+                "Autonomous task did not complete."
+              );
+            }
+
+            if (
+              result.task.steps.length !== 1
+            ) {
+              throw new Error(
+                "Executed task step count mismatch."
+              );
+            }
+
+            if (
+              result.task.steps[0].status !==
+              "completed"
+            ) {
+              throw new Error(
+                "Autonomous step did not complete."
+              );
+            }
+
+            console.log(
+              "Controlled Autonomous Execution test passed."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # APPROVAL FLOW TEST
+      # ======================================================
+
+      - name: Autonomous Approval Flow Test
+        run: |
+          node - <<'NODE'
+
+          (async () => {
+
+            const autonomousAgent =
+              require("./core/autonomousAgent");
+
+            autonomousAgent.reset();
+
+            const result =
+              await autonomousAgent.executeRequest(
+                "Send a message to a customer"
+              );
+
+            if (
+              result.success !== true
+            ) {
+              throw new Error(
+                "Approval-flow request creation failed."
+              );
+            }
+
+            if (
+              result.waitingApproval !== true
+            ) {
+              throw new Error(
+                "Protected action did not enter approval state."
+              );
+            }
+
+            if (
+              result.stage !==
+              "approval"
+            ) {
+              throw new Error(
+                "Approval stage mismatch."
+              );
+            }
+
+            if (
+              !result.task
+            ) {
+              throw new Error(
+                "Approval task is missing."
+              );
+            }
+
+            if (
+              result.task.status !==
+              "waiting_approval"
+            ) {
+              throw new Error(
+                "Task is not waiting for approval."
+              );
+            }
+
+            console.log(
+              "Autonomous Approval Flow test passed."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # STOP CONTROL TEST
+      # ======================================================
+
+      - name: Autonomous Stop Control Test
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          autonomousAgent.reset();
+
+          const created =
+            autonomousAgent.createTask(
+              "Calculate 100 + 200"
+            );
+
+          if (
+            created.success !== true
+          ) {
+            throw new Error(
+              "Stop test task creation failed."
+            );
+          }
+
+          const stopped =
+            autonomousAgent.stopTask(
+              created.task.id,
+              "Stopped by autonomous-agent test."
+            );
+
+          if (
+            stopped.success !== true
+          ) {
+            throw new Error(
+              "Autonomous stop failed."
+            );
+          }
+
+          if (
+            stopped.task.status !==
+            "stopped"
+          ) {
+            throw new Error(
+              "Task did not enter stopped state."
+            );
+          }
+
+          if (
+            stopped.task.stopRequested !==
+            true
+          ) {
+            throw new Error(
+              "Stop request flag is missing."
+            );
+          }
+
+          console.log(
+            "Autonomous Stop Control test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PAUSE / RESUME TEST
+      # ======================================================
+
+      - name: Autonomous Pause Resume Test
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          autonomousAgent.reset();
+
+          const created =
+            autonomousAgent.createTask(
+              "Calculate 200 + 300"
+            );
+
+          if (
+            created.success !== true
+          ) {
+            throw new Error(
+              "Pause test task creation failed."
+            );
+          }
+
+          const paused =
+            autonomousAgent.pauseTask(
+              created.task.id
+            );
+
+          if (
+            paused.success !== true
+          ) {
+            throw new Error(
+              "Autonomous pause failed."
+            );
+          }
+
+          if (
+            paused.task.status !==
+            "paused"
+          ) {
+            throw new Error(
+              "Task did not enter paused state."
+            );
+          }
+
+          const status =
+            autonomousAgent.getTaskStatus(
+              created.task.id
+            );
+
+          if (
+            status.status !==
+            "paused"
+          ) {
+            throw new Error(
+              "Task status API did not report paused."
+            );
+          }
+
+          console.log(
+            "Autonomous Pause test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # APPROVE + EXECUTE TEST
+      # ======================================================
+
+      - name: Approve And Execute Test
+        run: |
+          node - <<'NODE'
+
+          (async () => {
+
+            const autonomousAgent =
+              require("./core/autonomousAgent");
+
+            autonomousAgent.reset();
+
+            const created =
+              autonomousAgent.createTask(
+                "Send an email"
+              );
+
+            if (
+              created.success !== true
+            ) {
+              throw new Error(
+                "Protected task creation failed."
+              );
+            }
+
+            if (
+              created.task.status !==
+              "waiting_approval"
+            ) {
+              throw new Error(
+                "Protected task should require approval."
+              );
+            }
+
+            const result =
+              await autonomousAgent.approveAndExecute(
+                created.task.id
+              );
+
+            if (
+              result.success !== true
+            ) {
+              throw new Error(
+                "Approve and execute flow failed: " +
+                (
+                  result.execution?.runner?.result?.error ||
+                  JSON.stringify(
+                    result.execution ||
+                    {}
+                  )
+                )
+              );
+            }
+
+            if (
+              !result.task
+            ) {
+              throw new Error(
+                "Approved execution task is missing."
+              );
+            }
+
+            if (
+              result.task.status !==
+              "completed"
+            ) {
+              throw new Error(
+                "Approved task did not complete."
+              );
+            }
+
+            console.log(
+              "Approve And Execute test passed."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # LIST TEST
+      # ======================================================
+
+      - name: Agent And Task Listing Test
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          autonomousAgent.reset();
+
+          const created =
+            autonomousAgent.createTask(
+              "Calculate 5 + 5"
+            );
+
+          if (
+            created.success !== true
+          ) {
+            throw new Error(
+              "Listing test task creation failed."
+            );
+          }
+
+          const agents =
+            autonomousAgent.listAgents();
+
+          if (
+            agents.success !== true
+          ) {
+            throw new Error(
+              "Agent listing failed."
+            );
+          }
+
+          if (
+            agents.count < 1
+          ) {
+            throw new Error(
+              "At least one agent should exist."
+            );
+          }
+
+          const tasks =
+            autonomousAgent.listTasks();
+
+          if (
+            tasks.success !== true
+          ) {
+            throw new Error(
+              "Task listing failed."
+            );
+          }
+
+          if (
+            tasks.count < 1
+          ) {
+            throw new Error(
+              "At least one task should exist."
+            );
+          }
+
+          console.log(
+            "Agent and Task Listing test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL STATUS TEST
+      # ======================================================
+
+      - name: Final Autonomous Agent Status Test
+        run: |
+          node - <<'NODE'
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          const status =
+            autonomousAgent.getStatus();
+
+          if (
+            status.success !== true
+          ) {
+            throw new Error(
+              "Final Autonomous Agent status failed."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Final Autonomous Agent is not active."
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "Final Autonomous Agent status test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN AUTONOMOUS AGENT TEST"
+          echo "=============================================="
+          echo " Controller Load: PASSED"
+          echo " Controller Status: PASSED"
+          echo " Default Agent: PASSED"
+          echo " Request Planning: PASSED"
+          echo " Task Creation: PASSED"
+          echo " Controlled Execution: PASSED"
+          echo " Approval Flow: PASSED"
+          echo " Stop Control: PASSED"
+          echo " Pause Control: PASSED"
+          echo " Approve + Execute: PASSED"
+          echo " Agent/Task Listing: PASSED"
+          echo " Final Status: PASSED"
+          echo "=============================================="
+          echo " AUTONOMOUS AGENT v5.8.3 READY"
+          echo "=============================================="
