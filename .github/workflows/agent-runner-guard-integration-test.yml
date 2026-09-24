@@ -1,0 +1,726 @@
+name: AarHen Agent Runner Guard Integration Test
+
+on:
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+jobs:
+
+  agent-runner-guard-integration:
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD COMPONENTS
+      # ======================================================
+
+      - name: Load Agent Runner and Safety Guard
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const runner =
+            require("./core/agentRunner");
+
+          const guard =
+            require("./core/autonomousGuard");
+
+
+          if (!runner) {
+
+            throw new Error(
+              "Agent Runner could not be loaded."
+            );
+
+          }
+
+
+          if (!guard) {
+
+            throw new Error(
+              "Autonomous Safety Guard could not be loaded."
+            );
+
+          }
+
+
+          if (
+            runner.AGENT_RUNNER_VERSION !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Agent Runner version mismatch."
+            );
+
+          }
+
+
+          if (
+            guard.AUTONOMOUS_GUARD_VERSION !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Autonomous Guard version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Agent Runner:",
+            runner.AGENT_RUNNER_VERSION
+          );
+
+
+          console.log(
+            "Autonomous Guard:",
+            guard.AUTONOMOUS_GUARD_VERSION
+          );
+
+
+          console.log(
+            "Components loaded successfully."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RUNNER GUARD CONNECTION TEST
+      # ======================================================
+
+      - name: Runner Guard Connection Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const runner =
+            require("./core/agentRunner");
+
+
+          const status =
+            runner.getStatus();
+
+
+          if (
+            status.autonomousSafetyGuard?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Agent Runner is not connected to Autonomous Safety Guard."
+            );
+
+          }
+
+
+          if (
+            status.autonomousSafetyGuard?.version !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Agent Runner is connected to the wrong Guard version."
+            );
+
+          }
+
+
+          console.log(
+            "Runner-to-Guard connection test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              status.autonomousSafetyGuard,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SAFE ACTION TEST
+      # ======================================================
+
+      - name: Safe Calculation Through Guard Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const runner =
+              require("./core/agentRunner");
+
+
+            const controlledRunner =
+              runner.createRunner({
+
+                source:
+                  "agent-runner-guard-test"
+
+              });
+
+
+            const result =
+              await controlledRunner({
+
+                task: {
+
+                  id:
+                    "guard-safe-task",
+
+                  agentId:
+                    "guard-safe-agent",
+
+                  request:
+                    "Calculate 10 + 20",
+
+                  context: {},
+
+                  stopRequested:
+                    false,
+
+                  pauseRequested:
+                    false
+
+                },
+
+                step: {
+
+                  id:
+                    "guard-safe-step",
+
+                  action:
+                    "calculate",
+
+                  approved:
+                    true,
+
+                  input: {
+
+                    request:
+                      "Calculate 10 + 20"
+
+                  }
+
+                },
+
+                permission: {
+
+                  policy:
+                    "ALLOW"
+
+                }
+
+              });
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Safe calculation was unexpectedly blocked: " +
+                (
+                  result.error ||
+                  JSON.stringify(result)
+                )
+              );
+
+            }
+
+
+            if (
+              result.action !==
+              "calculate"
+            ) {
+
+              throw new Error(
+                "Safe action was not routed as calculate."
+              );
+
+            }
+
+
+            console.log(
+              "Safe calculation through Guard passed."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # PROTECTED ACTION TEST
+      # ======================================================
+
+      - name: Protected Action Guard Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const runner =
+              require("./core/agentRunner");
+
+
+            const controlledRunner =
+              runner.createRunner();
+
+
+            const result =
+              await controlledRunner({
+
+                task: {
+
+                  id:
+                    "guard-protected-task",
+
+                  agentId:
+                    "guard-protected-agent",
+
+                  request:
+                    "Send a message",
+
+                  context: {},
+
+                  stopRequested:
+                    false,
+
+                  pauseRequested:
+                    false
+
+                },
+
+                step: {
+
+                  id:
+                    "guard-protected-step",
+
+                  action:
+                    "send_message",
+
+                  approved:
+                    false,
+
+                  input: {}
+
+                },
+
+                permission:
+                  runner.resolvePermission({
+
+                    action:
+                      "send_message"
+
+                  })
+
+              });
+
+
+            if (
+              result.success !==
+              false
+            ) {
+
+              throw new Error(
+                "Protected action was allowed without approval."
+              );
+
+            }
+
+
+            if (
+              result.requiresApproval !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action approval requirement was not returned."
+              );
+
+            }
+
+
+            if (
+              result.executionStatus !==
+              "approval-required"
+            ) {
+
+              throw new Error(
+                "Unexpected protected-action execution status: " +
+                result.executionStatus
+              );
+
+            }
+
+
+            if (
+              result.safetyGuard?.allowed !==
+              false
+            ) {
+
+              throw new Error(
+                "Autonomous Safety Guard did not block protected action."
+              );
+
+            }
+
+
+            console.log(
+              "Protected action Guard test passed."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # EMERGENCY STOP TEST
+      # ======================================================
+
+      - name: Emergency STOP Integration Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const runner =
+              require("./core/agentRunner");
+
+            const guard =
+              require("./core/autonomousGuard");
+
+
+            guard.reset();
+
+
+            const stop =
+              guard.activateStop(
+                "Agent Runner integration STOP test."
+              );
+
+
+            if (
+              stop.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Emergency STOP could not be activated."
+              );
+
+            }
+
+
+            const controlledRunner =
+              runner.createRunner();
+
+
+            const result =
+              await controlledRunner({
+
+                task: {
+
+                  id:
+                    "guard-stop-task",
+
+                  agentId:
+                    "guard-stop-agent",
+
+                  request:
+                    "Calculate 10 + 20",
+
+                  context: {},
+
+                  stopRequested:
+                    false,
+
+                  pauseRequested:
+                    false
+
+                },
+
+                step: {
+
+                  id:
+                    "guard-stop-step",
+
+                  action:
+                    "calculate",
+
+                  approved:
+                    true,
+
+                  input: {
+
+                    request:
+                      "Calculate 10 + 20"
+
+                  }
+
+                },
+
+                permission: {
+
+                  policy:
+                    "ALLOW"
+
+                }
+
+              });
+
+
+            if (
+              result.success !==
+              false
+            ) {
+
+              throw new Error(
+                "Emergency STOP did not block execution."
+              );
+
+            }
+
+
+            if (
+              result.stopped !==
+              true
+            ) {
+
+              throw new Error(
+                "Emergency STOP result did not report stopped=true."
+              );
+
+            }
+
+
+            if (
+              result.executionStatus !==
+              "autonomous-stop"
+            ) {
+
+              throw new Error(
+                "Unexpected emergency STOP execution status: " +
+                result.executionStatus
+              );
+
+            }
+
+
+            if (
+              result.safetyGuard?.stopActive !==
+              true
+            ) {
+
+              throw new Error(
+                "Agent Runner did not receive active STOP state."
+              );
+
+            }
+
+
+            console.log(
+              "Emergency STOP integration test passed."
+            );
+
+
+            const clear =
+              guard.clearStop();
+
+
+            if (
+              clear.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Emergency STOP could not be cleared."
+              );
+
+            }
+
+
+            console.log(
+              "Emergency STOP cleared successfully."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # FINAL HEALTH TEST
+      # ======================================================
+
+      - name: Final Guard Integration Health Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const runner =
+            require("./core/agentRunner");
+
+          const guard =
+            require("./core/autonomousGuard");
+
+
+          guard.reset();
+
+
+          const runnerStatus =
+            runner.getStatus();
+
+          const guardStatus =
+            guard.getStatus();
+
+
+          if (
+            runnerStatus.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Agent Runner final status is unhealthy."
+            );
+
+          }
+
+
+          if (
+            guardStatus.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Autonomous Safety Guard final status is not active."
+            );
+
+          }
+
+
+          if (
+            runnerStatus.autonomousSafetyGuard?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Agent Runner Guard connection is unhealthy."
+            );
+
+          }
+
+
+          console.log(
+            "Final Guard integration health test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              {
+
+                agentRunner:
+                  runnerStatus,
+
+                autonomousGuard:
+                  guardStatus
+
+              },
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=============================================="
+          echo " AARHEN AGENT RUNNER + SAFETY GUARD"
+          echo "=============================================="
+          echo " Agent Runner Load: PASSED"
+          echo " Guard Load: PASSED"
+          echo " Runner-Guard Connection: PASSED"
+          echo " Safe Action: PASSED"
+          echo " Protected Action: PASSED"
+          echo " Emergency STOP: PASSED"
+          echo " Final Health: PASSED"
+          echo "=============================================="
+          echo " AGENT RUNNER v5.8.4"
+          echo " AUTONOMOUS GUARD v5.11.0"
+          echo "=============================================="
+          echo " SAFETY INTEGRATION READY"
+          echo "=============================================="
