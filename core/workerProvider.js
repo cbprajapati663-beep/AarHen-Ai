@@ -11,6 +11,8 @@
 // - Preserve Worker safety and queue controls
 // - Support provider-backed task execution
 // - Support provider-aware queue execution
+// - Refresh task state before provider detection to avoid
+//   stale task snapshots
 //
 // Architecture:
 //
@@ -365,6 +367,102 @@ function buildProviderRequirement(
 
 
 // ============================================================
+// REFRESH TASK SNAPSHOT
+// ============================================================
+//
+// Agent Manager methods return cloned task snapshots.
+//
+// Example:
+//
+// createTask() → snapshot
+// addStep()    → internal task changes
+//
+// The old snapshot may therefore not contain the new step.
+//
+// This helper always prefers the latest Agent Manager state
+// when a task ID is available.
+// ============================================================
+
+function refreshTaskSnapshot(
+    task
+) {
+
+    const original =
+        safeObject(
+            task
+        );
+
+
+    const taskId =
+        safeString(
+            original.id
+        );
+
+
+    if (
+        !taskId
+    ) {
+
+        return {
+
+            success:
+                true,
+
+            refreshed:
+                false,
+
+            task:
+                original
+
+        };
+
+    }
+
+
+    const latest =
+        getTask(
+            taskId
+        );
+
+
+    if (
+        latest.success &&
+        latest.task
+    ) {
+
+        return {
+
+            success:
+                true,
+
+            refreshed:
+                true,
+
+            task:
+                latest.task
+
+        };
+
+    }
+
+
+    return {
+
+        success:
+            true,
+
+        refreshed:
+            false,
+
+        task:
+            original
+
+    };
+
+}
+
+
+// ============================================================
 // PREPARE TASK PROVIDER CONTEXT
 // ============================================================
 //
@@ -374,6 +472,11 @@ function buildProviderRequirement(
 // Bridge returns it without doing another search.
 //
 // Otherwise Provider Bridge performs provider-backed search.
+//
+// IMPORTANT:
+// The task is refreshed from Agent Manager first so a stale
+// createTask() snapshot cannot hide newly-added research
+// steps.
 // ============================================================
 
 async function prepareTaskProviderContext(
@@ -387,9 +490,30 @@ async function prepareTaskProviderContext(
         );
 
 
+    // --------------------------------------------------------
+    // Refresh task state
+    // --------------------------------------------------------
+
+    const refreshed =
+        refreshTaskSnapshot(
+            task
+        );
+
+
+    const workingTask =
+        refreshed.task ||
+        safeObject(
+            task
+        );
+
+
+    // --------------------------------------------------------
+    // Check provider requirement using latest task state
+    // --------------------------------------------------------
+
     if (
         !taskNeedsProvider(
-            task
+            workingTask
         )
     ) {
 
@@ -404,6 +528,10 @@ async function prepareTaskProviderContext(
             searched:
                 false,
 
+            refreshed:
+                refreshed.refreshed ===
+                true,
+
             context:
                 null,
 
@@ -417,7 +545,7 @@ async function prepareTaskProviderContext(
 
     const providerSteps =
         getProviderSteps(
-            task
+            workingTask
         );
 
 
@@ -441,6 +569,10 @@ async function prepareTaskProviderContext(
             searched:
                 false,
 
+            refreshed:
+                refreshed.refreshed ===
+                true,
+
             context:
                 null
 
@@ -451,7 +583,7 @@ async function prepareTaskProviderContext(
 
     const request =
         getResearchRequest(
-            task,
+            workingTask,
             step
         );
 
@@ -471,6 +603,10 @@ async function prepareTaskProviderContext(
             searched:
                 false,
 
+            refreshed:
+                refreshed.refreshed ===
+                true,
+
             context:
                 null,
 
@@ -479,7 +615,7 @@ async function prepareTaskProviderContext(
 
             requirement:
                 buildProviderRequirement(
-                    task,
+                    workingTask,
                     step
                 )
 
@@ -492,7 +628,7 @@ async function prepareTaskProviderContext(
         safeObject(
             config.context
         ).research ||
-        task?.context?.research ||
+        workingTask?.context?.research ||
         null;
 
 
@@ -532,6 +668,10 @@ async function prepareTaskProviderContext(
 
             searched:
                 false,
+
+            refreshed:
+                refreshed.refreshed ===
+                true,
 
             context:
                 null,
@@ -580,6 +720,10 @@ async function prepareTaskProviderContext(
                     prepared?.searched ===
                     true,
 
+                refreshed:
+                    refreshed.refreshed ===
+                    true,
+
                 context:
                     null,
 
@@ -616,6 +760,10 @@ async function prepareTaskProviderContext(
 
             searched:
                 prepared.searched ===
+                true,
+
+            refreshed:
+                refreshed.refreshed ===
                 true,
 
             context:
@@ -666,6 +814,10 @@ async function prepareTaskProviderContext(
 
             searched:
                 false,
+
+            refreshed:
+                refreshed.refreshed ===
+                true,
 
             context:
                 null,
@@ -1090,6 +1242,7 @@ async function runTask(
 
                     provider:
                         providerPreparation.provider ||
+                        provider ||
                         null,
 
                     fallbackUsed:
@@ -1650,6 +1803,8 @@ module.exports = {
     getResearchRequest,
 
     buildProviderRequirement,
+
+    refreshTaskSnapshot,
 
     prepareTaskProviderContext,
 
