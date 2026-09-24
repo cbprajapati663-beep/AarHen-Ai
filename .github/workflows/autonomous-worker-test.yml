@@ -1,0 +1,1318 @@
+name: AarHen Autonomous Worker Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/autonomousWorker.js"
+      - "core/autonomousAgent.js"
+      - "core/agentPlanner.js"
+      - "core/agentManager.js"
+      - "core/agentWorker.js"
+      - "core/agentRunner.js"
+      - "core/workerProvider.js"
+      - "core/providerBridge.js"
+      - "providers/providerManager.js"
+      - "providers/researchProvider.js"
+      - "skills/executor.js"
+      - ".github/workflows/autonomous-worker-test.yml"
+
+jobs:
+
+  autonomous-worker-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # SETUP
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # LOAD TEST
+      # ======================================================
+
+      - name: Autonomous Worker Load Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const autonomousWorker =
+            require("./core/autonomousWorker");
+
+          const autonomousAgent =
+            require("./core/autonomousAgent");
+
+          const agentWorker =
+            require("./core/agentWorker");
+
+          const workerProvider =
+            require("./core/workerProvider");
+
+          const providerBridge =
+            require("./core/providerBridge");
+
+
+          if (!autonomousWorker) {
+            throw new Error(
+              "Autonomous Worker could not be loaded."
+            );
+          }
+
+          if (!autonomousAgent) {
+            throw new Error(
+              "Autonomous Agent could not be loaded."
+            );
+          }
+
+          if (!agentWorker) {
+            throw new Error(
+              "Agent Worker could not be loaded."
+            );
+          }
+
+          if (!workerProvider) {
+            throw new Error(
+              "Worker Provider could not be loaded."
+            );
+          }
+
+          if (!providerBridge) {
+            throw new Error(
+              "Provider Bridge could not be loaded."
+            );
+          }
+
+
+          if (
+            autonomousWorker
+              .AUTONOMOUS_WORKER_VERSION !==
+            "5.10.3"
+          ) {
+
+            throw new Error(
+              "Autonomous Worker version mismatch."
+            );
+
+          }
+
+
+          if (
+            autonomousAgent
+              .AUTONOMOUS_AGENT_VERSION !==
+            "5.8.3"
+          ) {
+
+            throw new Error(
+              "Autonomous Agent version mismatch."
+            );
+
+          }
+
+
+          if (
+            agentWorker
+              .AGENT_WORKER_VERSION !==
+            "5.10.1"
+          ) {
+
+            throw new Error(
+              "Agent Worker version mismatch."
+            );
+
+          }
+
+
+          if (
+            workerProvider
+              .WORKER_PROVIDER_VERSION !==
+            "5.10.2"
+          ) {
+
+            throw new Error(
+              "Worker Provider version mismatch."
+            );
+
+          }
+
+
+          if (
+            providerBridge
+              .PROVIDER_BRIDGE_VERSION !==
+            "5.9.1"
+          ) {
+
+            throw new Error(
+              "Provider Bridge version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Autonomous Worker system loaded successfully."
+          );
+
+          console.log(
+            "Autonomous Worker:",
+            autonomousWorker
+              .AUTONOMOUS_WORKER_VERSION
+          );
+
+          console.log(
+            "Autonomous Agent:",
+            autonomousAgent
+              .AUTONOMOUS_AGENT_VERSION
+          );
+
+          console.log(
+            "Agent Worker:",
+            agentWorker
+              .AGENT_WORKER_VERSION
+          );
+
+          console.log(
+            "Worker Provider:",
+            workerProvider
+              .WORKER_PROVIDER_VERSION
+          );
+
+          console.log(
+            "Provider Bridge:",
+            providerBridge
+              .PROVIDER_BRIDGE_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SYSTEM STATUS TEST
+      # ======================================================
+
+      - name: Autonomous Worker Status Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const autonomousWorker =
+            require("./core/autonomousWorker");
+
+
+          const status =
+            autonomousWorker.getStatus();
+
+
+          if (
+            !status ||
+            status.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Autonomous Worker status failed."
+            );
+
+          }
+
+
+          if (
+            status.version !==
+            "5.10.3"
+          ) {
+
+            throw new Error(
+              "Autonomous Worker status version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Autonomous Worker is not active."
+            );
+
+          }
+
+
+          const systems =
+            status.systems ||
+            {};
+
+
+          if (
+            systems.autonomousAgent
+              ?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Autonomous Agent connection failed."
+            );
+
+          }
+
+
+          if (
+            systems.agentWorker
+              ?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Agent Worker connection failed."
+            );
+
+          }
+
+
+          if (
+            systems.workerProvider
+              ?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Worker Provider connection failed."
+            );
+
+          }
+
+
+          if (
+            systems.workerProvider
+              ?.integration !==
+            true
+          ) {
+
+            throw new Error(
+              "Worker Provider integration is not active."
+            );
+
+          }
+
+
+          console.log(
+            "Autonomous Worker status test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CALCULATION AUTONOMOUS TEST
+      # ======================================================
+
+      - name: Autonomous Calculation Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const autonomousWorker =
+              require("./core/autonomousWorker");
+
+            const agentManager =
+              require("./core/agentManager");
+
+            const agentWorker =
+              require("./core/agentWorker");
+
+
+            // ------------------------------------------------
+            // RESET
+            // ------------------------------------------------
+
+            autonomousWorker.reset();
+
+            agentWorker.reset();
+
+            agentManager.reset();
+
+
+            // ------------------------------------------------
+            // EXECUTE NORMAL REQUEST
+            // ------------------------------------------------
+
+            const result =
+              await autonomousWorker.executeRequest(
+
+                "Calculate 100 + 200"
+
+              );
+
+
+            if (
+              !result
+            ) {
+
+              throw new Error(
+                "Autonomous calculation result is missing."
+              );
+
+            }
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Autonomous calculation failed: " +
+                (
+                  result.error ||
+                  result.execution?.error ||
+                  result.execution?.execution?.error ||
+                  "unknown error"
+                )
+              );
+
+            }
+
+
+            if (
+              !result.task?.id
+            ) {
+
+              throw new Error(
+                "Autonomous calculation task ID is missing."
+              );
+
+            }
+
+
+            if (
+              result.worker?.id ===
+              undefined
+            ) {
+
+              throw new Error(
+                "Autonomous calculation worker is missing."
+              );
+
+            }
+
+
+            if (
+              result.workerStatus !==
+              agentWorker.WORKER_STATES.IDLE
+            ) {
+
+              throw new Error(
+                "Calculation worker did not return to idle state."
+              );
+
+            }
+
+
+            if (
+              result.execution ===
+              null
+            ) {
+
+              throw new Error(
+                "Calculation execution result is missing."
+              );
+
+            }
+
+
+            const finalTask =
+              agentManager.getTask(
+                result.task.id
+              );
+
+
+            if (
+              finalTask.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Final calculation task could not be retrieved."
+              );
+
+            }
+
+
+            if (
+              finalTask.task.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Calculation task was not completed. Status: " +
+                finalTask.task.status
+              );
+
+            }
+
+
+            console.log(
+              "Autonomous calculation test passed."
+            );
+
+            console.log(
+              "Task:",
+              result.task.id
+            );
+
+            console.log(
+              "Worker:",
+              result.worker.id
+            );
+
+            console.log(
+              "Worker status:",
+              result.workerStatus
+            );
+
+          })().catch(
+            error => {
+
+              console.error(
+                error
+              );
+
+              process.exitCode =
+                1;
+
+            }
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RESEARCH PROVIDER TEST
+      # ======================================================
+      #
+      # Everything is kept in ONE Node process because
+      # Provider Manager state is process-local.
+      #
+      # ======================================================
+
+      - name: Autonomous Research Provider Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const autonomousWorker =
+              require("./core/autonomousWorker");
+
+            const agentManager =
+              require("./core/agentManager");
+
+            const agentWorker =
+              require("./core/agentWorker");
+
+            const providerManager =
+              require("./providers/providerManager");
+
+
+            // ------------------------------------------------
+            // RESET
+            // ------------------------------------------------
+
+            autonomousWorker.reset();
+
+            agentWorker.reset();
+
+            agentManager.reset();
+
+            providerManager.reset();
+
+
+            // ------------------------------------------------
+            // MOCK RESEARCH PROVIDER
+            // ------------------------------------------------
+
+            const mockProvider = {
+
+              getProviderStatus() {
+
+                return {
+
+                  provider:
+                    "mock-research",
+
+                  providerType:
+                    "web-search",
+
+                  connected:
+                    true,
+
+                  status:
+                    "connected",
+
+                  supportsSearch:
+                    true,
+
+                  supportsSourceValidation:
+                    true,
+
+                  supportsResultNormalization:
+                    true
+
+                };
+
+              },
+
+
+              async search({
+                query,
+                maxSources
+              } = {}) {
+
+                return {
+
+                  success:
+                    true,
+
+                  provider:
+                    "mock-research",
+
+                  providerType:
+                    "web-search",
+
+                  query,
+
+                  answer:
+                    `Mock answer for: ${query}`,
+
+                  summary:
+                    `Mock summary for: ${query}`,
+
+                  confidence:
+                    0.90,
+
+                  results:
+                    [
+
+                      {
+
+                        id:
+                          "autonomous-source-1",
+
+                        title:
+                          "Autonomous Mock Source",
+
+                        url:
+                          "https://example.com/autonomous-source-1",
+
+                        publisher:
+                          "AarHen Test Provider",
+
+                        snippet:
+                          `Mock source for ${query}`,
+
+                        content:
+                          `Mock research content for ${query}`,
+
+                        score:
+                          0.95
+
+                      },
+
+                      {
+
+                        id:
+                          "autonomous-source-2",
+
+                        title:
+                          "Autonomous Secondary Source",
+
+                        url:
+                          "https://example.com/autonomous-source-2",
+
+                        publisher:
+                          "AarHen Test Provider",
+
+                        snippet:
+                          `Secondary mock source for ${query}`,
+
+                        content:
+                          `Secondary mock content for ${query}`,
+
+                        score:
+                          0.90
+
+                      }
+
+                    ].slice(
+                      0,
+                      maxSources
+                    )
+
+                };
+
+              }
+
+            };
+
+
+            // ------------------------------------------------
+            // REGISTER
+            // ------------------------------------------------
+
+            const registered =
+              providerManager.registerProvider(
+
+                "mock-research",
+
+                mockProvider,
+
+                {
+
+                  priority:
+                    1,
+
+                  enabled:
+                    true,
+
+                  providerType:
+                    "web-search"
+
+                }
+
+              );
+
+
+            if (
+              registered.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Mock research provider registration failed."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // EXECUTE AUTONOMOUS RESEARCH
+            // ------------------------------------------------
+
+            const result =
+              await autonomousWorker.executeRequest(
+
+                "Research AarHen provider integration",
+
+                {
+
+                  provider:
+                    "mock-research",
+
+                  maxSources:
+                    2
+
+                }
+
+              );
+
+
+            if (
+              !result
+            ) {
+
+              throw new Error(
+                "Autonomous research result is missing."
+              );
+
+            }
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Autonomous research execution failed: " +
+                (
+                  result.error ||
+                  result.execution?.error ||
+                  result.execution?.execution?.error ||
+                  "unknown error"
+                )
+              );
+
+            }
+
+
+            if (
+              !result.task?.id
+            ) {
+
+              throw new Error(
+                "Autonomous research task ID is missing."
+              );
+
+            }
+
+
+            if (
+              !result.worker?.id
+            ) {
+
+              throw new Error(
+                "Autonomous research worker is missing."
+              );
+
+            }
+
+
+            if (
+              result.provider?.provider !==
+              "mock-research"
+            ) {
+
+              throw new Error(
+                "Autonomous research provider mismatch."
+              );
+
+            }
+
+
+            if (
+              result.provider?.searched !==
+              true
+            ) {
+
+              throw new Error(
+                "Autonomous research did not perform provider search."
+              );
+
+            }
+
+
+            if (
+              result.provider?.sourceCount !==
+              2
+            ) {
+
+              throw new Error(
+                "Autonomous research source count mismatch."
+              );
+
+            }
+
+
+            if (
+              result.workerStatus !==
+              agentWorker.WORKER_STATES.IDLE
+            ) {
+
+              throw new Error(
+                "Research worker did not return to idle state."
+              );
+
+            }
+
+
+            const finalTask =
+              agentManager.getTask(
+                result.task.id
+              );
+
+
+            if (
+              finalTask.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Final research task could not be retrieved."
+              );
+
+            }
+
+
+            if (
+              finalTask.task.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Research task did not complete. Status: " +
+                finalTask.task.status
+              );
+
+            }
+
+
+            console.log(
+              "Autonomous research provider test passed."
+            );
+
+            console.log(
+              "Task:",
+              result.task.id
+            );
+
+            console.log(
+              "Worker:",
+              result.worker.id
+            );
+
+            console.log(
+              "Provider:",
+              result.provider.provider
+            );
+
+            console.log(
+              "Sources:",
+              result.provider.sourceCount
+            );
+
+          })().catch(
+            error => {
+
+              console.error(
+                error
+              );
+
+              process.exitCode =
+                1;
+
+            }
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PROTECTED ACTION APPROVAL TEST
+      # ======================================================
+
+      - name: Autonomous Approval Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const autonomousWorker =
+              require("./core/autonomousWorker");
+
+            const agentManager =
+              require("./core/agentManager");
+
+
+            // ------------------------------------------------
+            // RESET
+            // ------------------------------------------------
+
+            autonomousWorker.reset();
+
+            agentManager.reset();
+
+
+            // ------------------------------------------------
+            // CREATE PROTECTED REQUEST
+            // ------------------------------------------------
+
+            const created =
+              autonomousWorker.createAndAssign(
+
+                "Send an email to the customer"
+
+              );
+
+
+            if (
+              created.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action task creation failed: " +
+                (
+                  created.error ||
+                  "unknown error"
+                )
+              );
+
+            }
+
+
+            if (
+              created.waitingApproval !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected email action did not enter approval state."
+              );
+
+            }
+
+
+            if (
+              created.stage !==
+              "approval"
+            ) {
+
+              throw new Error(
+                "Protected action stage mismatch."
+              );
+
+            }
+
+
+            if (
+              !created.task?.id
+            ) {
+
+              throw new Error(
+                "Protected action task ID is missing."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY TASK STATUS
+            // ------------------------------------------------
+
+            const taskStatus =
+              autonomousWorker.getTaskStatus(
+
+                created.task.id
+
+              );
+
+
+            if (
+              taskStatus.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Protected action task status failed."
+              );
+
+            }
+
+
+            if (
+              taskStatus.taskStatus !==
+              agentManager.TASK_STATES
+                .WAITING_APPROVAL
+            ) {
+
+              throw new Error(
+                "Protected action task is not waiting for approval."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // APPROVE + EXECUTE
+            // ------------------------------------------------
+
+            const execution =
+              await autonomousWorker
+                .approveAndExecute(
+
+                  created.task.id
+
+                );
+
+
+            if (
+              !execution
+            ) {
+
+              throw new Error(
+                "Protected approval execution result is missing."
+              );
+
+            }
+
+
+            if (
+              execution.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Approved protected action failed: " +
+                (
+                  execution.error ||
+                  execution.execution?.error ||
+                  execution.execution?.execution?.error ||
+                  "unknown error"
+                )
+              );
+
+            }
+
+
+            const runnerExecution =
+              execution
+                .execution
+                ?.execution
+                ?.execution ||
+              execution
+                .execution
+                ?.execution ||
+              execution
+                .execution ||
+              null;
+
+
+            // ------------------------------------------------
+            // SAFE HANDOFF MUST BE REPORTED
+            // ------------------------------------------------
+
+            let prepared =
+              false;
+
+
+            const candidates = [
+
+              runnerExecution,
+
+              execution
+                .execution
+                ?.execution,
+
+              execution
+                .execution
+                ?.result,
+
+              execution
+                .execution
+
+            ];
+
+
+            for (
+              const candidate of
+              candidates
+            ) {
+
+              if (
+                candidate &&
+                (
+                  candidate.awaitingIntegration ===
+                    true ||
+                  candidate.executionStatus ===
+                    "protected-action-prepared"
+                )
+              ) {
+
+                prepared =
+                  true;
+
+                break;
+
+              }
+
+            }
+
+
+            if (
+              !prepared
+            ) {
+
+              throw new Error(
+                "Protected action did not return safe-handoff state."
+              );
+
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY NO DIRECT EXTERNAL EXECUTION
+            // ------------------------------------------------
+
+            let externalExecution =
+              null;
+
+
+            for (
+              const candidate of
+              candidates
+            ) {
+
+              if (
+                candidate &&
+                typeof candidate.externalExecution ===
+                  "boolean"
+              ) {
+
+                externalExecution =
+                  candidate.externalExecution;
+
+                break;
+
+              }
+
+            }
+
+
+            if (
+              externalExecution ===
+              true
+            ) {
+
+              throw new Error(
+                "Protected action incorrectly reported direct external execution."
+              );
+
+            }
+
+
+            console.log(
+              "Autonomous approval test passed."
+            );
+
+            console.log(
+              "Protected action:",
+              "send_email"
+            );
+
+            console.log(
+              "Safe handoff:",
+              prepared
+            );
+
+            console.log(
+              "Direct external execution:",
+              externalExecution
+            );
+
+          })().catch(
+            error => {
+
+              console.error(
+                error
+              );
+
+              process.exitCode =
+                1;
+
+            }
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL API TEST
+      # ======================================================
+
+      - name: Autonomous Worker API Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const autonomousWorker =
+            require("./core/autonomousWorker");
+
+
+          const requiredFunctions = [
+
+            "getTask",
+            "ensureWorkerForAgent",
+            "findWorkerForAgent",
+            "getWorkerForTask",
+            "assignTask",
+            "createTask",
+            "createAndAssign",
+            "executeAssignedTask",
+            "executeRequest",
+            "approveTask",
+            "approveAndExecute",
+            "pauseTask",
+            "resumeTask",
+            "stopTask",
+            "cancelTask",
+            "getTaskStatus",
+            "listTasks",
+            "listWorkers",
+            "listAgents",
+            "getStatus",
+            "reset"
+
+          ];
+
+
+          for (
+            const name of
+            requiredFunctions
+          ) {
+
+            if (
+              typeof autonomousWorker[name] !==
+              "function"
+            ) {
+
+              throw new Error(
+                `Autonomous Worker API missing: ${name}`
+              );
+
+            }
+
+          }
+
+
+          console.log(
+            "Autonomous Worker API test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "======================================================"
+          echo " AARHEN AUTONOMOUS WORKER TEST"
+          echo "======================================================"
+          echo " Load: PASSED"
+          echo " System Status: PASSED"
+          echo " Autonomous Calculation: PASSED"
+          echo " Autonomous Research Provider: PASSED"
+          echo " Protected Approval Flow: PASSED"
+          echo " Safe Handoff: PASSED"
+          echo " API Export Check: PASSED"
+          echo "======================================================"
+          echo " AUTONOMOUS WORKER v5.10.3 READY"
+          echo "======================================================"
