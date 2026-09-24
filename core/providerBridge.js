@@ -2,7 +2,7 @@
 // AARHEN CORE V5
 // PROVIDER BRIDGE
 // ============================================================
-// Version: 5.9.1
+// Version: 5.9.2
 //
 // Purpose:
 // - Safe bridge between Provider Manager and higher-level
@@ -12,6 +12,7 @@
 // - Execute provider-backed web research
 // - Build normalized research context
 // - Preserve provider fallback information
+// - Preserve reusable research source counts
 //
 // Architecture:
 //
@@ -40,7 +41,7 @@ const providerManager =
 // ============================================================
 
 const PROVIDER_BRIDGE_VERSION =
-    "5.9.1";
+    "5.9.2";
 
 
 // ============================================================
@@ -737,6 +738,24 @@ async function prepareResearchContext({
         0
     ) {
 
+        const existingProvider =
+            existing.provider ||
+            provider ||
+            null;
+
+
+        const existingProviderType =
+            existing.providerType ||
+            null;
+
+
+        const existingSourceCount =
+            safeNumber(
+                existing.sourceCount,
+                existingSources.length
+            );
+
+
         return {
 
             success:
@@ -765,13 +784,24 @@ async function prepareResearchContext({
                 results:
                     clone(
                         existingSources
-                    )
+                    ),
+
+                sourceCount:
+                    existingSources.length,
+
+                provider:
+                    existingProvider,
+
+                providerType:
+                    existingProviderType
 
             },
 
             provider:
-                existing.provider ||
-                null,
+                existingProvider,
+
+            providerType:
+                existingProviderType,
 
             attemptedProviders:
                 safeArray(
@@ -784,6 +814,11 @@ async function prepareResearchContext({
 
             searched:
                 false,
+
+            sourceCount:
+                existingSources.length,
+
+            existingSourceCount,
 
             bridgeVersion:
                 PROVIDER_BRIDGE_VERSION
@@ -835,6 +870,10 @@ async function prepareResearchContext({
                 provider ||
                 null,
 
+            providerType:
+                searchResult.providerType ||
+                null,
+
             attemptedProviders:
                 safeArray(
                     searchResult.attemptedProviders
@@ -846,6 +885,9 @@ async function prepareResearchContext({
 
             searched:
                 true,
+
+            sourceCount:
+                0,
 
             error:
                 searchResult.error ||
