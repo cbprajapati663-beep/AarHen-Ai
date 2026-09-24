@@ -1,0 +1,76 @@
+name: AarHen Checkpoint Save Input Isolation Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-save-input-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify caller metadata cannot mutate saved checkpoint
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const agent = manager.createAgent({
+            id: "save-input-isolation-agent",
+            name: "Checkpoint save input isolation test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const created = manager.createTask(
+            "save-input-isolation-agent",
+            "Checkpoint save input isolation",
+            { id: "save-input-isolation-task" }
+          );
+          assert(created.success, "Task creation failed.");
+          assert(manager.startTask("save-input-isolation-task").success,
+            "Task start failed.");
+
+          const metadata = {
+            nested: { label: "original-value" },
+            values: ["alpha", "beta"]
+          };
+
+          const saved = bridge.saveTaskCheckpoint("save-input-isolation-task", {
+            id: "save-input-isolation-checkpoint",
+            metadata
+          });
+          assert(saved.success, "Checkpoint save failed.");
+
+          metadata.nested.label = "changed-after-save";
+          metadata.values.push("gamma");
+          saved.checkpoint.metadata.nested.label = "changed-in-returned-object";
+
+          const stored = bridge.getCheckpoint("save-input-isolation-checkpoint");
+          assert(stored.success, "Stored checkpoint could not be fetched.");
+          assert(stored.checkpoint.metadata.nested.label === "original-value",
+            "Mutating caller or returned metadata changed stored checkpoint data.");
+          assert(stored.checkpoint.metadata.values.length === 2 &&
+            stored.checkpoint.metadata.values[0] === "alpha" &&
+            stored.checkpoint.metadata.values[1] === "beta",
+            "Mutating caller metadata arrays changed stored checkpoint data.");
+
+          console.log("Checkpoint save input isolation tests passed.");
+          console.log(JSON.stringify({
+            storedLabel: stored.checkpoint.metadata.nested.label,
+            storedValues: stored.checkpoint.metadata.values
+          }, null, 2));
+          NODE
