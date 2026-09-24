@@ -17,14 +17,15 @@
 // - This engine does NOT bypass Agent Manager.
 // - This engine does NOT bypass Agent Runner.
 // - This engine does NOT bypass Autonomous Guard.
-// - Checkpoints are in-memory in this version.
-// - Persistent disk/database checkpoint storage will be added
-//   in a later persistence layer.
+// - Disk persistence is opt-in through AARHEN_CHECKPOINT_STORE_DIR.
+// - Without that setting, storage remains in-memory.
 // ============================================================
 
 
 const agentManager =
     require("./agentManager");
+
+const { createCheckpointStore } = require("./checkpointStore");
 
 
 // ============================================================
@@ -79,6 +80,20 @@ const checkpoints =
 // taskId -> ordered checkpoint ids
 const taskCheckpointIndex =
     new Map();
+
+// Persistent storage is opt-in to avoid writing into an implicit location.
+const persistentStore = process.env.AARHEN_CHECKPOINT_STORE_DIR
+    ? createCheckpointStore({ directory: process.env.AARHEN_CHECKPOINT_STORE_DIR })
+    : null;
+
+if (persistentStore) {
+    for (const checkpoint of persistentStore.list()) {
+        if (!checkpoint || typeof checkpoint.taskId !== "string" || !checkpoint.taskId) continue;
+        checkpoints.set(checkpoint.id, checkpoint);
+        if (!taskCheckpointIndex.has(checkpoint.taskId)) taskCheckpointIndex.set(checkpoint.taskId, []);
+        taskCheckpointIndex.get(checkpoint.taskId).push(checkpoint.id);
+    }
+}
 
 
 // ============================================================
@@ -798,6 +813,14 @@ function saveCheckpoint(
 
     }
 
+
+    if (persistentStore) {
+        try {
+            persistentStore.save(checkpoint);
+        } catch (error) {
+            return { success: false, error: `Persistent checkpoint save failed: ${error.message}`, checkpoint: null };
+        }
+    }
 
     checkpoints.set(
         checkpoint.id,
@@ -1545,6 +1568,12 @@ function deleteCheckpoint(
     }
 
 
+    if (persistentStore) {
+        try { persistentStore.remove(id); } catch (error) {
+            return { success: false, error: `Persistent checkpoint delete failed: ${error.message}` };
+        }
+    }
+
     checkpoints.delete(
         id
     );
@@ -1641,15 +1670,13 @@ function deleteTaskCheckpoints(
         ) || [];
 
 
-    for (
-        const checkpointId of
-        ids
-    ) {
-
-        checkpoints.delete(
-            checkpointId
-        );
-
+    for (const checkpointId of ids) {
+        if (persistentStore) {
+            try { persistentStore.remove(checkpointId); } catch (error) {
+                return { success: false, error: `Persistent task checkpoint delete failed: ${error.message}`, taskId: id };
+            }
+        }
+        checkpoints.delete(checkpointId);
     }
 
 
@@ -1683,6 +1710,13 @@ function reset() {
     const count =
         checkpoints.size;
 
+    if (persistentStore) {
+        try {
+            for (const checkpoint of persistentStore.list()) persistentStore.remove(checkpoint.id);
+        } catch (error) {
+            return { success: false, error: `Persistent checkpoint reset failed: ${error.message}`, deleted: 0 };
+        }
+    }
 
     checkpoints.clear();
 
@@ -1817,10 +1851,10 @@ function getStatus() {
             "active",
 
         storage:
-            "in-memory",
+            persistentStore ? "file-system" : "in-memory",
 
         persistentStorage:
-            false,
+            Boolean(persistentStore),
 
         checkpointCount:
             checkpoints.size,
