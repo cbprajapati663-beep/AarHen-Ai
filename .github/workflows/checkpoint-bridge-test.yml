@@ -1,0 +1,1803 @@
+name: AarHen Checkpoint Bridge Test
+
+on:
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+jobs:
+
+  checkpoint-bridge-test:
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD CHECKPOINT SYSTEM
+      # ======================================================
+
+      - name: Load Checkpoint Engine and Bridge
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointEngine =
+            require("./core/checkpointEngine");
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          if (!checkpointEngine) {
+
+            throw new Error(
+              "Checkpoint Engine could not be loaded."
+            );
+
+          }
+
+
+          if (!checkpointBridge) {
+
+            throw new Error(
+              "Checkpoint Bridge could not be loaded."
+            );
+
+          }
+
+
+          if (
+            checkpointEngine.CHECKPOINT_ENGINE_VERSION !==
+            "5.13.0"
+          ) {
+
+            throw new Error(
+              "Checkpoint Engine version mismatch."
+            );
+
+          }
+
+
+          if (
+            checkpointBridge.CHECKPOINT_BRIDGE_VERSION !==
+            "5.13.1"
+          ) {
+
+            throw new Error(
+              "Checkpoint Bridge version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Checkpoint Engine loaded successfully."
+          );
+
+
+          console.log(
+            "Checkpoint Engine:",
+            checkpointEngine.CHECKPOINT_ENGINE_VERSION
+          );
+
+
+          console.log(
+            "Checkpoint Bridge:",
+            checkpointBridge.CHECKPOINT_BRIDGE_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RESET
+      # ======================================================
+
+      - name: Reset Checkpoint and Agent State
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointEngine =
+            require("./core/checkpointEngine");
+
+          const agentManager =
+            require("./core/agentManager");
+
+
+          checkpointEngine.reset();
+
+          agentManager.reset();
+
+
+          console.log(
+            "Checkpoint and Agent state reset completed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Checkpoint Bridge Status Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const status =
+            checkpointBridge.getStatus();
+
+
+          if (
+            status.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint Bridge status is unhealthy."
+            );
+
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Checkpoint Bridge is not active."
+            );
+
+          }
+
+
+          if (
+            status.version !==
+            "5.13.1"
+          ) {
+
+            throw new Error(
+              "Checkpoint Bridge status version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.agentManager?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint Bridge is not connected to Agent Manager."
+            );
+
+          }
+
+
+          if (
+            status.agentManager?.version !==
+            "5.8.0"
+          ) {
+
+            throw new Error(
+              "Agent Manager version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.checkpointEngine?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint Bridge is not connected to Checkpoint Engine."
+            );
+
+          }
+
+
+          if (
+            status.checkpointEngine?.version !==
+            "5.13.0"
+          ) {
+
+            throw new Error(
+              "Checkpoint Engine connection version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.capabilities?.saveCheckpoint !==
+            true
+          ) {
+
+            throw new Error(
+              "saveCheckpoint capability is missing."
+            );
+
+          }
+
+
+          if (
+            status.capabilities?.saveBeforeExecution !==
+            true
+          ) {
+
+            throw new Error(
+              "saveBeforeExecution capability is missing."
+            );
+
+          }
+
+
+          if (
+            status.capabilities?.saveAfterExecution !==
+            true
+          ) {
+
+            throw new Error(
+              "saveAfterExecution capability is missing."
+            );
+
+          }
+
+
+          if (
+            status.capabilities?.recoveryCandidate !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery candidate capability is missing."
+            );
+
+          }
+
+
+          if (
+            status.capabilities?.recoveryPlan !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery plan capability is missing."
+            );
+
+          }
+
+
+          if (
+            status.capabilities?.stateComparison !==
+            true
+          ) {
+
+            throw new Error(
+              "State comparison capability is missing."
+            );
+
+          }
+
+
+          console.log(
+            "Checkpoint Bridge status test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CREATE TEST AGENT
+      # ======================================================
+
+      - name: Create Checkpoint Test Agent
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+
+          const result =
+            agentManager.createAgent({
+
+              id:
+                "checkpoint-test-agent",
+
+              name:
+                "Checkpoint Test Agent",
+
+              default:
+                true
+
+            });
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint test agent creation failed: " +
+              JSON.stringify(result)
+            );
+
+          }
+
+
+          console.log(
+            "Checkpoint test agent created."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CREATE TEST TASK
+      # ======================================================
+
+      - name: Create Checkpoint Test Task
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+
+          const result =
+            agentManager.createTask(
+
+              "checkpoint-test-agent",
+
+              "Run two controlled calculation steps.",
+
+              {
+
+                id:
+                  "checkpoint-test-task",
+
+                description:
+                  "Checkpoint Bridge integration test task.",
+
+                maxRetries:
+                  2,
+
+                autonomy:
+                  true
+
+              }
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint test task creation failed: " +
+              JSON.stringify(result)
+            );
+
+          }
+
+
+          if (
+            result.task?.id !==
+            "checkpoint-test-task"
+          ) {
+
+            throw new Error(
+              "Checkpoint test task ID mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Checkpoint test task created."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              result.task,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # ADD STEP 1
+      # ======================================================
+
+      - name: Add Checkpoint Test Step 1
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+
+          const result =
+            agentManager.addStep(
+
+              "checkpoint-test-task",
+
+              {
+
+                id:
+                  "checkpoint-test-step-1",
+
+                name:
+                  "Calculation Step 1",
+
+                description:
+                  "Calculate 10 + 20.",
+
+                action:
+                  "calculate",
+
+                approved:
+                  true,
+
+                input: {
+
+                  request:
+                    "Calculate 10 + 20"
+
+                }
+
+              }
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint test step 1 creation failed: " +
+              JSON.stringify(result)
+            );
+
+          }
+
+
+          if (
+            result.step?.status !==
+            "pending"
+          ) {
+
+            throw new Error(
+              "Checkpoint test step 1 should be pending."
+            );
+
+          }
+
+
+          console.log(
+            "Checkpoint test step 1 created."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # ADD STEP 2
+      # ======================================================
+
+      - name: Add Checkpoint Test Step 2
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+
+          const result =
+            agentManager.addStep(
+
+              "checkpoint-test-task",
+
+              {
+
+                id:
+                  "checkpoint-test-step-2",
+
+                name:
+                  "Calculation Step 2",
+
+                description:
+                  "Calculate 30 + 40.",
+
+                action:
+                  "calculate",
+
+                approved:
+                  true,
+
+                input: {
+
+                  request:
+                    "Calculate 30 + 40"
+
+                }
+
+              }
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint test step 2 creation failed: " +
+              JSON.stringify(result)
+            );
+
+          }
+
+
+          if (
+            result.step?.status !==
+            "pending"
+          ) {
+
+            throw new Error(
+              "Checkpoint test step 2 should be pending."
+            );
+
+          }
+
+
+          console.log(
+            "Checkpoint test step 2 created."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # VERIFY LIVE TASK
+      # ======================================================
+
+      - name: Verify Live Task State
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+
+          const result =
+            agentManager.getTask(
+              "checkpoint-test-task"
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint test task could not be loaded."
+            );
+
+          }
+
+
+          if (
+            result.task?.steps?.length !==
+            2
+          ) {
+
+            throw new Error(
+              "Checkpoint test task should contain exactly two steps."
+            );
+
+          }
+
+
+          if (
+            result.task.steps[0].status !==
+            "pending"
+          ) {
+
+            throw new Error(
+              "Step 1 is not pending."
+            );
+
+          }
+
+
+          if (
+            result.task.steps[1].status !==
+            "pending"
+          ) {
+
+            throw new Error(
+              "Step 2 is not pending."
+            );
+
+          }
+
+
+          console.log(
+            "Live task state verification passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SAVE BEFORE EXECUTION
+      # ======================================================
+
+      - name: Save Before Execution Checkpoint
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const result =
+            checkpointBridge.saveBeforeExecution(
+
+              "checkpoint-test-task",
+
+              {
+
+                reason:
+                  "Before checkpoint integration execution test.",
+
+                metadata: {
+
+                  test:
+                    "checkpoint-bridge"
+
+                }
+
+              }
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Pre-execution checkpoint save failed: " +
+              JSON.stringify(result)
+            );
+
+          }
+
+
+          if (
+            !result.checkpoint?.id
+          ) {
+
+            throw new Error(
+              "Pre-execution checkpoint ID is missing."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint.recoveryEligible !==
+            true
+          ) {
+
+            throw new Error(
+              "Pre-execution checkpoint should be recovery eligible."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint.pendingSteps !==
+            2
+          ) {
+
+            throw new Error(
+              "Pre-execution checkpoint should contain two pending steps."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint.totalSteps !==
+            2
+          ) {
+
+            throw new Error(
+              "Pre-execution checkpoint total step count mismatch."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint.state !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Pre-execution checkpoint state should be active."
+            );
+
+          }
+
+
+          console.log(
+            "Pre-execution checkpoint test passed."
+          );
+
+
+          console.log(
+            "Checkpoint:",
+            result.checkpoint.id
+          );
+
+          NODE
+
+
+      # ======================================================
+      # LATEST CHECKPOINT
+      # ======================================================
+
+      - name: Latest Checkpoint Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const result =
+            checkpointBridge.getLatestCheckpoint(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Latest checkpoint could not be loaded."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint?.taskId !==
+            "checkpoint-test-task"
+          ) {
+
+            throw new Error(
+              "Latest checkpoint task ID mismatch."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint?.pendingSteps !==
+            2
+          ) {
+
+            throw new Error(
+              "Latest checkpoint pending step count mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Latest checkpoint test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RECOVERY CANDIDATE TEST
+      # ======================================================
+
+      - name: Recovery Candidate Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const result =
+            checkpointBridge.getRecoveryCandidate(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery candidate lookup failed."
+            );
+
+          }
+
+
+          if (
+            result.recoverable !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint should be recoverable."
+            );
+
+          }
+
+
+          if (
+            !result.checkpoint?.id
+          ) {
+
+            throw new Error(
+              "Recovery candidate checkpoint ID is missing."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery candidate test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              result,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RECOVERY PLAN TEST
+      # ======================================================
+
+      - name: Recovery Plan Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const result =
+            checkpointBridge.buildRecoveryPlan(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery plan creation failed."
+            );
+
+          }
+
+
+          if (
+            result.recoverable !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery plan should be recoverable."
+            );
+
+          }
+
+
+          if (
+            result.plan?.action !==
+            "resume-from-checkpoint"
+          ) {
+
+            throw new Error(
+              "Recovery plan action mismatch."
+            );
+
+          }
+
+
+          if (
+            result.plan?.taskId !==
+            "checkpoint-test-task"
+          ) {
+
+            throw new Error(
+              "Recovery plan task ID mismatch."
+            );
+
+          }
+
+
+          if (
+            result.plan?.pendingSteps !==
+            2
+          ) {
+
+            throw new Error(
+              "Recovery plan pending step count mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery plan test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              result.plan,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATE COMPARISON TEST
+      # ======================================================
+
+      - name: State Comparison Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const agentManager =
+            require("./core/agentManager");
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const taskResult =
+            agentManager.getTask(
+              "checkpoint-test-task"
+            );
+
+
+          if (
+            taskResult.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Task could not be loaded for comparison."
+            );
+
+          }
+
+
+          const comparison =
+            checkpointBridge.compareWithCheckpoint(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            comparison.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint comparison failed."
+            );
+
+          }
+
+
+          if (
+            comparison.checkpointExists !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint should exist during comparison."
+            );
+
+          }
+
+
+          if (
+            comparison.changed !==
+            false
+          ) {
+
+            throw new Error(
+              "Unchanged task should not report checkpoint drift."
+            );
+
+          }
+
+
+          console.log(
+            "State comparison test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              comparison,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # INSPECT TASK TEST
+      # ======================================================
+
+      - name: Task Inspection Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const result =
+            checkpointBridge.inspectTask(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Task inspection failed."
+            );
+
+          }
+
+
+          if (
+            result.checkpointExists !==
+            true
+          ) {
+
+            throw new Error(
+              "Task inspection did not detect checkpoint."
+            );
+
+          }
+
+
+          if (
+            result.recoveryCandidate?.recoverable !==
+            true
+          ) {
+
+            throw new Error(
+              "Task inspection recovery candidate mismatch."
+            );
+
+          }
+
+
+          if (
+            result.recoveryPlan?.plan?.action !==
+            "resume-from-checkpoint"
+          ) {
+
+            throw new Error(
+              "Task inspection recovery plan mismatch."
+            );
+
+          }
+
+
+          if (
+            result.comparison?.changed !==
+            false
+          ) {
+
+            throw new Error(
+              "Task inspection comparison mismatch."
+            );
+
+          }
+
+
+          if (
+            result.task?.id !==
+            "checkpoint-test-task"
+          ) {
+
+            throw new Error(
+              "Task inspection task ID mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Task inspection test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SAVE AFTER EXECUTION
+      # ======================================================
+
+      - name: Save After Execution Checkpoint
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const result =
+            checkpointBridge.saveAfterExecution(
+
+              "checkpoint-test-task",
+
+              {
+
+                success:
+                  false,
+
+                status:
+                  "network-error",
+
+                error:
+                  "Temporary test failure.",
+
+                needsApproval:
+                  false,
+
+                needsInput:
+                  false
+
+              },
+
+              {
+
+                reason:
+                  "After controlled checkpoint integration test attempt.",
+
+                metadata: {
+
+                  stage:
+                    "post-execution",
+
+                  test:
+                    "checkpoint-bridge"
+
+                }
+
+              }
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Post-execution checkpoint save failed: " +
+              JSON.stringify(result)
+            );
+
+          }
+
+
+          if (
+            !result.checkpoint?.metadata?.execution
+          ) {
+
+            throw new Error(
+              "Execution metadata was not stored."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint.metadata.execution.success !==
+            false
+          ) {
+
+            throw new Error(
+              "Execution success metadata mismatch."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint.metadata.execution.status !==
+            "network-error"
+          ) {
+
+            throw new Error(
+              "Execution status metadata mismatch."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint.metadata.execution.error !==
+            "Temporary test failure."
+          ) {
+
+            throw new Error(
+              "Execution error metadata mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Post-execution checkpoint test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CHECKPOINT HISTORY TEST
+      # ======================================================
+
+      - name: Checkpoint History Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const result =
+            checkpointBridge.listCheckpoints(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint history lookup failed."
+            );
+
+          }
+
+
+          if (
+            result.count !==
+            2
+          ) {
+
+            throw new Error(
+              "Expected exactly two checkpoints."
+            );
+
+          }
+
+
+          if (
+            !Array.isArray(
+              result.checkpoints
+            )
+          ) {
+
+            throw new Error(
+              "Checkpoint history array is missing."
+            );
+
+          }
+
+
+          if (
+            result.checkpoints.length !==
+            2
+          ) {
+
+            throw new Error(
+              "Checkpoint history length mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Checkpoint history test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CHECKPOINT GET TEST
+      # ======================================================
+
+      - name: Checkpoint Get Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const latest =
+            checkpointBridge.getLatestCheckpoint(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            latest.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Latest checkpoint retrieval failed."
+            );
+
+          }
+
+
+          const checkpointId =
+            latest.checkpoint.id;
+
+
+          const result =
+            checkpointBridge.getCheckpoint(
+              checkpointId
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Checkpoint retrieval by ID failed."
+            );
+
+          }
+
+
+          if (
+            result.checkpoint?.id !==
+            checkpointId
+          ) {
+
+            throw new Error(
+              "Checkpoint retrieval ID mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Checkpoint get test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DELETE SINGLE CHECKPOINT TEST
+      # ======================================================
+
+      - name: Delete Single Checkpoint Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const history =
+            checkpointBridge.listCheckpoints(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            history.count !==
+            2
+          ) {
+
+            throw new Error(
+              "Expected two checkpoints before deletion."
+            );
+
+          }
+
+
+          const firstId =
+            history.checkpoints[0].id;
+
+
+          const result =
+            checkpointBridge.deleteCheckpoint(
+              firstId
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Single checkpoint deletion failed."
+            );
+
+          }
+
+
+          const after =
+            checkpointBridge.listCheckpoints(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            after.count !==
+            1
+          ) {
+
+            throw new Error(
+              "Checkpoint count should be one after single deletion."
+            );
+
+          }
+
+
+          console.log(
+            "Single checkpoint deletion test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DELETE TASK CHECKPOINTS TEST
+      # ======================================================
+
+      - name: Delete Task Checkpoints Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const result =
+            checkpointBridge.deleteTaskCheckpoints(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            result.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Task checkpoint deletion failed."
+            );
+
+          }
+
+
+          if (
+            result.deleted !==
+            1
+          ) {
+
+            throw new Error(
+              "Expected one remaining checkpoint to be deleted."
+            );
+
+          }
+
+
+          const after =
+            checkpointBridge.listCheckpoints(
+
+              "checkpoint-test-task"
+
+            );
+
+
+          if (
+            after.count !==
+            0
+          ) {
+
+            throw new Error(
+              "All task checkpoints should be deleted."
+            );
+
+          }
+
+
+          console.log(
+            "Task checkpoint deletion test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL STATUS
+      # ======================================================
+
+      - name: Final Checkpoint Bridge Health Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const checkpointBridge =
+            require("./core/checkpointBridge");
+
+
+          const status =
+            checkpointBridge.getStatus();
+
+
+          if (
+            status.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Checkpoint Bridge health check failed."
+            );
+
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Final Checkpoint Bridge status is not active."
+            );
+
+          }
+
+
+          if (
+            status.agentManager?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Agent Manager connection failed."
+            );
+
+          }
+
+
+          if (
+            status.checkpointEngine?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Checkpoint Engine connection failed."
+            );
+
+          }
+
+
+          if (
+            status.checkpointEngine?.checkpointCount !==
+            0
+          ) {
+
+            throw new Error(
+              "Checkpoint storage should be empty after cleanup."
+            );
+
+          }
+
+
+          console.log(
+            "Final Checkpoint Bridge health test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "================================================"
+          echo " AARHEN CHECKPOINT BRIDGE TEST"
+          echo "================================================"
+          echo " Checkpoint Engine Load: PASSED"
+          echo " Checkpoint Bridge Load: PASSED"
+          echo " Status Connection: PASSED"
+          echo " Agent Creation: PASSED"
+          echo " Task Creation: PASSED"
+          echo " Step Creation: PASSED"
+          echo " Pre-Execution Checkpoint: PASSED"
+          echo " Latest Checkpoint: PASSED"
+          echo " Recovery Candidate: PASSED"
+          echo " Recovery Plan: PASSED"
+          echo " State Comparison: PASSED"
+          echo " Task Inspection: PASSED"
+          echo " Post-Execution Checkpoint: PASSED"
+          echo " Checkpoint History: PASSED"
+          echo " Checkpoint Get: PASSED"
+          echo " Single Deletion: PASSED"
+          echo " Task Deletion: PASSED"
+          echo " Final Health: PASSED"
+          echo "================================================"
+          echo " CHECKPOINT BRIDGE v5.13.1"
+          echo "================================================"
+          echo " CHECKPOINT BRIDGE READY"
+          echo "================================================"
