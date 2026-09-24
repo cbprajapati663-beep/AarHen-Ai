@@ -1,0 +1,61 @@
+name: AarHen Recovery Plan Purity Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  recovery-plan-purity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify recovery plan generation is non-mutating
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          bridge.reset();
+
+          const saved = engine.saveCheckpoint({
+            id: "plan-purity-task",
+            status: "running",
+            currentStepIndex: 2,
+            currentStepId: "step-2",
+            steps: [
+              { id: "step-1", status: "completed" },
+              { id: "step-2", status: "pending" }
+            ]
+          }, { id: "plan-purity-checkpoint" });
+
+          assert(saved.success, "Checkpoint should save successfully.");
+
+          const before = engine.getCheckpoint("plan-purity-checkpoint");
+          const beforeStatus = engine.getStatus();
+          const firstPlan = engine.buildRecoveryPlan("plan-purity-task");
+          const secondPlan = engine.buildRecoveryPlan("plan-purity-task");
+          const after = engine.getCheckpoint("plan-purity-checkpoint");
+          const afterStatus = engine.getStatus();
+
+          assert(firstPlan.success && firstPlan.recoverable, "Expected a recoverable plan.");
+          assert(secondPlan.success && secondPlan.recoverable, "Repeated plan should remain recoverable.");
+          assert(JSON.stringify(before.checkpoint) === JSON.stringify(after.checkpoint),
+            "Building recovery plans must not mutate the stored checkpoint.");
+          assert(beforeStatus.checkpointCount === afterStatus.checkpointCount,
+            "Building recovery plans must not change checkpoint count.");
+          assert(firstPlan.plan.checkpointId === secondPlan.plan.checkpointId,
+            "Repeated plans should refer to the same checkpoint.");
+
+          console.log("Recovery plan purity tests passed.");
+          NODE
