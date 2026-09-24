@@ -1303,11 +1303,21 @@ function createRunner(
         );
 
 
-    return async function runner({
-        task,
-        step,
-        permission
-    }) {
+    return async function runner(execution = {}) {
+
+        const task =
+            execution.task;
+
+        const step =
+            execution.step;
+
+        const permission =
+            execution.permission;
+
+        const effectiveContext = {
+            ...context,
+            ...safeObject(execution.context)
+        };
 
         // ----------------------------------------------------
         // SAFETY RE-CHECK
@@ -1589,7 +1599,7 @@ function createRunner(
 
                 {
 
-                    ...context,
+                    ...effectiveContext,
 
                     taskContext:
                         task.context ||
@@ -1628,7 +1638,7 @@ function createRunner(
 
                 {
 
-                    ...context,
+                    ...effectiveContext,
 
                     taskContext:
                         task.context ||
