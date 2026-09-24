@@ -41,7 +41,7 @@ jobs:
       - name: Worker Provider Load Test
         run: |
 
-          node - <<'NODE'
+          node --input-type=commonjs - <<'NODE'
 
           const bridge =
             require("./core/providerBridge");
@@ -103,7 +103,7 @@ jobs:
       - name: Provider Bridge Status Test
         run: |
 
-          node - <<'NODE'
+          node --input-type=commonjs - <<'NODE'
 
           const bridge =
             require("./core/providerBridge");
@@ -169,7 +169,7 @@ jobs:
       - name: Worker Provider Status Test
         run: |
 
-          node - <<'NODE'
+          node --input-type=commonjs - <<'NODE'
 
           const workerProvider =
             require("./core/workerProvider");
@@ -247,18 +247,11 @@ jobs:
       # ======================================================
       # PROVIDER-AWARE INTEGRATION TEST
       # ======================================================
-      #
-      # IMPORTANT:
-      # Provider Manager state is process-local.
-      # Therefore mock provider registration and execution
-      # happen inside ONE Node process.
-      #
-      # ======================================================
 
       - name: Provider Aware Worker Integration Test
         run: |
 
-          node - <<'NODE'
+          node --input-type=commonjs - <<'NODE'
 
           const providerManager =
             require("./providers/providerManager");
@@ -277,16 +270,18 @@ jobs:
 
 
           // --------------------------------------------------
-          // RESET TEST SYSTEMS
+          // RESET
           // --------------------------------------------------
 
           providerManager.reset();
+
           agentWorker.reset();
+
           agentManager.reset();
 
 
           // --------------------------------------------------
-          // MOCK CONNECTED PROVIDER
+          // MOCK PROVIDER
           // --------------------------------------------------
 
           const mockProvider = {
@@ -414,7 +409,7 @@ jobs:
 
 
           // --------------------------------------------------
-          // REGISTER MOCK PROVIDER
+          // REGISTER PROVIDER
           // --------------------------------------------------
 
           const registered =
@@ -644,7 +639,7 @@ jobs:
 
 
           // --------------------------------------------------
-          // ASSIGN TASK
+          // ASSIGN RESEARCH TASK
           // --------------------------------------------------
 
           const assigned =
@@ -672,7 +667,7 @@ jobs:
 
 
           // --------------------------------------------------
-          // PREVIEW PROVIDER REQUIREMENT
+          // PREVIEW
           // --------------------------------------------------
 
           const preview =
@@ -738,7 +733,7 @@ jobs:
 
 
           // --------------------------------------------------
-          // PROVIDER CONTEXT PREPARATION
+          // PROVIDER CONTEXT
           // --------------------------------------------------
 
           const preparation =
@@ -815,7 +810,7 @@ jobs:
 
 
           // --------------------------------------------------
-          // RUN TASK THROUGH WORKER PROVIDER
+          // RUN THROUGH WORKER PROVIDER
           // --------------------------------------------------
 
           const execution =
@@ -904,7 +899,7 @@ jobs:
 
 
           // --------------------------------------------------
-          // VERIFY TASK COMPLETION
+          // FINAL TASK
           // --------------------------------------------------
 
           const finalTask =
@@ -935,35 +930,7 @@ jobs:
 
 
           // --------------------------------------------------
-          // VERIFY RESEARCH CONTEXT USED
-          // --------------------------------------------------
-
-          const finalExecution =
-            execution.execution ||
-            {};
-
-
-          const runnerResult =
-            finalExecution.result ||
-            finalExecution;
-
-
-          if (
-            !runnerResult
-          ) {
-            throw new Error(
-              "Final execution result is missing."
-            );
-          }
-
-
-          // --------------------------------------------------
           // CALCULATION NON-PROVIDER TEST
-          // --------------------------------------------------
-          //
-          // A normal calculation task should not need the
-          // Provider Manager.
-          //
           // --------------------------------------------------
 
           const calculationTask =
@@ -1132,7 +1099,7 @@ jobs:
 
 
           // --------------------------------------------------
-          // FINAL PROVIDER STATUS
+          // PROVIDER STATUS
           // --------------------------------------------------
 
           const providerStatus =
@@ -1179,13 +1146,13 @@ jobs:
 
 
       # ======================================================
-      # EXPORT / FUNCTION TEST
+      # API FUNCTION TEST
       # ======================================================
 
       - name: Worker Provider API Test
         run: |
 
-          node - <<'NODE'
+          node --input-type=commonjs - <<'NODE'
 
           const workerProvider =
             require("./core/workerProvider");
