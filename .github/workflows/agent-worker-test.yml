@@ -1,0 +1,1824 @@
+name: AarHen Agent Worker Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/agentWorker.js"
+      - "core/agentManager.js"
+      - "core/agentRunner.js"
+      - ".github/workflows/agent-worker-test.yml"
+
+jobs:
+
+  agent-worker-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # SETUP
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # LOAD TEST
+      # ======================================================
+
+      - name: Agent Worker Load Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          if (!worker) {
+            throw new Error(
+              "Agent Worker could not be loaded."
+            );
+          }
+
+          if (
+            worker.AGENT_WORKER_VERSION !==
+            "5.10.0"
+          ) {
+            throw new Error(
+              "Agent Worker version mismatch."
+            );
+          }
+
+          if (
+            !worker.WORKER_STATES
+          ) {
+            throw new Error(
+              "Worker states are missing."
+            );
+          }
+
+          console.log(
+            "Agent Worker loaded successfully."
+          );
+
+          console.log(
+            "Version:",
+            worker.AGENT_WORKER_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS / CONNECTION TEST
+      # ======================================================
+
+      - name: Agent Worker Status Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const status =
+            worker.getStatus();
+
+          if (
+            status.success !==
+            true
+          ) {
+            throw new Error(
+              "Agent Worker status is not healthy."
+            );
+          }
+
+          if (
+            status.version !==
+            "5.10.0"
+          ) {
+            throw new Error(
+              "Agent Worker status version mismatch."
+            );
+          }
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Agent Worker is not active."
+            );
+          }
+
+          if (
+            status.agentManagerConnected !==
+            true
+          ) {
+            throw new Error(
+              "Agent Manager is not connected."
+            );
+          }
+
+          if (
+            status.agentRunnerConnected !==
+            true
+          ) {
+            throw new Error(
+              "Agent Runner is not connected."
+            );
+          }
+
+          console.log(
+            "Agent Worker status test passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CREATE WORKER TEST
+      # ======================================================
+
+      - name: Worker Creation Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          worker.reset();
+
+          const created =
+            worker.createWorker({
+
+              id:
+                "test-worker",
+
+              name:
+                "AarHen Test Worker",
+
+              metadata: {
+
+                test:
+                  true
+
+              }
+
+            });
+
+          if (
+            created.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker creation failed."
+            );
+          }
+
+          if (
+            created.worker?.id !==
+            "test-worker"
+          ) {
+            throw new Error(
+              "Worker ID mismatch."
+            );
+          }
+
+          if (
+            created.worker?.name !==
+            "AarHen Test Worker"
+          ) {
+            throw new Error(
+              "Worker name mismatch."
+            );
+          }
+
+          if (
+            created.worker?.status !==
+            worker.WORKER_STATES.IDLE
+          ) {
+            throw new Error(
+              "New worker should be idle."
+            );
+          }
+
+          console.log(
+            "Worker creation test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DEFAULT WORKER TEST
+      # ======================================================
+
+      - name: Default Worker Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const result =
+            worker.ensureDefaultWorker();
+
+          if (
+            result.success !==
+            true
+          ) {
+            throw new Error(
+              "Default worker creation failed."
+            );
+          }
+
+          if (
+            !result.worker?.id
+          ) {
+            throw new Error(
+              "Default worker ID is missing."
+            );
+          }
+
+          if (
+            result.worker?.metadata?.default !==
+            true
+          ) {
+            throw new Error(
+              "Default worker flag is missing."
+            );
+          }
+
+          const again =
+            worker.getDefaultWorker();
+
+          if (
+            again.success !==
+            true
+          ) {
+            throw new Error(
+              "Default worker retrieval failed."
+            );
+          }
+
+          if (
+            again.worker?.id !==
+            result.worker.id
+          ) {
+            throw new Error(
+              "Default worker identity changed."
+            );
+          }
+
+          console.log(
+            "Default worker test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # TASK CREATION
+      # ======================================================
+
+      - name: Agent Manager Task Creation Test
+        run: |
+
+          node - <<'NODE'
+
+          const manager =
+            require("./core/agentManager");
+
+          const agents =
+            manager.listAgents();
+
+          if (
+            !agents ||
+            !Array.isArray(
+              agents.agents
+            )
+          ) {
+            throw new Error(
+              "Agent Manager agent list is unavailable."
+            );
+          }
+
+          const createdAgent =
+            manager.createAgent({
+
+              id:
+                "worker-test-agent",
+
+              name:
+                "Worker Test Agent"
+
+            });
+
+          if (
+            createdAgent.success !==
+            true
+          ) {
+            throw new Error(
+              "Test agent creation failed."
+            );
+          }
+
+          const task =
+            manager.createTask(
+
+              createdAgent.agent.id,
+
+              {
+                request:
+                  "Calculate 10 + 20"
+              }
+
+            );
+
+          if (
+            task.success !==
+            true
+          ) {
+            throw new Error(
+              "Test task creation failed."
+            );
+          }
+
+          if (
+            !task.task?.id
+          ) {
+            throw new Error(
+              "Created task ID is missing."
+            );
+          }
+
+          console.log(
+            "Agent Manager task creation test passed."
+          );
+
+          console.log(
+            "Task:",
+            task.task.id
+          );
+
+          NODE
+
+
+      # ======================================================
+      # ASSIGN TASK
+      # ======================================================
+
+      - name: Worker Task Assignment Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const manager =
+            require("./core/agentManager");
+
+          const defaultWorker =
+            worker.getDefaultWorker();
+
+          if (
+            defaultWorker.success !==
+            true
+          ) {
+            throw new Error(
+              "Default worker unavailable."
+            );
+          }
+
+          const agent =
+            manager.createAgent({
+
+              id:
+                "assignment-agent",
+
+              name:
+                "Assignment Agent"
+
+            });
+
+          if (
+            agent.success !==
+            true
+          ) {
+            throw new Error(
+              "Assignment agent creation failed."
+            );
+          }
+
+          const task =
+            manager.createTask(
+
+              agent.agent.id,
+
+              {
+                request:
+                  "Calculate 5 + 5"
+              }
+
+            );
+
+          if (
+            task.success !==
+            true
+          ) {
+            throw new Error(
+              "Assignment task creation failed."
+            );
+          }
+
+          const assigned =
+            worker.assignTask(
+
+              defaultWorker.worker.id,
+
+              task.task.id
+
+            );
+
+          if (
+            assigned.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker task assignment failed."
+            );
+          }
+
+          if (
+            assigned.taskId !==
+            task.task.id
+          ) {
+            throw new Error(
+              "Assigned task ID mismatch."
+            );
+          }
+
+          const queue =
+            worker.getQueue(
+              defaultWorker.worker.id
+            );
+
+          if (
+            queue.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker queue retrieval failed."
+            );
+          }
+
+          if (
+            !queue.queue.includes(
+              task.task.id
+            )
+          ) {
+            throw new Error(
+              "Assigned task was not added to worker queue."
+            );
+          }
+
+          console.log(
+            "Worker task assignment test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CONTROLLED EXECUTION TEST
+      # ======================================================
+
+      - name: Worker Controlled Execution Test
+        run: |
+
+          node - <<'NODE'
+
+          (async () => {
+
+            const worker =
+              require("./core/agentWorker");
+
+            const manager =
+              require("./core/agentManager");
+
+            const defaultWorker =
+              worker.getDefaultWorker();
+
+            if (
+              defaultWorker.success !==
+              true
+            ) {
+              throw new Error(
+                "Default worker unavailable."
+              );
+            }
+
+            const agent =
+              manager.createAgent({
+
+                id:
+                  "execution-agent",
+
+                name:
+                  "Execution Agent"
+
+              });
+
+            if (
+              agent.success !==
+              true
+            ) {
+              throw new Error(
+                "Execution agent creation failed."
+              );
+            }
+
+            const task =
+              manager.createTask(
+
+                agent.agent.id,
+
+                {
+                  request:
+                    "Calculate 10 + 20"
+                }
+
+              );
+
+            if (
+              task.success !==
+              true
+            ) {
+              throw new Error(
+                "Execution task creation failed."
+              );
+            }
+
+            const plan =
+              manager.addStep(
+
+                task.task.id,
+
+                {
+
+                  action:
+                    "calculate",
+
+                  requiresApproval:
+                    false,
+
+                  approved:
+                    true,
+
+                  input: {
+
+                    request:
+                      "Calculate 10 + 20"
+
+                  }
+
+                }
+
+              );
+
+            if (
+              plan.success !==
+              true
+            ) {
+              throw new Error(
+                "Execution task step creation failed."
+              );
+            }
+
+            const assigned =
+              worker.assignTask(
+
+                defaultWorker.worker.id,
+
+                task.task.id
+
+              );
+
+            if (
+              assigned.success !==
+              true
+            ) {
+              throw new Error(
+                "Execution task assignment failed."
+              );
+            }
+
+            const execution =
+              await worker.runAssignedTask(
+
+                defaultWorker.worker.id
+
+              );
+
+            if (
+              execution.success !==
+              true
+            ) {
+              throw new Error(
+                "Worker controlled execution failed: " +
+                (
+                  execution.error ||
+                  execution.execution?.error ||
+                  "unknown error"
+                )
+              );
+            }
+
+            if (
+              execution.task?.status !==
+              manager.TASK_STATES.COMPLETED
+            ) {
+              throw new Error(
+                "Worker execution did not complete the task."
+              );
+            }
+
+            if (
+              execution.workerStatus !==
+              worker.WORKER_STATES.IDLE
+            ) {
+              throw new Error(
+                "Worker did not return to idle state."
+              );
+            }
+
+            if (
+              execution.worker?.successfulRuns <
+              1
+            ) {
+              throw new Error(
+                "Worker successful run counter was not updated."
+              );
+            }
+
+            console.log(
+              "Worker controlled execution test passed."
+            );
+
+            console.log(
+              JSON.stringify(
+                execution,
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # APPROVAL WAITING TEST
+      # ======================================================
+
+      - name: Worker Approval Control Test
+        run: |
+
+          node - <<'NODE'
+
+          (async () => {
+
+            const worker =
+              require("./core/agentWorker");
+
+            const manager =
+              require("./core/agentManager");
+
+            const createdWorker =
+              worker.createWorker({
+
+                id:
+                  "approval-worker",
+
+                name:
+                  "Approval Worker"
+
+              });
+
+            if (
+              createdWorker.success !==
+              true
+            ) {
+              throw new Error(
+                "Approval worker creation failed."
+              );
+            }
+
+            const agent =
+              manager.createAgent({
+
+                id:
+                  "approval-worker-agent",
+
+                name:
+                  "Approval Worker Agent"
+
+              });
+
+            if (
+              agent.success !==
+              true
+            ) {
+              throw new Error(
+                "Approval agent creation failed."
+              );
+            }
+
+            const task =
+              manager.createTask(
+
+                agent.agent.id,
+
+                {
+                  request:
+                    "Send a message to a customer"
+                }
+
+              );
+
+            if (
+              task.success !==
+              true
+            ) {
+              throw new Error(
+                "Approval task creation failed."
+              );
+            }
+
+            const step =
+              manager.addStep(
+
+                task.task.id,
+
+                {
+
+                  action:
+                    "send_message",
+
+                  requiresApproval:
+                    true,
+
+                  approved:
+                    false,
+
+                  input: {
+
+                    request:
+                      "Send a message to a customer"
+
+                  }
+
+                }
+
+              );
+
+            if (
+              step.success !==
+              true
+            ) {
+              throw new Error(
+                "Approval task step creation failed."
+              );
+            }
+
+            const assigned =
+              worker.assignTask(
+
+                createdWorker.worker.id,
+
+                task.task.id
+
+              );
+
+            if (
+              assigned.success !==
+              true
+            ) {
+              throw new Error(
+                "Approval task assignment failed."
+              );
+            }
+
+            const execution =
+              await worker.runAssignedTask(
+
+                createdWorker.worker.id
+
+              );
+
+            if (
+              execution.workerStatus !==
+              worker.WORKER_STATES.WAITING_APPROVAL
+            ) {
+              throw new Error(
+                "Worker did not enter waiting-approval state."
+              );
+            }
+
+            if (
+              execution.task?.status !==
+              manager.TASK_STATES.WAITING_APPROVAL
+            ) {
+              throw new Error(
+                "Task did not enter waiting-approval state."
+              );
+            }
+
+            console.log(
+              "Worker approval control test passed."
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # PAUSE / RESUME TEST
+      # ======================================================
+
+      - name: Worker Pause Resume Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const manager =
+            require("./core/agentManager");
+
+          const createdWorker =
+            worker.createWorker({
+
+              id:
+                "pause-worker",
+
+              name:
+                "Pause Worker"
+
+            });
+
+          if (
+            createdWorker.success !==
+            true
+          ) {
+            throw new Error(
+              "Pause worker creation failed."
+            );
+          }
+
+          const agent =
+            manager.createAgent({
+
+              id:
+                "pause-agent",
+
+              name:
+                "Pause Agent"
+
+            });
+
+          if (
+            agent.success !==
+            true
+          ) {
+            throw new Error(
+              "Pause agent creation failed."
+            );
+          }
+
+          const task =
+            manager.createTask(
+
+              agent.agent.id,
+
+              {
+                request:
+                  "Calculate 100 + 200"
+              }
+
+            );
+
+          if (
+            task.success !==
+            true
+          ) {
+            throw new Error(
+              "Pause task creation failed."
+            );
+          }
+
+          const step =
+            manager.addStep(
+
+              task.task.id,
+
+              {
+
+                action:
+                  "calculate",
+
+                requiresApproval:
+                  false,
+
+                approved:
+                  true,
+
+                input: {
+
+                  request:
+                    "Calculate 100 + 200"
+
+                }
+
+              }
+
+            );
+
+          if (
+            step.success !==
+            true
+          ) {
+            throw new Error(
+              "Pause task step creation failed."
+            );
+          }
+
+          const assigned =
+            worker.assignTask(
+
+              createdWorker.worker.id,
+
+              task.task.id
+
+            );
+
+          if (
+            assigned.success !==
+            true
+          ) {
+            throw new Error(
+              "Pause task assignment failed."
+            );
+          }
+
+          const pause =
+            worker.pauseWorker(
+              createdWorker.worker.id
+            );
+
+          if (
+            pause.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker pause failed."
+            );
+          }
+
+          if (
+            pause.worker?.status !==
+            worker.WORKER_STATES.PAUSED
+          ) {
+            throw new Error(
+              "Worker did not enter paused state."
+            );
+          }
+
+          const resume =
+            worker.resumeWorker(
+              createdWorker.worker.id
+            );
+
+          if (
+            resume.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker resume failed."
+            );
+          }
+
+          if (
+            resume.worker?.status !==
+            worker.WORKER_STATES.IDLE
+          ) {
+            throw new Error(
+              "Worker did not return to idle state."
+            );
+          }
+
+          console.log(
+            "Worker pause/resume test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # QUEUE TEST
+      # ======================================================
+
+      - name: Worker Queue Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const manager =
+            require("./core/agentManager");
+
+          const createdWorker =
+            worker.createWorker({
+
+              id:
+                "queue-worker",
+
+              name:
+                "Queue Worker"
+
+            });
+
+          if (
+            createdWorker.success !==
+            true
+          ) {
+            throw new Error(
+              "Queue worker creation failed."
+            );
+          }
+
+          const agent =
+            manager.createAgent({
+
+              id:
+                "queue-agent",
+
+              name:
+                "Queue Agent"
+
+            });
+
+          if (
+            agent.success !==
+            true
+          ) {
+            throw new Error(
+              "Queue agent creation failed."
+            );
+          }
+
+          const task1 =
+            manager.createTask(
+
+              agent.agent.id,
+
+              {
+                request:
+                  "Calculate 1 + 1"
+              }
+
+            );
+
+          const task2 =
+            manager.createTask(
+
+              agent.agent.id,
+
+              {
+                request:
+                  "Calculate 2 + 2"
+              }
+
+            );
+
+          if (
+            task1.success !==
+            true ||
+            task2.success !==
+            true
+          ) {
+            throw new Error(
+              "Queue test task creation failed."
+            );
+          }
+
+          const step1 =
+            manager.addStep(
+
+              task1.task.id,
+
+              {
+
+                action:
+                  "calculate",
+
+                approved:
+                  true,
+
+                requiresApproval:
+                  false,
+
+                input: {
+
+                  request:
+                    "Calculate 1 + 1"
+
+                }
+
+              }
+
+            );
+
+          const step2 =
+            manager.addStep(
+
+              task2.task.id,
+
+              {
+
+                action:
+                  "calculate",
+
+                approved:
+                  true,
+
+                requiresApproval:
+                  false,
+
+                input: {
+
+                  request:
+                    "Calculate 2 + 2"
+
+                }
+
+              }
+
+            );
+
+          if (
+            step1.success !==
+            true ||
+            step2.success !==
+            true
+          ) {
+            throw new Error(
+              "Queue test step creation failed."
+            );
+          }
+
+          const assign1 =
+            worker.enqueueTask(
+              createdWorker.worker.id,
+              task1.task.id
+            );
+
+          const assign2 =
+            worker.enqueueTask(
+              createdWorker.worker.id,
+              task2.task.id
+            );
+
+          if (
+            assign1.success !==
+            true ||
+            assign2.success !==
+            true
+          ) {
+            throw new Error(
+              "Queue assignment failed."
+            );
+          }
+
+          const queue =
+            worker.getQueue(
+              createdWorker.worker.id
+            );
+
+          if (
+            queue.queueLength !==
+            2
+          ) {
+            throw new Error(
+              "Worker queue length mismatch."
+            );
+          }
+
+          if (
+            queue.queue[0] !==
+            task1.task.id
+          ) {
+            throw new Error(
+              "First queued task order mismatch."
+            );
+          }
+
+          if (
+            queue.queue[1] !==
+            task2.task.id
+          ) {
+            throw new Error(
+              "Second queued task order mismatch."
+            );
+          }
+
+          console.log(
+            "Worker queue test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # LIST WORKERS TEST
+      # ======================================================
+
+      - name: Worker Listing Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const result =
+            worker.listWorkers();
+
+          if (
+            result.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker listing failed."
+            );
+          }
+
+          if (
+            !Array.isArray(
+              result.workers
+            )
+          ) {
+            throw new Error(
+              "Worker list is missing."
+            );
+          }
+
+          if (
+            result.workers.length ===
+            0
+          ) {
+            throw new Error(
+              "Worker list is unexpectedly empty."
+            );
+          }
+
+          console.log(
+            "Worker listing test passed."
+          );
+
+          console.log(
+            "Worker count:",
+            result.count
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STOP TEST
+      # ======================================================
+
+      - name: Worker Stop Control Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const manager =
+            require("./core/agentManager");
+
+          const createdWorker =
+            worker.createWorker({
+
+              id:
+                "stop-worker",
+
+              name:
+                "Stop Worker"
+
+            });
+
+          if (
+            createdWorker.success !==
+            true
+          ) {
+            throw new Error(
+              "Stop worker creation failed."
+            );
+          }
+
+          const agent =
+            manager.createAgent({
+
+              id:
+                "stop-agent",
+
+              name:
+                "Stop Agent"
+
+            });
+
+          if (
+            agent.success !==
+            true
+          ) {
+            throw new Error(
+              "Stop agent creation failed."
+            );
+          }
+
+          const task =
+            manager.createTask(
+
+              agent.agent.id,
+
+              {
+                request:
+                  "Calculate 50 + 50"
+              }
+
+            );
+
+          if (
+            task.success !==
+            true
+          ) {
+            throw new Error(
+              "Stop task creation failed."
+            );
+          }
+
+          const assigned =
+            worker.assignTask(
+
+              createdWorker.worker.id,
+
+              task.task.id
+
+            );
+
+          if (
+            assigned.success !==
+            true
+          ) {
+            throw new Error(
+              "Stop task assignment failed."
+            );
+          }
+
+          const stopped =
+            worker.stopWorker(
+              createdWorker.worker.id
+            );
+
+          if (
+            stopped.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker stop failed."
+            );
+          }
+
+          if (
+            stopped.worker?.status !==
+            worker.WORKER_STATES.STOPPED
+          ) {
+            throw new Error(
+              "Worker did not enter stopped state."
+            );
+          }
+
+          console.log(
+            "Worker stop control test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # CANCEL TEST
+      # ======================================================
+
+      - name: Worker Cancel Task Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const manager =
+            require("./core/agentManager");
+
+          const createdWorker =
+            worker.createWorker({
+
+              id:
+                "cancel-worker",
+
+              name:
+                "Cancel Worker"
+
+            });
+
+          if (
+            createdWorker.success !==
+            true
+          ) {
+            throw new Error(
+              "Cancel worker creation failed."
+            );
+          }
+
+          const agent =
+            manager.createAgent({
+
+              id:
+                "cancel-agent",
+
+              name:
+                "Cancel Agent"
+
+            });
+
+          if (
+            agent.success !==
+            true
+          ) {
+            throw new Error(
+              "Cancel agent creation failed."
+            );
+          }
+
+          const task =
+            manager.createTask(
+
+              agent.agent.id,
+
+              {
+                request:
+                  "Calculate 7 + 8"
+              }
+
+            );
+
+          if (
+            task.success !==
+            true
+          ) {
+            throw new Error(
+              "Cancel task creation failed."
+            );
+          }
+
+          const assigned =
+            worker.assignTask(
+
+              createdWorker.worker.id,
+
+              task.task.id
+
+            );
+
+          if (
+            assigned.success !==
+            true
+          ) {
+            throw new Error(
+              "Cancel task assignment failed."
+            );
+          }
+
+          const paused =
+            worker.pauseWorker(
+              createdWorker.worker.id
+            );
+
+          if (
+            paused.success !==
+            true
+          ) {
+            throw new Error(
+              "Cancel preparation pause failed."
+            );
+          }
+
+          const resumed =
+            worker.resumeWorker(
+              createdWorker.worker.id
+            );
+
+          if (
+            resumed.success !==
+            true
+          ) {
+            throw new Error(
+              "Cancel preparation resume failed."
+            );
+          }
+
+          const canceled =
+            worker.cancelWorkerTask(
+              createdWorker.worker.id
+            );
+
+          if (
+            canceled.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker task cancellation failed."
+            );
+          }
+
+          if (
+            canceled.worker?.activeTaskId !==
+            null
+          ) {
+            throw new Error(
+              "Canceled worker still has an active task."
+            );
+          }
+
+          console.log(
+            "Worker cancel task test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # DELETE TEST
+      # ======================================================
+
+      - name: Worker Delete Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const created =
+            worker.createWorker({
+
+              id:
+                "delete-worker",
+
+              name:
+                "Delete Worker"
+
+            });
+
+          if (
+            created.success !==
+            true
+          ) {
+            throw new Error(
+              "Delete worker creation failed."
+            );
+          }
+
+          const deleted =
+            worker.deleteWorker(
+              created.worker.id
+            );
+
+          if (
+            deleted.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker deletion failed."
+            );
+          }
+
+          const fetched =
+            worker.getWorker(
+              created.worker.id
+            );
+
+          if (
+            fetched.success !==
+            false
+          ) {
+            throw new Error(
+              "Deleted worker still exists."
+            );
+          }
+
+          console.log(
+            "Worker delete test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RESET TEST
+      # ======================================================
+
+      - name: Worker Reset Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const reset =
+            worker.reset();
+
+          if (
+            reset.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker reset failed."
+            );
+          }
+
+          if (
+            reset.version !==
+            "5.10.0"
+          ) {
+            throw new Error(
+              "Worker reset version mismatch."
+            );
+          }
+
+          const status =
+            worker.getStatus();
+
+          if (
+            status.workerCount !==
+            0
+          ) {
+            throw new Error(
+              "Worker reset did not clear worker registry."
+            );
+          }
+
+          console.log(
+            "Worker reset test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL STATUS
+      # ======================================================
+
+      - name: Final Worker Status Test
+        run: |
+
+          node - <<'NODE'
+
+          const worker =
+            require("./core/agentWorker");
+
+          const status =
+            worker.getStatus();
+
+          if (
+            status.success !==
+            true
+          ) {
+            throw new Error(
+              "Final Worker status failed."
+            );
+          }
+
+          if (
+            status.version !==
+            "5.10.0"
+          ) {
+            throw new Error(
+              "Final Worker version mismatch."
+            );
+          }
+
+          if (
+            status.agentManagerConnected !==
+            true
+          ) {
+            throw new Error(
+              "Final Agent Manager connection failed."
+            );
+          }
+
+          if (
+            status.agentRunnerConnected !==
+            true
+          ) {
+            throw new Error(
+              "Final Agent Runner connection failed."
+            );
+          }
+
+          console.log(
+            "Final Worker status passed."
+          );
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=============================================="
+          echo " AARHEN AGENT WORKER TEST"
+          echo "=============================================="
+          echo " Load: PASSED"
+          echo " Status: PASSED"
+          echo " Worker Creation: PASSED"
+          echo " Default Worker: PASSED"
+          echo " Agent Manager Task Creation: PASSED"
+          echo " Task Assignment: PASSED"
+          echo " Controlled Execution: PASSED"
+          echo " Approval Control: PASSED"
+          echo " Pause / Resume: PASSED"
+          echo " Queue: PASSED"
+          echo " Worker Listing: PASSED"
+          echo " Stop Control: PASSED"
+          echo " Cancel: PASSED"
+          echo " Delete: PASSED"
+          echo " Reset: PASSED"
+          echo " Final Status: PASSED"
+          echo "=============================================="
+          echo " AGENT WORKER v5.10.0 READY"
+          echo "=============================================="
