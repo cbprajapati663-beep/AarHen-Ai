@@ -1,0 +1,1143 @@
+name: AarHen Checkpoint Recovery Controller Test
+
+on:
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+jobs:
+
+  checkpoint-recovery-controller-test:
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # COMPLETE CONTROLLER TEST
+      # ======================================================
+
+      - name: Run Complete Checkpoint Recovery Controller Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            // =================================================
+            // LOAD MODULES
+            // =================================================
+
+            const controller =
+              require("./core/checkpointRecoveryController");
+
+            const checkpointBridge =
+              require("./core/checkpointBridge");
+
+            const checkpointEngine =
+              require("./core/checkpointEngine");
+
+            const autonomousRecovery =
+              require("./core/autonomousRecovery");
+
+            const autonomousWorker =
+              require("./core/autonomousWorker");
+
+            const agentManager =
+              require("./core/agentManager");
+
+
+            // =================================================
+            // VERSION TEST
+            // =================================================
+
+            if (
+              controller.CHECKPOINT_RECOVERY_CONTROLLER_VERSION !==
+              "5.14.0"
+            ) {
+
+              throw new Error(
+                "Checkpoint Recovery Controller version mismatch: " +
+                controller.CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+              );
+
+            }
+
+
+            if (
+              checkpointBridge.CHECKPOINT_BRIDGE_VERSION !==
+              "5.13.1"
+            ) {
+
+              throw new Error(
+                "Checkpoint Bridge version mismatch."
+              );
+
+            }
+
+
+            if (
+              checkpointEngine.CHECKPOINT_ENGINE_VERSION !==
+              "5.13.0"
+            ) {
+
+              throw new Error(
+                "Checkpoint Engine version mismatch."
+              );
+
+            }
+
+
+            if (
+              autonomousRecovery.AUTONOMOUS_RECOVERY_VERSION !==
+              "5.12.3"
+            ) {
+
+              throw new Error(
+                "Autonomous Recovery version mismatch."
+              );
+
+            }
+
+
+            if (
+              autonomousWorker.AUTONOMOUS_WORKER_VERSION !==
+              "5.10.3"
+            ) {
+
+              throw new Error(
+                "Autonomous Worker version mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "All controller dependency versions verified."
+            );
+
+
+            // =================================================
+            // RESET ALL IN-MEMORY STATE
+            // =================================================
+
+            checkpointEngine.reset();
+
+            autonomousWorker.reset();
+
+            agentManager.reset();
+
+
+            console.log(
+              "Initial controller test reset completed."
+            );
+
+
+            // =================================================
+            // CONTROLLER STATUS
+            // =================================================
+
+            const status =
+              controller.getStatus();
+
+
+            if (
+              status.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Controller status is unhealthy."
+              );
+
+            }
+
+
+            if (
+              status.status !==
+              "active"
+            ) {
+
+              throw new Error(
+                "Controller is not active."
+              );
+
+            }
+
+
+            if (
+              status.version !==
+              "5.14.0"
+            ) {
+
+              throw new Error(
+                "Controller status version mismatch."
+              );
+
+            }
+
+
+            if (
+              status.autonomousWorker?.connected !==
+              true
+            ) {
+
+              throw new Error(
+                "Controller is not connected to Autonomous Worker."
+              );
+
+            }
+
+
+            if (
+              status.autonomousWorker?.version !==
+              "5.10.3"
+            ) {
+
+              throw new Error(
+                "Autonomous Worker connection version mismatch."
+              );
+
+            }
+
+
+            if (
+              status.autonomousRecovery?.connected !==
+              true
+            ) {
+
+              throw new Error(
+                "Controller is not connected to Autonomous Recovery."
+              );
+
+            }
+
+
+            if (
+              status.autonomousRecovery?.version !==
+              "5.12.3"
+            ) {
+
+              throw new Error(
+                "Autonomous Recovery connection version mismatch."
+              );
+
+            }
+
+
+            if (
+              status.checkpointBridge?.connected !==
+              true
+            ) {
+
+              throw new Error(
+                "Controller is not connected to Checkpoint Bridge."
+              );
+
+            }
+
+
+            if (
+              status.checkpointBridge?.version !==
+              "5.13.1"
+            ) {
+
+              throw new Error(
+                "Checkpoint Bridge connection version mismatch."
+              );
+
+            }
+
+
+            if (
+              status.agentManager?.connected !==
+              true
+            ) {
+
+              throw new Error(
+                "Controller is not connected to Agent Manager."
+              );
+
+            }
+
+
+            if (
+              status.agentManager?.version !==
+              "5.8.0"
+            ) {
+
+              throw new Error(
+                "Agent Manager connection version mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Controller status test passed."
+            );
+
+
+            // =================================================
+            // CREATE AGENT
+            // =================================================
+
+            const agent =
+              autonomousWorker.ensureWorkerForAgent
+                ? null
+                : null;
+
+
+            const autonomousAgent =
+              require("./core/autonomousAgent");
+
+
+            autonomousAgent.reset();
+
+
+            const agentResult =
+              autonomousAgent.createAgent({
+
+                id:
+                  "checkpoint-controller-agent",
+
+                name:
+                  "Checkpoint Controller Test Agent",
+
+                description:
+                  "Integration test agent for Checkpoint Recovery Controller.",
+
+                default:
+                  true
+
+              });
+
+
+            if (
+              agentResult.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Controller test agent creation failed: " +
+                JSON.stringify(agentResult)
+              );
+
+            }
+
+
+            if (
+              agentResult.agent?.id !==
+              "checkpoint-controller-agent"
+            ) {
+
+              throw new Error(
+                "Controller test agent ID mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Controller test agent created."
+            );
+
+
+            // =================================================
+            // EXECUTE REQUEST
+            // =================================================
+
+            const result =
+              await controller.executeRequest(
+
+                "Calculate 10 + 20",
+
+                {
+
+                  agentId:
+                    "checkpoint-controller-agent",
+
+                  maxAttempts:
+                    3,
+
+                  baseDelayMs:
+                    0,
+
+                  maxDelayMs:
+                    100,
+
+                  source:
+                    "checkpoint-controller-test"
+
+                }
+
+              );
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Controller execution failed: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            if (
+              result.stage !==
+              "completed"
+            ) {
+
+              throw new Error(
+                "Controller execution stage mismatch: " +
+                result.stage
+              );
+
+            }
+
+
+            if (
+              !result.task?.id
+            ) {
+
+              throw new Error(
+                "Controller did not return a task."
+              );
+
+            }
+
+
+            if (
+              !result.worker?.id
+            ) {
+
+              throw new Error(
+                "Controller did not return a worker."
+              );
+
+            }
+
+
+            console.log(
+              "Controller execution completed."
+            );
+
+
+            // =================================================
+            // VERIFY TASK
+            // =================================================
+
+            const task =
+              agentManager.getTask(
+                result.task.id
+              );
+
+
+            if (
+              task.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Created task could not be loaded."
+              );
+
+            }
+
+
+            if (
+              task.task.status !==
+              "completed"
+            ) {
+
+              throw new Error(
+                "Task did not reach completed state: " +
+                task.task.status
+              );
+
+            }
+
+
+            if (
+              !Array.isArray(
+                task.task.steps
+              ) ||
+              task.task.steps.length <
+              1
+            ) {
+
+              throw new Error(
+                "Task does not contain an execution step."
+              );
+
+            }
+
+
+            if (
+              task.task.steps[0].status !==
+              "completed"
+            ) {
+
+              throw new Error(
+                "Execution step did not complete: " +
+                task.task.steps[0].status
+              );
+
+            }
+
+
+            console.log(
+              "Task completion verification passed."
+            );
+
+
+            // =================================================
+            // VERIFY BEFORE CHECKPOINT
+            // =================================================
+
+            if (
+              !result.beforeCheckpoint?.id
+            ) {
+
+              throw new Error(
+                "Before-execution checkpoint is missing."
+              );
+
+            }
+
+
+            if (
+              result.beforeCheckpoint.taskId !==
+              result.task.id
+            ) {
+
+              throw new Error(
+                "Before checkpoint task ID mismatch."
+              );
+
+            }
+
+
+            if (
+              result.beforeCheckpoint.state !==
+              "active"
+            ) {
+
+              throw new Error(
+                "Before checkpoint state should be active."
+              );
+
+            }
+
+
+            if (
+              result.beforeCheckpoint.recoveryEligible !==
+              true
+            ) {
+
+              throw new Error(
+                "Before checkpoint should be recovery eligible."
+              );
+
+            }
+
+
+            console.log(
+              "Before-execution checkpoint verification passed."
+            );
+
+
+            // =================================================
+            // VERIFY AFTER CHECKPOINT
+            // =================================================
+
+            if (
+              !result.afterCheckpoint?.id
+            ) {
+
+              throw new Error(
+                "After-execution checkpoint is missing."
+              );
+
+            }
+
+
+            if (
+              result.afterCheckpoint.taskId !==
+              result.task.id
+            ) {
+
+              throw new Error(
+                "After checkpoint task ID mismatch."
+              );
+
+            }
+
+
+            if (
+              result.afterCheckpoint.state !==
+              "completed"
+            ) {
+
+              throw new Error(
+                "After checkpoint state should be completed: " +
+                result.afterCheckpoint.state
+              );
+
+            }
+
+
+            if (
+              result.afterCheckpoint.recoveryEligible !==
+              false
+            ) {
+
+              throw new Error(
+                "Completed task checkpoint must not be recovery eligible."
+              );
+
+            }
+
+
+            if (
+              result.afterCheckpoint.metadata?.execution
+                ?.success !==
+              true
+            ) {
+
+              throw new Error(
+                "After checkpoint execution success metadata mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "After-execution checkpoint verification passed."
+            );
+
+
+            // =================================================
+            // VERIFY CHECKPOINT HISTORY
+            // =================================================
+
+            const history =
+              checkpointBridge.listCheckpoints(
+                result.task.id
+              );
+
+
+            if (
+              history.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Checkpoint history lookup failed."
+              );
+
+            }
+
+
+            if (
+              history.count !==
+              2
+            ) {
+
+              throw new Error(
+                "Expected 2 checkpoints, got: " +
+                history.count
+              );
+
+            }
+
+
+            if (
+              history.checkpoints[0].id !==
+              result.beforeCheckpoint.id
+            ) {
+
+              throw new Error(
+                "First checkpoint ID mismatch."
+              );
+
+            }
+
+
+            if (
+              history.checkpoints[1].id !==
+              result.afterCheckpoint.id
+            ) {
+
+              throw new Error(
+                "Second checkpoint ID mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Checkpoint history verification passed."
+            );
+
+
+            // =================================================
+            // VERIFY LATEST CHECKPOINT
+            // =================================================
+
+            const latest =
+              controller.getLatestCheckpoint(
+                result.task.id
+              );
+
+
+            if (
+              latest.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Latest checkpoint lookup failed."
+              );
+
+            }
+
+
+            if (
+              latest.checkpoint?.id !==
+              result.afterCheckpoint.id
+            ) {
+
+              throw new Error(
+                "Latest checkpoint does not match after checkpoint."
+              );
+
+            }
+
+
+            if (
+              latest.checkpoint?.state !==
+              "completed"
+            ) {
+
+              throw new Error(
+                "Latest checkpoint should be completed."
+              );
+
+            }
+
+
+            console.log(
+              "Latest checkpoint verification passed."
+            );
+
+
+            // =================================================
+            // VERIFY RECOVERY CANDIDATE
+            // =================================================
+
+            const candidate =
+              controller.getRecoveryCandidate(
+                result.task.id
+              );
+
+
+            if (
+              candidate.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery candidate lookup failed."
+              );
+
+            }
+
+
+            if (
+              candidate.recoverable !==
+              false
+            ) {
+
+              throw new Error(
+                "Completed task must not be marked recoverable."
+              );
+
+            }
+
+
+            console.log(
+              "Completed-task recovery candidate verification passed."
+            );
+
+
+            // =================================================
+            // VERIFY RECOVERY PLAN
+            // =================================================
+
+            const recoveryPlan =
+              controller.buildRecoveryPlan(
+                result.task.id
+              );
+
+
+            if (
+              recoveryPlan.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery plan lookup failed."
+              );
+
+            }
+
+
+            if (
+              recoveryPlan.recoverable !==
+              false
+            ) {
+
+              throw new Error(
+                "Completed task recovery plan must not be recoverable."
+              );
+
+            }
+
+
+            if (
+              recoveryPlan.plan?.action !==
+              "no-recovery"
+            ) {
+
+              throw new Error(
+                "Completed task recovery plan should be no-recovery."
+              );
+
+            }
+
+
+            console.log(
+              "Recovery plan verification passed."
+            );
+
+
+            // =================================================
+            // INSPECT TASK
+            // =================================================
+
+            const inspection =
+              controller.inspectTask(
+                result.task.id
+              );
+
+
+            if (
+              inspection.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Controller task inspection failed."
+              );
+
+            }
+
+
+            if (
+              inspection.task?.id !==
+              result.task.id
+            ) {
+
+              throw new Error(
+                "Inspection task ID mismatch."
+              );
+
+            }
+
+
+            if (
+              inspection.checkpointExists !==
+              true
+            ) {
+
+              throw new Error(
+                "Inspection did not detect checkpoints."
+              );
+
+            }
+
+
+            if (
+              inspection.latestCheckpoint?.id !==
+              result.afterCheckpoint.id
+            ) {
+
+              throw new Error(
+                "Inspection latest checkpoint mismatch."
+              );
+
+            }
+
+
+            if (
+              inspection.recoveryCandidate?.recoverable !==
+              false
+            ) {
+
+              throw new Error(
+                "Inspection recovery candidate mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Controller inspection test passed."
+            );
+
+
+            // =================================================
+            // VERIFY CHECKPOINT LINKAGE
+            // =================================================
+
+            if (
+              result.afterCheckpoint.metadata
+                ?.execution
+                ?.status !==
+              "completed"
+            ) {
+
+              throw new Error(
+                "After checkpoint execution status metadata mismatch."
+              );
+
+            }
+
+
+            if (
+              result.afterCheckpoint.metadata
+                ?.beforeCheckpointId !==
+              result.beforeCheckpoint.id
+            ) {
+
+              throw new Error(
+                "Checkpoint linkage metadata mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Checkpoint linkage verification passed."
+            );
+
+
+            // =================================================
+            // FINAL STATUS
+            // =================================================
+
+            const finalStatus =
+              controller.getStatus();
+
+
+            if (
+              finalStatus.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Final controller health check failed."
+              );
+
+            }
+
+
+            if (
+              finalStatus.status !==
+              "active"
+            ) {
+
+              throw new Error(
+                "Final controller status is not active."
+              );
+
+            }
+
+
+            if (
+              finalStatus.autonomousWorker?.connected !==
+              true
+            ) {
+
+              throw new Error(
+                "Final Autonomous Worker connection failed."
+              );
+
+            }
+
+
+            if (
+              finalStatus.autonomousRecovery?.connected !==
+              true
+            ) {
+
+              throw new Error(
+                "Final Autonomous Recovery connection failed."
+              );
+
+            }
+
+
+            if (
+              finalStatus.checkpointBridge?.connected !==
+              true
+            ) {
+
+              throw new Error(
+                "Final Checkpoint Bridge connection failed."
+              );
+
+            }
+
+
+            if (
+              finalStatus.agentManager?.connected !==
+              true
+            ) {
+
+              throw new Error(
+                "Final Agent Manager connection failed."
+              );
+
+            }
+
+
+            console.log(
+              "Final controller health test passed."
+            );
+
+
+            // =================================================
+            // FINAL SUMMARY
+            // =================================================
+
+            console.log("");
+            console.log(
+              "======================================================"
+            );
+            console.log(
+              " AARHEN CHECKPOINT RECOVERY CONTROLLER TEST"
+            );
+            console.log(
+              "======================================================"
+            );
+            console.log(
+              " Version Validation: PASSED"
+            );
+            console.log(
+              " Controller Status: PASSED"
+            );
+            console.log(
+              " Agent Creation: PASSED"
+            );
+            console.log(
+              " Autonomous Task Creation: PASSED"
+            );
+            console.log(
+              " Autonomous Execution: PASSED"
+            );
+            console.log(
+              " Task Completion: PASSED"
+            );
+            console.log(
+              " Before Checkpoint: PASSED"
+            );
+            console.log(
+              " After Checkpoint: PASSED"
+            );
+            console.log(
+              " Checkpoint History: PASSED"
+            );
+            console.log(
+              " Latest Checkpoint: PASSED"
+            );
+            console.log(
+              " Recovery Candidate: PASSED"
+            );
+            console.log(
+              " Recovery Plan: PASSED"
+            );
+            console.log(
+              " Task Inspection: PASSED"
+            );
+            console.log(
+              " Checkpoint Linkage: PASSED"
+            );
+            console.log(
+              " Final Health: PASSED"
+            );
+            console.log(
+              "======================================================"
+            );
+            console.log(
+              " CHECKPOINT RECOVERY CONTROLLER v5.14.0"
+            );
+            console.log(
+              "======================================================"
+            );
+            console.log(
+              " CHECKPOINT RECOVERY CONTROLLER READY"
+            );
+            console.log(
+              "======================================================"
+            );
+
+
+          })().catch(error => {
+
+            console.error("");
+            console.error(
+              "CHECKPOINT RECOVERY CONTROLLER TEST FAILED"
+            );
+            console.error(error);
+            process.exit(1);
+
+          });
+
+          NODE
