@@ -1058,6 +1058,40 @@ async function runAssignedTask(
 
     try {
 
+        const workerContext = {
+
+            workerId:
+                worker.id,
+
+            workerName:
+                worker.name,
+
+            ...safeObject(
+                options.context
+            )
+
+        };
+
+
+        const runner =
+            typeof options.runner ===
+            "function"
+
+                ? async executionContext =>
+                    options.runner({
+
+                        ...safeObject(
+                            executionContext
+                        ),
+
+                        context:
+                            workerContext
+
+                    })
+
+                : options.runner;
+
+
         execution =
             await agentRunner.runTask(
 
@@ -1069,19 +1103,10 @@ async function runAssignedTask(
                         options
                     ),
 
-                    context: {
+                    runner,
 
-                        workerId:
-                            worker.id,
-
-                        workerName:
-                            worker.name,
-
-                        ...safeObject(
-                            options.context
-                        )
-
-                    }
+                    context:
+                        workerContext
 
                 }
 
