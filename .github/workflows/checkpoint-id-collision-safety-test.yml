@@ -1,0 +1,91 @@
+name: AarHen Checkpoint ID Collision Safety Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-id-collision:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify duplicate checkpoint IDs cannot corrupt checkpoint indexes
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          assert(manager.createAgent({
+            id: "collision-agent",
+            name: "Checkpoint ID collision test"
+          }).success, "Agent creation failed.");
+
+          for (const id of ["collision-task-a", "collision-task-b"]) {
+            assert(manager.createTask("collision-agent", "Task " + id, { id }).success,
+              "Task creation failed: " + id);
+            assert(manager.startTask(id).success, "Task start failed: " + id);
+          }
+
+          const first = bridge.saveTaskCheckpoint("collision-task-a", {
+            id: "shared-checkpoint-id",
+            reason: "Original checkpoint"
+          });
+          assert(first.success, "Initial checkpoint save failed.");
+
+          const duplicateSameTask = bridge.saveTaskCheckpoint("collision-task-a", {
+            id: "shared-checkpoint-id",
+            reason: "Duplicate same-task checkpoint"
+          });
+          assert(!duplicateSameTask.success &&
+            duplicateSameTask.error === "Checkpoint ID already exists.",
+            "Duplicate ID for the same task must be rejected.");
+
+          const duplicateOtherTask = bridge.saveTaskCheckpoint("collision-task-b", {
+            id: "shared-checkpoint-id",
+            reason: "Cross-task collision"
+          });
+          assert(!duplicateOtherTask.success &&
+            duplicateOtherTask.error === "Checkpoint ID already exists.",
+            "Duplicate ID across tasks must be rejected.");
+
+          const stored = engine.getCheckpoint("shared-checkpoint-id");
+          assert(stored.success &&
+            stored.checkpoint.taskId === "collision-task-a" &&
+            stored.checkpoint.reason === "Original checkpoint",
+            "Original checkpoint must remain unchanged.");
+
+          const listA = engine.listCheckpoints("collision-task-a");
+          const listB = engine.listCheckpoints("collision-task-b");
+          const status = engine.getStatus();
+
+          assert(listA.count === 1 && listA.checkpoints[0].id === "shared-checkpoint-id",
+            "Original task index must contain exactly one checkpoint ID.");
+          assert(listB.count === 0,
+            "Collision must not create a checkpoint under the second task.");
+          assert(status.checkpointCount === 1 && status.trackedTasks === 1,
+            "Counters must remain consistent after rejected collisions.");
+
+          console.log("Checkpoint ID collision safety tests passed.");
+          console.log(JSON.stringify({
+            sameTaskDuplicateRejected: !duplicateSameTask.success,
+            crossTaskDuplicateRejected: !duplicateOtherTask.success,
+            storedTaskId: stored.checkpoint.taskId,
+            checkpointCount: status.checkpointCount,
+            trackedTasks: status.trackedTasks
+          }, null, 2));
+          NODE
