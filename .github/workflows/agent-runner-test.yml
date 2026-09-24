@@ -59,7 +59,7 @@ jobs:
 
           if (
             runner.AGENT_RUNNER_VERSION !==
-            "5.8.3"
+            "5.8.4"
           ) {
             throw new Error(
               "Agent Runner version mismatch."
@@ -1008,5 +1008,5 @@ jobs:
           echo " Custom Action Safety: PASSED"
           echo " Final Status: PASSED"
           echo "=============================================="
-          echo " AGENT RUNNER v5.8.3 READY"
+          echo " AGENT RUNNER v5.8.4 READY"
           echo "=============================================="
