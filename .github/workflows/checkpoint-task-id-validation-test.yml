@@ -1,0 +1,76 @@
+name: AarHen Checkpoint Task ID Validation Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-task-id-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify checkpoint save requires a nonblank task ID
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          bridge.reset();
+
+          const missingId = engine.saveCheckpoint({
+            status: "running",
+            steps: []
+          }, { id: "missing-task-id-checkpoint" });
+
+          assert(!missingId.success &&
+            missingId.error === "Task ID is required to save a checkpoint.",
+            "Checkpoint save without task ID must be rejected.");
+
+          const blankId = engine.saveCheckpoint({
+            id: "   ",
+            status: "running",
+            steps: []
+          }, { id: "blank-task-id-checkpoint" });
+
+          assert(!blankId.success &&
+            blankId.error === "Task ID is required to save a checkpoint.",
+            "Checkpoint save with blank task ID must be rejected.");
+
+          const statusAfterRejects = engine.getStatus();
+          assert(statusAfterRejects.checkpointCount === 0 &&
+            statusAfterRejects.trackedTasks === 0,
+            "Rejected checkpoint saves must not mutate storage or indexes.");
+
+          const valid = engine.saveCheckpoint({
+            id: "valid-task-id",
+            status: "running",
+            steps: []
+          }, { id: "valid-task-checkpoint" });
+
+          assert(valid.success, "Checkpoint with a valid task ID should save.");
+          const latest = engine.getLatestCheckpoint("valid-task-id");
+          assert(latest.success &&
+            latest.checkpoint.id === "valid-task-checkpoint",
+            "Valid task checkpoint should be indexed and retrievable.");
+
+          console.log("Checkpoint task ID validation tests passed.");
+          console.log(JSON.stringify({
+            missingIdRejected: !missingId.success,
+            blankIdRejected: !blankId.success,
+            validIdAccepted: valid.success,
+            checkpointCount: engine.getStatus().checkpointCount
+          }, null, 2));
+          NODE
