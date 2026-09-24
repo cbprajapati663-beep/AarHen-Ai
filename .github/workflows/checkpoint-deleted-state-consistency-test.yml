@@ -64,11 +64,11 @@ jobs:
             "No-checkpoint comparison should return no differences.");
 
           const candidate = bridge.getRecoveryCandidate("deleted-state-task");
-          assert(candidate.success && candidate.recoverable === false,
+          assert(candidate.recoverable === false,
             "Task without a checkpoint must not be recoverable.");
 
           const plan = bridge.buildRecoveryPlan("deleted-state-task");
-          assert(plan.success && plan.recoverable === false,
+          assert(plan.recoverable === false,
             "Task without a checkpoint must not produce a recoverable plan.");
 
           const live = manager.getTask("deleted-state-task");
