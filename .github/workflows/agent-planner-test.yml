@@ -59,7 +59,7 @@ jobs:
 
           if (
             planner.AGENT_PLANNER_VERSION !==
-            "5.8.1"
+            "5.8.4"
           ) {
             throw new Error(
               "Agent Planner version mismatch."
@@ -143,6 +143,14 @@ jobs:
           ) {
             throw new Error(
               "Permission system is not connected."
+            );
+          }
+
+          if (
+            status.directActionDetection !== true
+          ) {
+            throw new Error(
+              "Direct action detection is not enabled."
             );
           }
 
@@ -584,6 +592,206 @@ jobs:
 
 
       # ======================================================
+      # DIRECT PROTECTED ACTION TEST
+      # ======================================================
+
+      - name: Direct Protected Action Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Send a message to a customer"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Direct protected action planning failed."
+            );
+          }
+
+          if (
+            result.directAction !==
+            true
+          ) {
+            throw new Error(
+              "Direct action was not detected."
+            );
+          }
+
+          if (
+            result.action !==
+            "send_message"
+          ) {
+            throw new Error(
+              "Direct action mismatch."
+            );
+          }
+
+          if (
+            result.category !==
+            "action"
+          ) {
+            throw new Error(
+              "Direct action category mismatch."
+            );
+          }
+
+          if (
+            result.plan.length !== 1
+          ) {
+            throw new Error(
+              "Protected action should create one step."
+            );
+          }
+
+          if (
+            result.plan[0].action !==
+            "send_message"
+          ) {
+            throw new Error(
+              "Protected step action mismatch."
+            );
+          }
+
+          if (
+            result.plan[0].requiresApproval !==
+            true
+          ) {
+            throw new Error(
+              "Protected message action should require approval."
+            );
+          }
+
+          if (
+            result.plan[0].approved !==
+            false
+          ) {
+            throw new Error(
+              "Protected message action should not be automatically approved."
+            );
+          }
+
+          if (
+            result.approvalRequired !==
+            true
+          ) {
+            throw new Error(
+              "Direct protected action approval flag is missing."
+            );
+          }
+
+          console.log(
+            "Direct protected action test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # EMAIL PROTECTION TEST
+      # ======================================================
+
+      - name: Direct Email Protection Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Send an email to the customer"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Direct email planning failed."
+            );
+          }
+
+          if (
+            result.action !==
+            "send_email"
+          ) {
+            throw new Error(
+              "Direct email action mismatch."
+            );
+          }
+
+          if (
+            result.plan[0].requiresApproval !==
+            true
+          ) {
+            throw new Error(
+              "Email action should require approval."
+            );
+          }
+
+          console.log(
+            "Direct email protection test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FILE PROTECTION TEST
+      # ======================================================
+
+      - name: File Protection Test
+        run: |
+          node - <<'NODE'
+
+          const planner =
+            require("./core/agentPlanner");
+
+          const result =
+            planner.planRequest(
+              "Create a file with this information"
+            );
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Direct file planning failed."
+            );
+          }
+
+          if (
+            result.action !==
+            "write_file"
+          ) {
+            throw new Error(
+              "Direct file action mismatch."
+            );
+          }
+
+          if (
+            result.plan[0].requiresApproval !==
+            true
+          ) {
+            throw new Error(
+              "File-writing action should require approval."
+            );
+          }
+
+          console.log(
+            "File protection test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
       # PLAN SUMMARY TEST
       # ======================================================
 
@@ -755,8 +963,11 @@ jobs:
           echo " Document Planning: PASSED"
           echo " Business Planning: PASSED"
           echo " Security Approval: PASSED"
+          echo " Direct Protected Action: PASSED"
+          echo " Direct Email Protection: PASSED"
+          echo " File Protection: PASSED"
           echo " Plan Summary: PASSED"
           echo " Agent Manager Integration: PASSED"
           echo "=============================================="
-          echo " AGENT PLANNER v5.8.1 READY"
+          echo " AGENT PLANNER v5.8.4 READY"
           echo "=============================================="
