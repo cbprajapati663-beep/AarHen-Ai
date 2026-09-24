@@ -1,0 +1,1270 @@
+name: AarHen Recovery Worker Test
+
+on:
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+jobs:
+
+  recovery-worker-test:
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ======================================================
+      # NODE
+      # ======================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # INSTALL
+      # ======================================================
+
+      - name: Install dependencies
+        run: npm install
+
+
+      # ======================================================
+      # LOAD COMPONENTS
+      # ======================================================
+
+      - name: Load Recovery Worker
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+          const agentWorker =
+            require("./core/agentWorker");
+
+          const recoveryBridge =
+            require("./core/recoveryBridge");
+
+          const recoveryEngine =
+            require("./core/recoveryEngine");
+
+          const agentRunner =
+            require("./core/agentRunner");
+
+          const guard =
+            require("./core/autonomousGuard");
+
+
+          if (!recoveryWorker) {
+
+            throw new Error(
+              "Recovery Worker could not be loaded."
+            );
+
+          }
+
+
+          if (
+            recoveryWorker.RECOVERY_WORKER_VERSION !==
+            "5.12.2"
+          ) {
+
+            throw new Error(
+              "Recovery Worker version mismatch."
+            );
+
+          }
+
+
+          if (
+            recoveryBridge.RECOVERY_BRIDGE_VERSION !==
+            "5.12.1"
+          ) {
+
+            throw new Error(
+              "Recovery Bridge version mismatch."
+            );
+
+          }
+
+
+          if (
+            recoveryEngine.RECOVERY_ENGINE_VERSION !==
+            "5.12.0"
+          ) {
+
+            throw new Error(
+              "Recovery Engine version mismatch."
+            );
+
+          }
+
+
+          if (
+            agentRunner.AGENT_RUNNER_VERSION !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Agent Runner version mismatch."
+            );
+
+          }
+
+
+          if (
+            guard.AUTONOMOUS_GUARD_VERSION !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Autonomous Guard version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery Worker:",
+            recoveryWorker.RECOVERY_WORKER_VERSION
+          );
+
+          console.log(
+            "Agent Worker:",
+            agentWorker.AGENT_WORKER_VERSION
+          );
+
+          console.log(
+            "Recovery Bridge:",
+            recoveryBridge.RECOVERY_BRIDGE_VERSION
+          );
+
+          console.log(
+            "Recovery Engine:",
+            recoveryEngine.RECOVERY_ENGINE_VERSION
+          );
+
+          console.log(
+            "Agent Runner:",
+            agentRunner.AGENT_RUNNER_VERSION
+          );
+
+          console.log(
+            "Autonomous Guard:",
+            guard.AUTONOMOUS_GUARD_VERSION
+          );
+
+
+          console.log(
+            "All Recovery Worker dependencies loaded."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STATUS TEST
+      # ======================================================
+
+      - name: Recovery Worker Status Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+
+          const status =
+            recoveryWorker.getStatus();
+
+
+          if (
+            status.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker status is unhealthy."
+            );
+
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not active."
+            );
+
+          }
+
+
+          if (
+            status.version !==
+            "5.12.2"
+          ) {
+
+            throw new Error(
+              "Recovery Worker status version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.agentWorker?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not connected to Agent Worker."
+            );
+
+          }
+
+
+          if (
+            status.recoveryBridge?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not connected to Recovery Bridge."
+            );
+
+          }
+
+
+          if (
+            status.agentRunner?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not connected to Agent Runner."
+            );
+
+          }
+
+
+          if (
+            status.autonomousSafetyGuard?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Recovery Worker is not connected to Autonomous Safety Guard."
+            );
+
+          }
+
+
+          if (
+            status.agentRunner?.version !==
+            "5.8.4"
+          ) {
+
+            throw new Error(
+              "Recovery Worker Agent Runner version mismatch."
+            );
+
+          }
+
+
+          if (
+            status.autonomousSafetyGuard?.version !==
+            "5.11.0"
+          ) {
+
+            throw new Error(
+              "Recovery Worker Guard version mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery Worker status test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              status,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # RECOVERY RUNNER CREATION TEST
+      # ======================================================
+
+      - name: Recovery Runner Creation Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+
+          const runner =
+            recoveryWorker.createRecoveryRunner({
+
+              maxAttempts:
+                3,
+
+              baseDelayMs:
+                0,
+
+              maxDelayMs:
+                100
+
+            });
+
+
+          if (
+            typeof runner !==
+            "function"
+          ) {
+
+            throw new Error(
+              "Recovery Worker did not create a recovery-aware runner."
+            );
+
+          }
+
+
+          console.log(
+            "Recovery runner creation test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # SAFE ACTION RECOVERY TEST
+      # ======================================================
+
+      - name: Safe Action Recovery Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const recoveryWorker =
+              require("./core/recoveryWorker");
+
+
+            let calls =
+              0;
+
+
+            const customRunner =
+              async () => {
+
+                calls +=
+                  1;
+
+
+                if (
+                  calls ===
+                  1
+                ) {
+
+                  return {
+
+                    success:
+                      false,
+
+                    error:
+                      "Temporary network failure.",
+
+                    executionStatus:
+                      "network-error"
+
+                  };
+
+                }
+
+
+                return {
+
+                  success:
+                    true,
+
+                  action:
+                    "calculate",
+
+                  result: {
+
+                    value:
+                      30
+
+                  },
+
+                  executionStatus:
+                    "completed"
+
+                };
+
+              };
+
+
+            const runner =
+              recoveryWorker.createRecoveryRunner({
+
+                runner:
+                  customRunner,
+
+                maxAttempts:
+                  3,
+
+                baseDelayMs:
+                  0,
+
+                maxDelayMs:
+                  100
+
+              });
+
+
+            const result =
+              await runner({});
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Worker safe action recovery failed: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            if (
+              calls !==
+              2
+            ) {
+
+              throw new Error(
+                "Recovery Worker should perform exactly two attempts."
+              );
+
+            }
+
+
+            if (
+              result.recovery?.recovered !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Worker did not report recovered=true."
+              );
+
+            }
+
+
+            if (
+              result.recovery?.attempts !==
+              2
+            ) {
+
+              throw new Error(
+                "Recovery Worker attempt count mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Safe action recovery test passed."
+            );
+
+            console.log(
+              JSON.stringify(
+                result.recovery,
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # APPROVAL SAFETY TEST
+      # ======================================================
+
+      - name: Approval Must Not Retry Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+
+          const runner =
+            recoveryWorker.createRecoveryRunner({
+
+              maxAttempts:
+                3,
+
+              baseDelayMs:
+                0,
+
+              maxDelayMs:
+                100
+
+            });
+
+
+          let calls =
+            0;
+
+
+          const execute =
+            async () => {
+
+              calls +=
+                1;
+
+
+              return {
+
+                success:
+                  false,
+
+                requiresApproval:
+                  true,
+
+                executionStatus:
+                  "approval-required",
+
+                error:
+                  "Action requires approval."
+
+              };
+
+            };
+
+
+          const recoveryRunner =
+            recoveryWorker.createRecoveryRunner({
+
+              runner:
+                execute,
+
+              maxAttempts:
+                3,
+
+              baseDelayMs:
+                0
+
+            });
+
+
+          const result =
+            await recoveryRunner({});
+
+
+          if (
+            result.success !==
+            false
+          ) {
+
+            throw new Error(
+              "Approval failure unexpectedly succeeded."
+            );
+
+          }
+
+
+          if (
+            calls !==
+            1
+          ) {
+
+            throw new Error(
+              "Approval failure must never be retried."
+            );
+
+          }
+
+
+          if (
+            result.recovery?.finalClassification !==
+            "approval"
+          ) {
+
+            throw new Error(
+              "Approval final classification mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "Approval safety test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # STOP SAFETY TEST
+      # ======================================================
+
+      - name: STOP Must Not Retry Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+
+          let calls =
+            0;
+
+
+          const runner =
+            recoveryWorker.createRecoveryRunner({
+
+              runner:
+                async () => {
+
+                  calls +=
+                    1;
+
+
+                  return {
+
+                    success:
+                      false,
+
+                    stopped:
+                      true,
+
+                    executionStatus:
+                      "autonomous-stop",
+
+                    error:
+                      "Emergency STOP activated."
+
+                  };
+
+                },
+
+              maxAttempts:
+                3,
+
+              baseDelayMs:
+                0
+
+            });
+
+
+          const result =
+            await runner({});
+
+
+          if (
+            result.success !==
+            false
+          ) {
+
+            throw new Error(
+              "STOP failure unexpectedly succeeded."
+            );
+
+          }
+
+
+          if (
+            calls !==
+            1
+          ) {
+
+            throw new Error(
+              "STOP failure must never be retried."
+            );
+
+          }
+
+
+          if (
+            result.recovery?.finalClassification !==
+            "stop"
+          ) {
+
+            throw new Error(
+              "STOP final classification mismatch."
+            );
+
+          }
+
+
+          console.log(
+            "STOP safety test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # REAL AGENT WORKER RECOVERY TEST
+      # ======================================================
+
+      - name: Real Agent Worker Recovery Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const recoveryWorker =
+              require("./core/recoveryWorker");
+
+            const agentWorker =
+              require("./core/agentWorker");
+
+            const agentManager =
+              require("./core/agentManager");
+
+
+            agentManager.reset();
+
+            agentWorker.reset();
+
+
+            const agent =
+              agentManager.createAgent({
+
+                id:
+                  "recovery-worker-agent",
+
+                name:
+                  "Recovery Worker Agent"
+
+              });
+
+
+            if (
+              agent.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Worker Agent creation failed."
+              );
+
+            }
+
+
+            const task =
+              agentManager.createTask(
+
+                "recovery-worker-agent",
+
+                "Calculate 10 + 20",
+
+                {
+
+                  id:
+                    "recovery-worker-task",
+
+                  maxRetries:
+                    0
+
+                }
+
+              );
+
+
+            if (
+              task.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Worker task creation failed."
+              );
+
+            }
+
+
+            const step =
+              agentManager.addStep(
+
+                "recovery-worker-task",
+
+                {
+
+                  id:
+                    "recovery-worker-step",
+
+                  name:
+                    "Recovery Worker Calculation",
+
+                  description:
+                    "Recovery Worker real execution test.",
+
+                  action:
+                    "calculate",
+
+                  approved:
+                    true,
+
+                  maxRetries:
+                    0,
+
+                  input: {
+
+                    request:
+                      "Calculate 10 + 20"
+
+                  }
+
+                }
+
+              );
+
+
+            if (
+              step.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Worker step creation failed."
+              );
+
+            }
+
+
+            const worker =
+              agentWorker.createWorker({
+
+                id:
+                  "recovery-worker",
+
+                name:
+                  "Recovery Worker Test Worker",
+
+                agentId:
+                  "recovery-worker-agent"
+
+              });
+
+
+            if (
+              worker.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Worker test worker creation failed."
+              );
+
+            }
+
+
+            const assignment =
+              agentWorker.assignTask(
+
+                "recovery-worker",
+
+                "recovery-worker-task"
+
+              );
+
+
+            if (
+              assignment.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Recovery Worker task assignment failed: " +
+                JSON.stringify(assignment)
+              );
+
+            }
+
+
+            let calls =
+              0;
+
+
+            const controlledRunner =
+              async () => {
+
+                calls +=
+                  1;
+
+
+                if (
+                  calls ===
+                  1
+                ) {
+
+                  return {
+
+                    success:
+                      false,
+
+                    error:
+                      "Temporary network failure.",
+
+                    executionStatus:
+                      "network-error"
+
+                  };
+
+                }
+
+
+                return {
+
+                  success:
+                    true,
+
+                  action:
+                    "calculate",
+
+                  result: {
+
+                    value:
+                      30
+
+                  },
+
+                  executionStatus:
+                    "completed"
+
+                };
+
+              };
+
+
+            const result =
+              await recoveryWorker.runAssignedTask(
+
+                "recovery-worker",
+
+                {
+
+                  runner:
+                    controlledRunner,
+
+                  maxAttempts:
+                    3,
+
+                  baseDelayMs:
+                    0,
+
+                  maxDelayMs:
+                    100
+
+                }
+
+              );
+
+
+            if (
+              result.success !==
+              true
+            ) {
+
+              throw new Error(
+                "Real Agent Worker recovery execution failed: " +
+                JSON.stringify(result)
+              );
+
+            }
+
+
+            if (
+              calls !==
+              2
+            ) {
+
+              throw new Error(
+                "Real Agent Worker recovery should require two attempts."
+              );
+
+            }
+
+
+            const completedTask =
+              result.task;
+
+
+            if (
+              completedTask?.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Recovery Worker task did not reach COMPLETED state."
+              );
+
+            }
+
+
+            if (
+              completedTask?.steps?.[0]?.status !==
+              agentManager.STEP_STATES.COMPLETED
+            ) {
+
+              throw new Error(
+                "Recovery Worker step did not reach COMPLETED state."
+              );
+
+            }
+
+
+            const storedStepResult =
+              completedTask?.steps?.[0]?.result;
+
+
+            if (
+              !storedStepResult
+            ) {
+
+              throw new Error(
+                "Recovery metadata was not stored in the completed step."
+              );
+
+            }
+
+
+            if (
+              storedStepResult.recovery?.recovered !==
+              true
+            ) {
+
+              throw new Error(
+                "Stored step recovery metadata did not report recovered=true."
+              );
+
+            }
+
+
+            if (
+              storedStepResult.recovery?.attempts !==
+              2
+            ) {
+
+              throw new Error(
+                "Stored recovery attempt count mismatch."
+              );
+
+            }
+
+
+            console.log(
+              "Real Agent Worker recovery test passed."
+            );
+
+
+            console.log(
+              "Task:",
+              completedTask.id
+            );
+
+            console.log(
+              "Task Status:",
+              completedTask.status
+            );
+
+            console.log(
+              "Worker:",
+              result.worker?.id
+            );
+
+            console.log(
+              "Worker Status:",
+              result.workerStatus
+            );
+
+            console.log(
+              "Recovery:",
+              JSON.stringify(
+                storedStepResult.recovery,
+                null,
+                2
+              )
+            );
+
+          })().catch(error => {
+
+            console.error(error);
+
+            process.exit(1);
+
+          });
+
+          NODE
+
+
+      # ======================================================
+      # FINAL HEALTH TEST
+      # ======================================================
+
+      - name: Final Recovery Worker Health Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const recoveryWorker =
+            require("./core/recoveryWorker");
+
+          const status =
+            recoveryWorker.getStatus();
+
+
+          if (
+            status.success !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Recovery Worker health check failed."
+            );
+
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+
+            throw new Error(
+              "Final Recovery Worker status is not active."
+            );
+
+          }
+
+
+          if (
+            status.agentWorker?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Agent Worker connection failed."
+            );
+
+          }
+
+
+          if (
+            status.recoveryBridge?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Recovery Bridge connection failed."
+            );
+
+          }
+
+
+          if (
+            status.agentRunner?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Agent Runner connection failed."
+            );
+
+          }
+
+
+          if (
+            status.autonomousSafetyGuard?.connected !==
+            true
+          ) {
+
+            throw new Error(
+              "Final Autonomous Guard connection failed."
+            );
+
+          }
+
+
+          console.log(
+            "Final Recovery Worker health test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=============================================="
+          echo " AARHEN RECOVERY WORKER TEST"
+          echo "=============================================="
+          echo " Recovery Worker Load: PASSED"
+          echo " Status: PASSED"
+          echo " Recovery Runner Creation: PASSED"
+          echo " Safe Recovery: PASSED"
+          echo " Approval Protection: PASSED"
+          echo " STOP Protection: PASSED"
+          echo " Real Agent Worker Recovery: PASSED"
+          echo " Final Health: PASSED"
+          echo "=============================================="
+          echo " RECOVERY WORKER v5.12.2"
+          echo "=============================================="
+          echo " WORKER RECOVERY READY"
+          echo "=============================================="
