@@ -1802,6 +1802,12 @@ function buildAutonomousOrchestrationResult(
         execution:
             autonomousExecution,
 
+        error:
+            autonomousExecution?.error ||
+            autonomousExecution?.result?.error ||
+            autonomousExecution?.execution?.error ||
+            null,
+
         status,
 
         timestamp:
