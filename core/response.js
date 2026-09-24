@@ -2,7 +2,7 @@
 // AARHEN CORE V5
 // RESPONSE ENGINE
 // ============================================================
-// Version: 5.7.6
+// Version: 5.7.7
 //
 // Improvements:
 // - Existing research response handling preserved
@@ -13,13 +13,15 @@
 // - Document RAG context support
 // - Document answer context support
 // - Document source display
-// - Safe nested document context resolution
+// - Safe nested document resolution
+// - Document wrapper collection resolution
+// - Supports results/documents/items/sources containers
 // - Existing public exports preserved
 // ============================================================
 
 
 const RESPONSE_VERSION =
-    "5.7.6";
+    "5.7.7";
 
 
 // ============================================================
@@ -32,8 +34,7 @@ function safeObject(
 
     return (
         value &&
-        typeof value ===
-            "object"
+        typeof value === "object"
     )
         ? value
         : {};
@@ -44,9 +45,7 @@ function safeArray(
     value
 ) {
 
-    return Array.isArray(
-        value
-    )
+    return Array.isArray(value)
         ? value
         : [];
 }
@@ -64,9 +63,7 @@ function normalize(
         return "";
     }
 
-    return String(
-        value
-    ).trim();
+    return String(value).trim();
 }
 
 
@@ -75,16 +72,13 @@ function firstNonEmpty(
 ) {
 
     for (
-        const value of
-        values
+        const value of values
     ) {
 
         if (
             value !== null &&
             value !== undefined &&
-            String(
-                value
-            ).trim() !== ""
+            String(value).trim() !== ""
         ) {
 
             return value;
@@ -92,6 +86,75 @@ function firstNonEmpty(
     }
 
     return "";
+}
+
+
+// ============================================================
+// COLLECTION RESOLVER
+// ============================================================
+// Supports:
+//
+// [...]
+// { results: [...] }
+// { documents: [...] }
+// { items: [...] }
+// { sources: [...] }
+// { knowledge: [...] }
+//
+// This fixes documentDocuments wrapper handling.
+// ============================================================
+
+function resolveArrayCollection(
+    value
+) {
+
+    if (
+        Array.isArray(value)
+    ) {
+
+        return value;
+    }
+
+
+    if (
+        !value ||
+        typeof value !== "object"
+    ) {
+
+        return [];
+    }
+
+
+    const candidates = [
+
+        value.results,
+
+        value.documents,
+
+        value.items,
+
+        value.sources,
+
+        value.knowledge
+
+    ];
+
+
+    for (
+        const candidate of
+        candidates
+    ) {
+
+        if (
+            Array.isArray(candidate)
+        ) {
+
+            return candidate;
+        }
+    }
+
+
+    return [];
 }
 
 
@@ -104,14 +167,11 @@ function formatNumber(
 ) {
 
     const number =
-        Number(
-            value
-        );
+        Number(value);
+
 
     if (
-        !Number.isFinite(
-            number
-        )
+        !Number.isFinite(number)
     ) {
 
         return String(
@@ -119,11 +179,11 @@ function formatNumber(
         );
     }
 
+
     return number.toLocaleString(
         "en-IN",
         {
-            maximumFractionDigits:
-                2
+            maximumFractionDigits: 2
         }
     );
 }
@@ -138,18 +198,16 @@ function formatConfidence(
 ) {
 
     const number =
-        Number(
-            value
-        );
+        Number(value);
+
 
     if (
-        !Number.isFinite(
-            number
-        )
+        !Number.isFinite(number)
     ) {
 
         return "";
     }
+
 
     return `${Math.round(
         Math.max(
@@ -164,7 +222,7 @@ function formatConfidence(
 
 
 // ============================================================
-// FINANCE RESPONSES
+// FINANCE
 // ============================================================
 
 function formatEMI(
@@ -181,6 +239,7 @@ function formatEMI(
         );
     }
 
+
     return (
 
         `Loan amount ₹${formatNumber(
@@ -193,9 +252,7 @@ function formatEMI(
 
         `estimated EMI ₹${formatNumber(
             result.emi
-        )} ` +
-
-        `per month hai.`
+        )} per month hai.`
 
     );
 }
@@ -215,6 +272,7 @@ function formatSimpleInterest(
         );
     }
 
+
     return (
 
         `Principal ₹${formatNumber(
@@ -227,9 +285,7 @@ function formatSimpleInterest(
 
         `simple interest ₹${formatNumber(
             result.interest
-        )} ` +
-
-        `aur total amount ₹${formatNumber(
+        )} aur total amount ₹${formatNumber(
             result.totalAmount
         )} hai.`
 
@@ -246,13 +302,8 @@ function formatMissingInput(
 ) {
 
     if (
-
-        !Array.isArray(
-            missing
-        ) ||
-
+        !Array.isArray(missing) ||
         missing.length === 0
-
     ) {
 
         return (
@@ -265,9 +316,7 @@ function formatMissingInput(
 
         "Mujhe calculation complete karne ke liye " +
 
-        missing.join(
-            ", "
-        ) +
+        missing.join(", ") +
 
         " chahiye."
 
@@ -284,9 +333,7 @@ function resolveResearchObject(
 ) {
 
     const root =
-        safeObject(
-            input
-        );
+        safeObject(input);
 
 
     const execution =
@@ -313,14 +360,12 @@ function resolveResearchObject(
 
 
     for (
-        const candidate of
-        candidates
+        const candidate of candidates
     ) {
 
         if (
             !candidate ||
-            typeof candidate !==
-                "object"
+            typeof candidate !== "object"
         ) {
 
             continue;
@@ -371,9 +416,7 @@ function resolveResearchSources(
 ) {
 
     const root =
-        safeObject(
-            input
-        );
+        safeObject(input);
 
 
     const execution =
@@ -383,9 +426,7 @@ function resolveResearchSources(
 
 
     const research =
-        resolveResearchObject(
-            root
-        );
+        resolveResearchObject(root);
 
 
     const candidates = [
@@ -422,37 +463,42 @@ function resolveResearchSources(
 
 
     for (
-        const candidate of
-        candidates
+        const candidate of candidates
     ) {
 
-        if (
-            Array.isArray(
+        const collection =
+            resolveArrayCollection(
                 candidate
-            ) &&
-            candidate.length > 0
+            );
+
+
+        if (
+            collection.length > 0
         ) {
 
             return normalizeResearchSources(
-                candidate
+                collection
             );
         }
     }
 
 
     for (
-        const candidate of
-        candidates
+        const candidate of candidates
     ) {
 
-        if (
-            Array.isArray(
+        const collection =
+            resolveArrayCollection(
                 candidate
-            )
+            );
+
+
+        if (
+            Array.isArray(collection)
         ) {
 
             return normalizeResearchSources(
-                candidate
+                collection
             );
         }
     }
@@ -470,10 +516,7 @@ function normalizeResearchSources(
     sources = []
 ) {
 
-    return safeArray(
-        sources
-    )
-
+    return safeArray(sources)
         .map(
             (
                 source,
@@ -481,126 +524,76 @@ function normalizeResearchSources(
             ) => {
 
                 const item =
-                    safeObject(
-                        source
-                    );
+                    safeObject(source);
 
 
                 return {
 
                     id:
-
                         normalize(
                             item.id
                         ) ||
-
                         `source-${index + 1}`,
 
                     title:
-
                         firstNonEmpty(
-
                             item.title,
-
                             item.name,
-
                             `Research Source ${index + 1}`
-
                         ),
 
                     url:
-
                         firstNonEmpty(
-
                             item.url,
-
                             item.link,
-
                             ""
-
                         ),
 
                     publisher:
-
                         firstNonEmpty(
-
                             item.publisher,
-
                             item.source,
-
                             item.domain,
-
                             ""
-
                         ),
 
                     publishedDate:
-
                         firstNonEmpty(
-
                             item.publishedDate,
-
                             item.publishedAt,
-
                             item.published_at,
-
                             item.date,
-
                             ""
-
                         ),
 
                     content:
-
                         firstNonEmpty(
-
                             item.content,
-
                             item.text,
-
                             item.description,
-
                             item.snippet,
-
                             ""
-
                         ),
 
                     snippet:
-
                         firstNonEmpty(
-
                             item.snippet,
-
                             item.description,
-
                             item.content,
-
                             ""
-
                         ),
 
                     score:
-
                         Number.isFinite(
-                            Number(
-                                item.score
-                            )
+                            Number(item.score)
                         )
-
-                            ? Number(
-                                item.score
-                            )
-
+                            ? Number(item.score)
                             : null
-
                 };
             }
         )
-
         .filter(
             source =>
-
                 source.title ||
                 source.url ||
                 source.content
@@ -609,7 +602,7 @@ function normalizeResearchSources(
 
 
 // ============================================================
-// RESEARCH VERIFICATION RESOLVER
+// RESEARCH VERIFICATION
 // ============================================================
 
 function resolveResearchVerification(
@@ -617,9 +610,7 @@ function resolveResearchVerification(
 ) {
 
     const research =
-        resolveResearchObject(
-            input
-        );
+        resolveResearchObject(input);
 
 
     const verification =
@@ -631,7 +622,6 @@ function resolveResearchVerification(
 
 
     let status =
-
         firstNonEmpty(
 
             research.verificationStatus,
@@ -649,14 +639,11 @@ function resolveResearchVerification(
 
     const verified =
 
-        research.verified ===
-            true ||
+        research.verified === true ||
 
-        verification?.verified ===
-            true ||
+        verification?.verified === true ||
 
-        status ===
-            "verified";
+        status === "verified";
 
 
     if (
@@ -688,7 +675,6 @@ function resolveResearchVerification(
                     research.confidence
                 )
             )
-
                 ? Number(
                     research.confidence
                 )
@@ -698,12 +684,9 @@ function resolveResearchVerification(
                         verification?.confidence
                     )
                 )
-
                     ? Number(
-                        verification
-                            .confidence
+                        verification.confidence
                     )
-
                     : 0,
 
         sourceCount:
@@ -725,7 +708,7 @@ function resolveResearchVerification(
 
 
 // ============================================================
-// RESEARCH LEARNING RESOLVER
+// RESEARCH LEARNING
 // ============================================================
 
 function resolveResearchLearning(
@@ -733,9 +716,7 @@ function resolveResearchLearning(
 ) {
 
     const research =
-        resolveResearchObject(
-            input
-        );
+        resolveResearchObject(input);
 
 
     return (
@@ -753,7 +734,7 @@ function resolveResearchLearning(
 
 
 // ============================================================
-// RESEARCH QUERY RESOLVER
+// RESEARCH QUERY
 // ============================================================
 
 function resolveResearchQuery(
@@ -761,9 +742,7 @@ function resolveResearchQuery(
 ) {
 
     const research =
-        resolveResearchObject(
-            input
-        );
+        resolveResearchObject(input);
 
 
     return firstNonEmpty(
@@ -783,7 +762,7 @@ function resolveResearchQuery(
 
 
 // ============================================================
-// RESEARCH ANSWER RESOLVER
+// RESEARCH ANSWER
 // ============================================================
 
 function resolveResearchAnswer(
@@ -791,9 +770,7 @@ function resolveResearchAnswer(
 ) {
 
     const research =
-        resolveResearchObject(
-            input
-        );
+        resolveResearchObject(input);
 
 
     return normalize(
@@ -819,7 +796,7 @@ function resolveResearchAnswer(
 
 
 // ============================================================
-// RESEARCH ERROR CHECK
+// RESEARCH ERROR
 // ============================================================
 
 function isResearchError(
@@ -827,15 +804,11 @@ function isResearchError(
 ) {
 
     const root =
-        safeObject(
-            input
-        );
+        safeObject(input);
 
 
     const research =
-        resolveResearchObject(
-            root
-        );
+        resolveResearchObject(root);
 
 
     return (
@@ -859,27 +832,13 @@ function isResearchError(
 // ============================================================
 // DOCUMENT OBJECT RESOLVER
 // ============================================================
-// Document data can arrive from:
-//
-// result.executionContext
-// result.execution.documentContext
-// result.documentContext
-// result.requestContext
-// result.brain.knowledge
-// result.executionContext.brain.knowledge
-//
-// The response engine searches these locations without
-// changing the upstream data model.
-// ============================================================
 
 function resolveDocumentObject(
     input = {}
 ) {
 
     const root =
-        safeObject(
-            input
-        );
+        safeObject(input);
 
 
     const execution =
@@ -930,55 +889,101 @@ function resolveDocumentObject(
 
         requestContext.documentContext,
 
-        executionContext.documentContext,
-
-        execution.documentContext,
-
-        root.documentKnowledge,
+        requestContext.documentDocuments,
 
         requestContext.documentKnowledge,
 
+        requestContext.documentRag,
+
+        executionContext.documentContext,
+
+        executionContext.documentDocuments,
+
         executionContext.documentKnowledge,
+
+        executionContext.documentRag,
+
+        execution.documentContext,
+
+        execution.documentDocuments,
 
         execution.documentKnowledge,
 
+        root.documentKnowledge,
+
+        root.documentDocuments,
+
+        root.documentRag,
+
         brainKnowledge.documentKnowledge,
+
+        brainKnowledge.documentDocuments,
+
+        brainKnowledge.documentRag,
 
         executionBrainKnowledge.documentKnowledge,
 
-        executionBrain.documentKnowledge
+        executionBrainKnowledge.documentDocuments,
+
+        executionBrainKnowledge.documentRag,
+
+        executionBrain.documentKnowledge,
+
+        executionBrain.documentDocuments,
+
+        executionBrain.documentRag
 
     ];
 
 
     for (
-        const candidate of
-        candidates
+        const candidate of candidates
     ) {
 
         if (
-            !candidate ||
-            typeof candidate !==
-                "object"
+            !candidate
         ) {
 
             continue;
         }
 
 
+        if (
+            Array.isArray(candidate)
+        ) {
+
+            return {
+
+                results:
+                    candidate,
+
+                documentKnowledge:
+                    candidate,
+
+                documentDetected:
+                    candidate.length > 0
+
+            };
+        }
+
+
+        if (
+            typeof candidate !== "object"
+        ) {
+
+            continue;
+        }
+
+
+        const collection =
+            resolveArrayCollection(
+                candidate
+            );
+
+
         const hasDocumentData =
 
-            Array.isArray(
-                candidate.documentKnowledge
-            ) ||
-
-            Array.isArray(
-                candidate.results
-            ) ||
-
-            Array.isArray(
-                candidate.documents
-            ) ||
+            collection.length > 0 ||
 
             candidate.rag ||
 
@@ -1012,9 +1017,7 @@ function resolveDocumentKnowledge(
 ) {
 
     const root =
-        safeObject(
-            input
-        );
+        safeObject(input);
 
 
     const executionContext =
@@ -1024,14 +1027,15 @@ function resolveDocumentKnowledge(
 
 
     const documentObject =
-        resolveDocumentObject(
-            root
-        );
+        resolveDocumentObject(root);
 
 
     const candidates = [
 
         documentObject.documentKnowledge,
+
+        documentObject.knowledge
+            ?.documentKnowledge,
 
         root.documentKnowledge,
 
@@ -1039,48 +1043,55 @@ function resolveDocumentKnowledge(
 
         executionContext.documentKnowledge,
 
-        executionContext.brain
+        executionContext
+            .brain
             ?.knowledge
             ?.documentKnowledge,
 
-        documentObject.knowledge
-            ?.documentKnowledge
+        documentObject.results,
+
+        documentObject.documents
 
     ];
 
 
     for (
-        const candidate of
-        candidates
+        const candidate of candidates
     ) {
 
-        if (
-            Array.isArray(
+        const collection =
+            resolveArrayCollection(
                 candidate
-            ) &&
-            candidate.length > 0
+            );
+
+
+        if (
+            collection.length > 0
         ) {
 
             return normalizeDocumentKnowledge(
-                candidate
+                collection
             );
         }
     }
 
 
     for (
-        const candidate of
-        candidates
+        const candidate of candidates
     ) {
 
-        if (
-            Array.isArray(
+        const collection =
+            resolveArrayCollection(
                 candidate
-            )
+            );
+
+
+        if (
+            Array.isArray(collection)
         ) {
 
             return normalizeDocumentKnowledge(
-                candidate
+                collection
             );
         }
     }
@@ -1098,10 +1109,7 @@ function normalizeDocumentKnowledge(
     items = []
 ) {
 
-    return safeArray(
-        items
-    )
-
+    return safeArray(items)
         .map(
             (
                 item,
@@ -1109,76 +1117,49 @@ function normalizeDocumentKnowledge(
             ) => {
 
                 const source =
-                    safeObject(
-                        item
-                    );
+                    safeObject(item);
 
 
                 return {
 
                     id:
                         firstNonEmpty(
-
                             source.id,
-
                             source.memoryId,
-
                             `document-knowledge-${index + 1}`
-
                         ),
 
                     title:
                         firstNonEmpty(
-
                             source.title,
-
                             source.name,
-
                             source.documentName,
-
                             `Document Knowledge ${index + 1}`
-
                         ),
 
                     content:
                         firstNonEmpty(
-
                             source.content,
-
                             source.text,
-
                             source.snippet,
-
                             source.answer,
-
                             ""
-
                         ),
 
                     source:
                         firstNonEmpty(
-
                             source.source,
-
                             source.documentSource,
-
                             source.documentName,
-
                             source.fileName,
-
                             ""
-
                         ),
 
                     documentType:
                         firstNonEmpty(
-
                             source.documentType,
-
                             source.type,
-
                             ""
-
                         ),
 
                     verified:
@@ -1186,21 +1167,14 @@ function normalizeDocumentKnowledge(
 
                     confidence:
                         Number.isFinite(
-                            Number(
-                                source.confidence
-                            )
+                            Number(source.confidence)
                         )
-
-                            ? Number(
-                                source.confidence
-                            )
-
+                            ? Number(source.confidence)
                             : null
 
                 };
             }
         )
-
         .filter(
             item =>
                 item.title ||
@@ -1213,20 +1187,36 @@ function normalizeDocumentKnowledge(
 // ============================================================
 // DOCUMENT SOURCE RESOLVER
 // ============================================================
+// IMPORTANT FIX:
+//
+// Supports:
+//
+// documentDocuments = {
+//     results: [...]
+// }
+//
+// documentDocuments = {
+//     documents: [...]
+// }
+//
+// documentDocuments = {
+//     items: [...]
+// }
+//
+// documentDocuments = [...]
+// ============================================================
 
 function resolveDocumentSources(
     input = {}
 ) {
 
     const root =
+        safeObject(input);
+
+
+    const execution =
         safeObject(
-            input
-        );
-
-
-    const documentObject =
-        resolveDocumentObject(
-            root
+            root.execution
         );
 
 
@@ -1236,57 +1226,135 @@ function resolveDocumentSources(
         );
 
 
+    const requestContext =
+        safeObject(
+            root.requestContext
+        );
+
+
+    const brain =
+        safeObject(
+            root.brain
+        );
+
+
+    const brainKnowledge =
+        safeObject(
+            brain.knowledge
+        );
+
+
+    const executionBrain =
+        safeObject(
+            executionContext.brain
+        );
+
+
+    const executionBrainKnowledge =
+        safeObject(
+            executionBrain.knowledge
+        );
+
+
     const candidates = [
 
-        documentObject.documents,
-
-        documentObject.results,
-
+        // Direct root
         root.documentDocuments,
 
-        root.requestContext?.documentDocuments,
+        root.documentSources,
 
+        root.documents,
+
+        // Request context
+        requestContext.documentDocuments,
+
+        requestContext.documentSources,
+
+        requestContext.documents,
+
+        // Execution context
         executionContext.documentDocuments,
 
-        executionContext.brain
-            ?.knowledge
-            ?.documentDocuments
+        executionContext.documentSources,
+
+        executionContext.documents,
+
+        // Execution
+        execution.documentDocuments,
+
+        execution.documentSources,
+
+        execution.documents,
+
+        // Brain knowledge
+        brainKnowledge.documentDocuments,
+
+        brainKnowledge.documentSources,
+
+        brainKnowledge.documents,
+
+        // Execution brain
+        executionBrainKnowledge.documentDocuments,
+
+        executionBrainKnowledge.documentSources,
+
+        executionBrainKnowledge.documents,
+
+        executionBrain.documentDocuments,
+
+        executionBrain.documentSources,
+
+        executionBrain.documents,
+
+        // Generic document object
+        root.documentContext,
+
+        requestContext.documentContext,
+
+        executionContext.documentContext,
+
+        execution.documentContext
 
     ];
 
 
     for (
-        const candidate of
-        candidates
+        const candidate of candidates
     ) {
 
-        if (
-            Array.isArray(
+        const collection =
+            resolveArrayCollection(
                 candidate
-            ) &&
-            candidate.length > 0
+            );
+
+
+        if (
+            collection.length > 0
         ) {
 
             return normalizeDocumentSources(
-                candidate
+                collection
             );
         }
     }
 
 
     for (
-        const candidate of
-        candidates
+        const candidate of candidates
     ) {
 
-        if (
-            Array.isArray(
+        const collection =
+            resolveArrayCollection(
                 candidate
-            )
+            );
+
+
+        if (
+            Array.isArray(collection)
         ) {
 
             return normalizeDocumentSources(
-                candidate
+                collection
             );
         }
     }
@@ -1304,10 +1372,7 @@ function normalizeDocumentSources(
     sources = []
 ) {
 
-    return safeArray(
-        sources
-    )
-
+    return safeArray(sources)
         .map(
             (
                 source,
@@ -1315,72 +1380,48 @@ function normalizeDocumentSources(
             ) => {
 
                 const item =
-                    safeObject(
-                        source
-                    );
+                    safeObject(source);
 
 
                 return {
 
                     id:
                         firstNonEmpty(
-
                             item.id,
-
                             `document-source-${index + 1}`
-
                         ),
 
                     title:
                         firstNonEmpty(
-
                             item.title,
-
                             item.name,
-
                             item.documentName,
-
                             item.fileName,
-
                             `Document ${index + 1}`
-
                         ),
 
                     source:
                         firstNonEmpty(
-
                             item.source,
-
                             item.documentSource,
-
                             item.documentName,
-
                             item.fileName,
-
                             ""
-
                         ),
 
                     type:
                         firstNonEmpty(
-
                             item.documentType,
-
                             item.type,
-
                             ""
-
                         ),
 
                     count:
-                        Number(
-                            item.count
-                        ) || 0
+                        Number(item.count) || 0
 
                 };
             }
         )
-
         .filter(
             item =>
                 item.title ||
@@ -1390,7 +1431,7 @@ function normalizeDocumentSources(
 
 
 // ============================================================
-// DOCUMENT ANSWER CONTEXT RESOLVER
+// DOCUMENT ANSWER CONTEXT
 // ============================================================
 
 function resolveDocumentAnswerContext(
@@ -1398,15 +1439,11 @@ function resolveDocumentAnswerContext(
 ) {
 
     const root =
-        safeObject(
-            input
-        );
+        safeObject(input);
 
 
     const documentObject =
-        resolveDocumentObject(
-            root
-        );
+        resolveDocumentObject(root);
 
 
     const executionContext =
@@ -1439,6 +1476,9 @@ function resolveDocumentAnswerContext(
             execution.documentContext
                 ?.answerContext,
 
+            root.requestContext
+                ?.answerContext,
+
             ""
 
         )
@@ -1448,7 +1488,7 @@ function resolveDocumentAnswerContext(
 
 
 // ============================================================
-// DOCUMENT RAG RESOLVER
+// DOCUMENT RAG
 // ============================================================
 
 function resolveDocumentRag(
@@ -1456,15 +1496,11 @@ function resolveDocumentRag(
 ) {
 
     const root =
-        safeObject(
-            input
-        );
+        safeObject(input);
 
 
     const documentObject =
-        resolveDocumentObject(
-            root
-        );
+        resolveDocumentObject(root);
 
 
     const executionContext =
@@ -1496,7 +1532,7 @@ function resolveDocumentRag(
 
 
 // ============================================================
-// DOCUMENT STATUS RESOLVER
+// DOCUMENT STATUS
 // ============================================================
 
 function resolveDocumentStatus(
@@ -1504,33 +1540,23 @@ function resolveDocumentStatus(
 ) {
 
     const knowledge =
-        resolveDocumentKnowledge(
-            input
-        );
+        resolveDocumentKnowledge(input);
 
 
     const sources =
-        resolveDocumentSources(
-            input
-        );
+        resolveDocumentSources(input);
 
 
     const answerContext =
-        resolveDocumentAnswerContext(
-            input
-        );
+        resolveDocumentAnswerContext(input);
 
 
     const rag =
-        resolveDocumentRag(
-            input
-        );
+        resolveDocumentRag(input);
 
 
     const root =
-        safeObject(
-            input
-        );
+        safeObject(input);
 
 
     const executionContext =
@@ -1540,6 +1566,7 @@ function resolveDocumentStatus(
 
 
     const documentAware =
+
         root.documentAware === true ||
 
         root.pipeline
@@ -1553,17 +1580,27 @@ function resolveDocumentStatus(
 
         knowledge.length > 0 ||
 
-        sources.length > 0;
+        sources.length > 0 ||
+
+        Boolean(answerContext) ||
+
+        Boolean(rag);
 
 
     return {
 
         enabled:
-            root.documentKnowledgeEnabled !== false &&
+
+            root.documentKnowledgeEnabled !==
+                false &&
+
             root.requestContext
-                ?.documentKnowledgeEnabled !== false &&
+                ?.documentKnowledgeEnabled !==
+                false &&
+
             executionContext
-                .documentKnowledgeEnabled !== false,
+                .documentKnowledgeEnabled !==
+                false,
 
         aware:
             documentAware,
@@ -1575,23 +1612,15 @@ function resolveDocumentStatus(
             sources.length,
 
         answerContextAvailable:
-            Boolean(
-                answerContext
-            ),
+            Boolean(answerContext),
 
         ragAvailable:
-            Boolean(
-                rag
-            ),
+            Boolean(rag),
 
         detected:
             documentAware ||
-            Boolean(
-                answerContext
-            ) ||
-            Boolean(
-                rag
-            ),
+            Boolean(answerContext) ||
+            Boolean(rag),
 
         knowledge,
 
@@ -1606,7 +1635,7 @@ function resolveDocumentStatus(
 
 
 // ============================================================
-// DOCUMENT RESPONSE FORMATTER
+// DOCUMENT RESPONSE
 // ============================================================
 
 function formatDocument(
@@ -1614,9 +1643,7 @@ function formatDocument(
 ) {
 
     const status =
-        resolveDocumentStatus(
-            input
-        );
+        resolveDocumentStatus(input);
 
 
     if (
@@ -1631,17 +1658,9 @@ function formatDocument(
         "";
 
 
-    // --------------------------------------------------------
-    // DOCUMENT HEADER
-    // --------------------------------------------------------
-
     response +=
         "📄 Document Knowledge";
 
-
-    // --------------------------------------------------------
-    // ANSWER CONTEXT
-    // --------------------------------------------------------
 
     if (
         status.answerContext
@@ -1652,10 +1671,6 @@ function formatDocument(
             `\n\n${status.answerContext}`;
     }
 
-
-    // --------------------------------------------------------
-    // KNOWLEDGE ITEMS
-    // --------------------------------------------------------
 
     const knowledge =
         status.knowledge;
@@ -1669,59 +1684,44 @@ function formatDocument(
             "\n\nRelevant document information:";
 
 
-        const visibleKnowledge =
-            knowledge.slice(
-                0,
-                5
-            );
+        knowledge
+            .slice(0, 5)
+            .forEach(
+                (
+                    item,
+                    index
+                ) => {
+
+                    const title =
+                        firstNonEmpty(
+                            item.title,
+                            `Document item ${index + 1}`
+                        );
 
 
-        visibleKnowledge.forEach(
+                    const content =
+                        normalize(
+                            item.content
+                        );
 
-            (
-                item,
-                index
-            ) => {
-
-                const content =
-                    normalize(
-                        item.content
-                    );
-
-
-                const title =
-                    firstNonEmpty(
-
-                        item.title,
-
-                        `Document item ${index + 1}`
-
-                    );
-
-
-                response +=
-
-                    `\n${index + 1}. ${title}`;
-
-
-                if (
-                    content
-                ) {
 
                     response +=
 
-                        ` — ${content}`;
+                        `\n${index + 1}. ${title}`;
+
+
+                    if (
+                        content
+                    ) {
+
+                        response +=
+
+                            ` — ${content}`;
+                    }
                 }
-
-            }
-
-        );
+            );
     }
 
-
-    // --------------------------------------------------------
-    // DOCUMENT SOURCES
-    // --------------------------------------------------------
 
     const sources =
         status.sources;
@@ -1735,45 +1735,29 @@ function formatDocument(
             "\n\n📚 Document sources:";
 
 
-        const visibleSources =
-            sources.slice(
-                0,
-                5
+        sources
+            .slice(0, 5)
+            .forEach(
+                (
+                    source,
+                    index
+                ) => {
+
+                    const title =
+                        firstNonEmpty(
+                            source.title,
+                            source.source,
+                            `Document ${index + 1}`
+                        );
+
+
+                    response +=
+
+                        `\n${index + 1}. ${title}`;
+                }
             );
-
-
-        visibleSources.forEach(
-
-            (
-                source,
-                index
-            ) => {
-
-                const title =
-                    firstNonEmpty(
-
-                        source.title,
-
-                        source.source,
-
-                        `Document ${index + 1}`
-
-                    );
-
-
-                response +=
-
-                    `\n${index + 1}. ${title}`;
-
-            }
-
-        );
     }
 
-
-    // --------------------------------------------------------
-    // RAG STATUS
-    // --------------------------------------------------------
 
     if (
         status.ragAvailable
@@ -1783,10 +1767,6 @@ function formatDocument(
             "\n🧩 RAG context: available";
     }
 
-
-    // --------------------------------------------------------
-    // DOCUMENT VERIFICATION / COUNT INFO
-    // --------------------------------------------------------
 
     if (
         status.knowledgeCount > 0 ||
@@ -1804,7 +1784,7 @@ function formatDocument(
 
 
 // ============================================================
-// WEB RESEARCH RESPONSE
+// RESEARCH RESPONSE
 // ============================================================
 
 function formatResearch(
@@ -1822,15 +1802,11 @@ function formatResearch(
 
 
     const research =
-        resolveResearchObject(
-            result
-        );
+        resolveResearchObject(result);
 
 
     if (
-        isResearchError(
-            result
-        )
+        isResearchError(result)
     ) {
 
         const error =
@@ -1858,42 +1834,28 @@ function formatResearch(
 
 
     const answer =
-        resolveResearchAnswer(
-            result
-        );
+        resolveResearchAnswer(result);
 
 
     const sources =
-        resolveResearchSources(
-            result
-        );
+        resolveResearchSources(result);
 
 
     const verification =
-        resolveResearchVerification(
-            result
-        );
+        resolveResearchVerification(result);
 
 
     const learning =
-        resolveResearchLearning(
-            result
-        );
+        resolveResearchLearning(result);
 
 
     const query =
-        resolveResearchQuery(
-            result
-        );
+        resolveResearchQuery(result);
 
 
     let response =
         "";
 
-
-    // --------------------------------------------------------
-    // ANSWER
-    // --------------------------------------------------------
 
     if (
         answer
@@ -1907,24 +1869,14 @@ function formatResearch(
 
         response +=
 
-            "🌐 Web research complete hui, " +
-
-            "lekin provider ne direct summary nahi di.";
+            "🌐 Web research complete hui, lekin provider ne direct summary nahi di.";
     }
 
-
-    // --------------------------------------------------------
-    // SOURCE COUNT
-    // --------------------------------------------------------
 
     response +=
 
         `\n\n📚 Sources: ${sources.length}`;
 
-
-    // --------------------------------------------------------
-    // VERIFICATION
-    // --------------------------------------------------------
 
     response +=
 
@@ -1939,10 +1891,6 @@ function formatResearch(
 
                 : "\n🔍 Verification: review required";
 
-
-    // --------------------------------------------------------
-    // CONFIDENCE
-    // --------------------------------------------------------
 
     if (
         Number.isFinite(
@@ -1961,26 +1909,12 @@ function formatResearch(
     }
 
 
-    // --------------------------------------------------------
-    // LEARNING
-    // --------------------------------------------------------
-
     if (
         learning
     ) {
 
-        const learned =
-            learning.learned ===
-                true;
-
-
-        const learningSuccess =
-            learning.success ===
-                true;
-
-
         if (
-            learned
+            learning.learned === true
         ) {
 
             response +=
@@ -1988,7 +1922,7 @@ function formatResearch(
                 "\n🧠 Verified information AarHen ki knowledge memory me learn ho gayi.";
 
         } else if (
-            learningSuccess
+            learning.success === true
         ) {
 
             response +=
@@ -2006,22 +1940,13 @@ function formatResearch(
     }
 
 
-    // --------------------------------------------------------
-    // QUERY
-    // --------------------------------------------------------
-
     if (
         query
     ) {
 
-        // Query deliberately kept out of the main response
-        // to keep normal output compact.
+        // Query intentionally not displayed separately.
     }
 
-
-    // --------------------------------------------------------
-    // SOURCE DETAILS
-    // --------------------------------------------------------
 
     if (
         sources.length > 0
@@ -2031,42 +1956,32 @@ function formatResearch(
             "\n\nTop sources:";
 
 
-        const visibleSources =
-            sources.slice(
-                0,
-                5
-            );
-
-
-        visibleSources.forEach(
-
-            (
-                source,
-                index
-            ) => {
-
-                response +=
-
-                    `\n${index + 1}. ${
-
-                        source.title ||
-
-                        "Untitled source"
-
-                    }`;
-
-
-                if (
-                    source.url
-                ) {
+        sources
+            .slice(0, 5)
+            .forEach(
+                (
+                    source,
+                    index
+                ) => {
 
                     response +=
 
-                        ` — ${source.url}`;
-                }
-            }
+                        `\n${index + 1}. ${
+                            source.title ||
+                            "Untitled source"
+                        }`;
 
-        );
+
+                    if (
+                        source.url
+                    ) {
+
+                        response +=
+
+                            ` — ${source.url}`;
+                    }
+                }
+            );
     }
 
 
@@ -2075,7 +1990,7 @@ function formatResearch(
 
 
 // ============================================================
-// GENERIC EXECUTION RESPONSE
+// GENERIC EXECUTION
 // ============================================================
 
 function formatExecution(
@@ -2097,16 +2012,13 @@ function formatExecution(
     ) {
 
         return formatMissingInput(
-
             execution.missingParameters
-
         );
     }
 
 
     if (
-        execution.success ===
-        false
+        execution.success === false
     ) {
 
         return (
@@ -2114,13 +2026,11 @@ function formatExecution(
             "AarHen task complete nahi kar saka. " +
 
             (
-
                 execution.error ||
 
                 execution.result?.error ||
 
                 "Unknown execution error."
-
             )
 
         );
@@ -2140,7 +2050,7 @@ function formatExecution(
 
     if (
         execution.intent ===
-            "web_research"
+        "web_research"
     ) {
 
         return formatResearch(
@@ -2155,7 +2065,6 @@ function formatExecution(
 
         execution.intent ===
             "calculate_emi"
-
     ) {
 
         return formatEMI(
@@ -2170,7 +2079,6 @@ function formatExecution(
 
         execution.intent ===
             "simple_interest"
-
     ) {
 
         return formatSimpleInterest(
@@ -2179,40 +2087,29 @@ function formatExecution(
     }
 
 
-    // --------------------------------------------------------
-    // GENERIC RESULT MESSAGE
-    // --------------------------------------------------------
-
-    let response =
-        "";
-
-
     if (
         execution.result &&
         typeof execution.result.message ===
             "string"
     ) {
 
-        response =
-            execution.result.message;
+        return execution.result.message;
+    }
 
-    } else if (
+
+    if (
         execution.message &&
         typeof execution.message ===
             "string"
     ) {
 
-        response =
-            execution.message;
-
-    } else {
-
-        response =
-            "AarHen ne task successfully process kiya.";
+        return execution.message;
     }
 
 
-    return response;
+    return (
+        "AarHen ne task successfully process kiya."
+    );
 }
 
 
@@ -2226,9 +2123,7 @@ function appendDocumentKnowledge(
 ) {
 
     const documentResponse =
-        formatDocument(
-            result
-        );
+        formatDocument(result);
 
 
     if (
@@ -2240,9 +2135,7 @@ function appendDocumentKnowledge(
 
 
     if (
-        normalize(
-            baseResponse
-        )
+        normalize(baseResponse)
     ) {
 
         return (
@@ -2276,11 +2169,8 @@ function createResponse(
         "approval-required"
     ) {
 
-        let response =
-
-            "Is action ko perform karne se pehle " +
-
-            "aapki approval required hai.";
+        const response =
+            "Is action ko perform karne se pehle aapki approval required hai.";
 
 
         return appendDocumentKnowledge(
@@ -2291,7 +2181,7 @@ function createResponse(
 
 
     // --------------------------------------------------------
-    // MISSING INFORMATION
+    // MISSING INPUT
     // --------------------------------------------------------
 
     if (
@@ -2299,13 +2189,10 @@ function createResponse(
         "needs-user-input"
     ) {
 
-        let response =
-
+        const response =
             formatMissingInput(
-
                 result.execution
                     ?.missingParameters
-
             );
 
 
@@ -2341,9 +2228,7 @@ function createResponse(
     ) {
 
         const response =
-            formatResearch(
-                result
-            );
+            formatResearch(result);
 
 
         return appendDocumentKnowledge(
@@ -2358,9 +2243,7 @@ function createResponse(
     ) {
 
         const response =
-            formatResearch(
-                result
-            );
+            formatResearch(result);
 
 
         return appendDocumentKnowledge(
@@ -2371,7 +2254,7 @@ function createResponse(
 
 
     // --------------------------------------------------------
-    // STANDARD EXECUTION
+    // EXECUTION
     // --------------------------------------------------------
 
     if (
@@ -2392,7 +2275,7 @@ function createResponse(
 
 
     // --------------------------------------------------------
-    // DIRECT RESEARCH RESULT
+    // DIRECT RESEARCH
     // --------------------------------------------------------
 
     if (
@@ -2404,9 +2287,7 @@ function createResponse(
     ) {
 
         const response =
-            formatResearch(
-                result
-            );
+            formatResearch(result);
 
 
         return appendDocumentKnowledge(
@@ -2417,7 +2298,7 @@ function createResponse(
 
 
     // --------------------------------------------------------
-    // DIRECT DOCUMENT REQUEST
+    // DIRECT DOCUMENT
     // --------------------------------------------------------
 
     const documentStatus =
@@ -2437,7 +2318,7 @@ function createResponse(
 
 
     // --------------------------------------------------------
-    // GENERIC ERROR
+    // ERROR
     // --------------------------------------------------------
 
     if (
@@ -2453,9 +2334,7 @@ function createResponse(
     // --------------------------------------------------------
 
     return (
-
         "AarHen ne request process kar li hai."
-
     );
 }
 
@@ -2482,17 +2361,8 @@ function getResponseStatus() {
 
         capabilities: {
 
-            // ------------------------------------------------
-            // FINANCE
-            // ------------------------------------------------
-
             financeFormatting:
                 true,
-
-
-            // ------------------------------------------------
-            // RESEARCH
-            // ------------------------------------------------
 
             researchFormatting:
                 true,
@@ -2512,11 +2382,6 @@ function getResponseStatus() {
             nestedResearchResolution:
                 true,
 
-
-            // ------------------------------------------------
-            // DOCUMENT
-            // ------------------------------------------------
-
             documentFormatting:
                 true,
 
@@ -2535,10 +2400,8 @@ function getResponseStatus() {
             nestedDocumentResolution:
                 true,
 
-
-            // ------------------------------------------------
-            // OTHER
-            // ------------------------------------------------
+            documentCollectionResolution:
+                true,
 
             approvalResponse:
                 true,
@@ -2564,6 +2427,16 @@ module.exports = {
 
     RESPONSE_VERSION,
 
+    safeObject,
+
+    safeArray,
+
+    normalize,
+
+    firstNonEmpty,
+
+    resolveArrayCollection,
+
     formatNumber,
 
     formatConfidence,
@@ -2587,6 +2460,8 @@ module.exports = {
     resolveResearchQuery,
 
     resolveResearchAnswer,
+
+    isResearchError,
 
     formatResearch,
 
