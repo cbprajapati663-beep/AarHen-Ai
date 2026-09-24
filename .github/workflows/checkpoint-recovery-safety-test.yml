@@ -1,0 +1,94 @@
+name: AarHen Checkpoint Recovery Safety Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-recovery-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Verify recovery candidate and plan safety
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          function setupTask(id, state, requiresApproval = false) {
+            const agentId = id + "-agent";
+            manager.createAgent({ id: agentId, name: "Recovery safety agent" });
+            const created = manager.createTask(agentId, "Recovery safety test", {
+              id,
+              approvalRequired: requiresApproval
+            });
+            assert(created.success, "Task creation failed: " + id);
+            const added = manager.addStep(id, {
+              id: id + "-step",
+              name: "Pending controlled step",
+              description: "Pending work",
+              action: "calculate",
+              requiresApproval,
+              approved: !requiresApproval,
+              input: { request: "2 + 2" }
+            });
+            assert(added.success, "Step creation failed: " + id);
+
+            if (state === "stopped") {
+              manager.stopTask(id, "Safety test STOP");
+            } else if (state === "waiting_approval") {
+              manager.startTask(id);
+            } else {
+              manager.startTask(id);
+            }
+
+            const saved = engine.saveTaskCheckpoint(id, {
+              reason: "Recovery safety state test"
+            });
+            assert(saved.success, "Checkpoint save failed: " + id);
+            return saved.checkpoint;
+          }
+
+          manager.reset();
+          engine.reset();
+
+          const active = setupTask("safety-active", "active");
+          const activeCandidate = engine.getRecoveryCandidate("safety-active");
+          assert(activeCandidate.success && activeCandidate.recoverable, "Active unfinished task should be recoverable.");
+          const activePlan = engine.buildRecoveryPlan("safety-active");
+          assert(activePlan.success && activePlan.plan.action === "resume-from-checkpoint", "Active task should produce resume plan.");
+
+          const stopped = setupTask("safety-stopped", "stopped");
+          const stoppedCandidate = engine.getRecoveryCandidate("safety-stopped");
+          assert(stoppedCandidate.success && stoppedCandidate.recoverable === false, "STOPped task must not be recoverable.");
+          const stoppedPlan = engine.buildRecoveryPlan("safety-stopped");
+          assert(stoppedPlan.success && stoppedPlan.plan.action === "no-recovery", "STOPped task must produce no-recovery plan.");
+
+          const approval = setupTask("safety-approval", "waiting_approval", true);
+          const approvalCandidate = engine.getRecoveryCandidate("safety-approval");
+          assert(approvalCandidate.success && approvalCandidate.recoverable === true, "Approval-waiting task may be recoverable only as a checkpoint candidate.");
+          assert(approval.task.approvalRequired === true, "Checkpoint must preserve task approval requirement.");
+          assert(approval.task.steps[0].requiresApproval === true, "Checkpoint must preserve step approval requirement.");
+          assert(approval.task.steps[0].approved === false, "Checkpoint must not invent approval.");
+
+          console.log("Checkpoint recovery safety tests passed.");
+          console.log(JSON.stringify({
+            activeAction: activePlan.plan.action,
+            stoppedAction: stoppedPlan.plan.action,
+            approvalRequired: approval.task.approvalRequired,
+            stepApproved: approval.task.steps[0].approved
+          }, null, 2));
+          NODE
