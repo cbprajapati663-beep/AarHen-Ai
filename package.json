@@ -13,5 +13,9 @@
     "business-ai",
     "vehicle-finance"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "mammoth": "^1.10.0",
+    "pdf-parse": "^1.1.1"
+  }
 }
