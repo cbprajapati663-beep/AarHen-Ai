@@ -1,0 +1,671 @@
+name: AarHen Document RAG Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "engines/documentLearning.js"
+      - "engines/documentIngestion.js"
+      - "engines/documentKnowledgeBridge.js"
+      - "core/learning.js"
+      - "core/memoryStore.js"
+      - "core/memoryManager.js"
+      - "package.json"
+      - ".github/workflows/document-rag-test.yml"
+
+jobs:
+  document-rag-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # --------------------------------------------------------
+      # NODE
+      # --------------------------------------------------------
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # --------------------------------------------------------
+      # NPM CACHE
+      # --------------------------------------------------------
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node20-aarhen-rag-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node20-aarhen-rag-
+
+
+      # --------------------------------------------------------
+      # INSTALL
+      # --------------------------------------------------------
+
+      - name: Install dependencies
+        run: npm install --prefer-offline
+
+
+      # --------------------------------------------------------
+      # MODULE CHECK
+      # --------------------------------------------------------
+
+      - name: Verify RAG modules
+        run: |
+          node - <<'NODE'
+
+          const documentLearning =
+            require("./engines/documentLearning");
+
+          const documentIngestion =
+            require("./engines/documentIngestion");
+
+          const documentBridge =
+            require("./engines/documentKnowledgeBridge");
+
+          const learning =
+            require("./core/learning");
+
+          if (!documentLearning) {
+            throw new Error(
+              "Document Learning Engine failed."
+            );
+          }
+
+          if (!documentIngestion) {
+            throw new Error(
+              "Document Ingestion Engine failed."
+            );
+          }
+
+          if (!documentBridge) {
+            throw new Error(
+              "Document Knowledge Bridge failed."
+            );
+          }
+
+          if (!learning) {
+            throw new Error(
+              "Continuous Learning Engine failed."
+            );
+          }
+
+          if (
+            typeof documentBridge.searchKnowledge !==
+            "function"
+          ) {
+            throw new Error(
+              "searchKnowledge() is missing."
+            );
+          }
+
+          if (
+            typeof documentBridge.searchDocuments !==
+            "function"
+          ) {
+            throw new Error(
+              "searchDocuments() is missing."
+            );
+          }
+
+          if (
+            typeof documentBridge.buildRagContext !==
+            "function"
+          ) {
+            throw new Error(
+              "buildRagContext() is missing."
+            );
+          }
+
+          if (
+            typeof documentBridge.prepareQuestionContext !==
+            "function"
+          ) {
+            throw new Error(
+              "prepareQuestionContext() is missing."
+            );
+          }
+
+          console.log(
+            "Document Learning Engine : OK"
+          );
+
+          console.log(
+            "Document Ingestion Engine : OK"
+          );
+
+          console.log(
+            "Document Knowledge Bridge : OK"
+          );
+
+          console.log(
+            "Continuous Learning Engine : OK"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # INGEST TEST KNOWLEDGE
+      # --------------------------------------------------------
+
+      - name: Ingest test document
+        run: |
+          node - <<'NODE'
+
+          const ingestion =
+            require("./engines/documentIngestion");
+
+          const testText = `
+          AarHen Business Knowledge Document.
+
+          Vehicle finance helps customers purchase
+          new cars, used cars, and commercial vehicles.
+
+          Vehicle insurance assistance can help customers
+          understand insurance-related requirements.
+
+          Refinance is another vehicle finance service.
+
+          Heritage Auto Finance works with vehicle finance
+          and insurance related customer enquiries.
+
+          This document is intentionally created for
+          AarHen RAG retrieval testing.
+          `;
+
+          const result =
+            ingestion.ingestText(
+              testText,
+              {
+                fileName:
+                  "aarhen-rag-test.txt",
+
+                category:
+                  "business",
+
+                source:
+                  "aarhen-rag-test-document",
+
+                memoryType:
+                  "knowledge",
+
+                importance:
+                  "normal",
+
+                confidence:
+                  0.70,
+
+                learn:
+                  true
+              }
+            );
+
+          if (!result) {
+            throw new Error(
+              "Ingestion returned nothing."
+            );
+          }
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              result.error ||
+              "Test document ingestion failed."
+            );
+          }
+
+          if (
+            result.ingested !== true
+          ) {
+            throw new Error(
+              "Test document was not ingested."
+            );
+          }
+
+          if (
+            Number(
+              result.chunkCount
+            ) <= 0
+          ) {
+            throw new Error(
+              "No document chunks were produced."
+            );
+          }
+
+          if (
+            Number(
+              result.learning?.learnedCount
+            ) <= 0
+          ) {
+            throw new Error(
+              "No chunks were learned."
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              {
+                success:
+                  result.success,
+
+                ingested:
+                  result.ingested,
+
+                chunkCount:
+                  result.chunkCount,
+
+                learnedCount:
+                  result.learning.learnedCount,
+
+                failedCount:
+                  result.learning.failedCount,
+
+                duplicateCount:
+                  result.learning.duplicateCount,
+
+                status:
+                  result.status
+              },
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "Document ingestion for RAG: PASS"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # KNOWLEDGE SEARCH
+      # --------------------------------------------------------
+
+      - name: Search learned knowledge
+        run: |
+          node - <<'NODE'
+
+          const bridge =
+            require("./engines/documentKnowledgeBridge");
+
+          const result =
+            bridge.searchKnowledge(
+              "vehicle finance commercial vehicles refinance",
+              10
+            );
+
+          if (!result) {
+            throw new Error(
+              "Knowledge search returned nothing."
+            );
+          }
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              result.error ||
+              "Knowledge search failed."
+            );
+          }
+
+          if (
+            Number(
+              result.count
+            ) <= 0
+          ) {
+            throw new Error(
+              "Learned document knowledge could not be retrieved."
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              {
+                query:
+                  result.query,
+
+                count:
+                  result.count,
+
+                topResults:
+                  result.results
+                    .slice(0, 3)
+                    .map(
+                      item => ({
+                        title:
+                          item.title,
+
+                        source:
+                          item.source,
+
+                        category:
+                          item.category,
+
+                        relevance:
+                          item.relevance
+                      })
+                    )
+              },
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "Knowledge retrieval: PASS"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # DOCUMENT ONLY SEARCH
+      # --------------------------------------------------------
+
+      - name: Search document knowledge only
+        run: |
+          node - <<'NODE'
+
+          const bridge =
+            require("./engines/documentKnowledgeBridge");
+
+          const result =
+            bridge.searchDocuments(
+              "vehicle finance insurance refinance",
+              10
+            );
+
+          if (!result) {
+            throw new Error(
+              "Document search returned nothing."
+            );
+          }
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              result.error ||
+              "Document search failed."
+            );
+          }
+
+          if (
+            Number(
+              result.count
+            ) <= 0
+          ) {
+            throw new Error(
+              "Document-only retrieval returned zero results."
+            );
+          }
+
+          const hasDocumentSource =
+            result.results.some(
+              item =>
+                String(
+                  item.source || ""
+                )
+                .toLowerCase()
+                .endsWith(".txt")
+            );
+
+          if (
+            !hasDocumentSource
+          ) {
+            throw new Error(
+              "Retrieved results do not contain the expected document source."
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              {
+                query:
+                  result.query,
+
+                count:
+                  result.count,
+
+                sources:
+                  result.results
+                    .slice(0, 5)
+                    .map(
+                      item =>
+                        item.source ||
+                        null
+                    )
+              },
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "Document-only retrieval: PASS"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # BUILD RAG CONTEXT
+      # --------------------------------------------------------
+
+      - name: Build RAG context
+        run: |
+          node - <<'NODE'
+
+          const bridge =
+            require("./engines/documentKnowledgeBridge");
+
+          const result =
+            bridge.buildRagContext(
+              "What vehicle finance services are discussed?",
+              {
+                limit: 10,
+
+                documentLimit: 5,
+
+                knowledgeLimit: 5,
+
+                memoryLimit: 5,
+
+                includeMemory: true
+              }
+            );
+
+          if (!result) {
+            throw new Error(
+              "RAG context returned nothing."
+            );
+          }
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "RAG context creation failed."
+            );
+          }
+
+          if (
+            Number(
+              result.count
+            ) <= 0
+          ) {
+            throw new Error(
+              "RAG context contains zero results."
+            );
+          }
+
+          if (
+            !result.context ||
+            String(
+              result.context
+            ).trim().length === 0
+          ) {
+            throw new Error(
+              "RAG context text is empty."
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              {
+                query:
+                  result.query,
+
+                count:
+                  result.count,
+
+                layers:
+                  result.layers,
+
+                contextPreview:
+                  String(
+                    result.context
+                  ).slice(
+                    0,
+                    1500
+                  )
+              },
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "RAG context build: PASS"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # QUESTION CONTEXT
+      # --------------------------------------------------------
+
+      - name: Prepare document question context
+        run: |
+          node - <<'NODE'
+
+          const bridge =
+            require("./engines/documentKnowledgeBridge");
+
+          const result =
+            bridge.prepareQuestionContext(
+              "Tell me about vehicle finance and refinance services.",
+              {
+                limit: 10,
+
+                documentLimit: 5,
+
+                knowledgeLimit: 5,
+
+                memoryLimit: 5
+              }
+            );
+
+          if (!result) {
+            throw new Error(
+              "Question context returned nothing."
+            );
+          }
+
+          if (
+            result.success !== true
+          ) {
+            throw new Error(
+              "Question context preparation failed."
+            );
+          }
+
+          if (
+            Number(
+              result.count
+            ) <= 0
+          ) {
+            throw new Error(
+              "No relevant knowledge was found for the question."
+            );
+          }
+
+          if (
+            !result.context ||
+            String(
+              result.context
+            ).trim().length === 0
+          ) {
+            throw new Error(
+              "Question context is empty."
+            );
+          }
+
+          console.log(
+            JSON.stringify(
+              {
+                question:
+                  result.question,
+
+                count:
+                  result.count,
+
+                layers:
+                  result.layers,
+
+                contextPreview:
+                  String(
+                    result.context
+                  ).slice(
+                    0,
+                    1500
+                  )
+              },
+              null,
+              2
+            )
+          );
+
+          console.log(
+            "Question context preparation: PASS"
+          );
+
+          NODE
+
+
+      # --------------------------------------------------------
+      # FINAL
+      # --------------------------------------------------------
+
+      - name: Final RAG summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo " AARHEN DOCUMENT RAG TEST SUMMARY"
+          echo "=============================================="
+          echo "Document ingestion       : PASS"
+          echo "Knowledge retrieval      : PASS"
+          echo "Document-only retrieval  : PASS"
+          echo "RAG context generation   : PASS"
+          echo "Question context         : PASS"
+          echo "=============================================="
+          echo " DOCUMENT RAG SYSTEM     : GREEN"
+          echo "=============================================="
