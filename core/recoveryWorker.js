@@ -37,6 +37,8 @@
 // - Does not bypass Autonomous Guard.
 // - Does not execute arbitrary code itself.
 // - Recovery retries remain controlled by Recovery Engine.
+// - Agent Runner context is passed directly to createRunner()
+//   so research / memory / execution context is preserved.
 // ============================================================
 
 
@@ -146,6 +148,31 @@ function clone(
 //
 // Every attempt still enters Agent Runner.
 //
+// IMPORTANT FIX:
+//
+// Agent Runner createRunner() expects the execution context
+// directly:
+//
+//     agentRunner.createRunner(baseContext)
+//
+// It does NOT expect:
+//
+//     agentRunner.createRunner({
+//         source,
+//         context
+//     })
+//
+// Passing the nested shape caused research context to become:
+//
+//     context.context.research
+//
+// instead of:
+//
+//     context.research
+//
+// That broke autonomous research after Recovery Worker was
+// introduced.
+//
 // ============================================================
 
 function createRecoveryRunner(
@@ -158,24 +185,49 @@ function createRecoveryRunner(
         );
 
 
-    const runner =
+    let runner;
+
+
+    // --------------------------------------------------------
+    // Caller-provided runner
+    // --------------------------------------------------------
+
+    if (
         typeof config.runner ===
         "function"
+    ) {
 
-            ? config.runner
+        runner =
+            config.runner;
 
-            : agentRunner.createRunner({
+    } else {
 
-                source:
-                    config.source ||
-                    "recovery-worker",
+        // ----------------------------------------------------
+        // IMPORTANT:
+        //
+        // Pass the actual execution context directly to
+        // Agent Runner.
+        //
+        // This preserves:
+        // - research
+        // - memory
+        // - knowledge
+        // - provider
+        // - worker context
+        // - other execution metadata
+        //
+        // ----------------------------------------------------
 
-                context:
-                    safeObject(
-                        config.context
-                    )
+        runner =
+            agentRunner.createRunner({
+
+                ...safeObject(
+                    config.context
+                )
 
             });
+
+    }
 
 
     return recoveryBridge.createRunner({
