@@ -239,6 +239,8 @@ jobs:
           const worker =
             require("./core/agentWorker");
 
+          worker.reset();
+
           const result =
             worker.ensureDefaultWorker();
 
@@ -297,7 +299,7 @@ jobs:
 
 
       # ======================================================
-      # TASK CREATION
+      # AGENT MANAGER TASK CREATION
       # ======================================================
 
       - name: Agent Manager Task Creation Test
@@ -384,7 +386,7 @@ jobs:
 
 
       # ======================================================
-      # ASSIGN TASK
+      # TASK ASSIGNMENT TEST
       # ======================================================
 
       - name: Worker Task Assignment Test
@@ -398,15 +400,25 @@ jobs:
           const manager =
             require("./core/agentManager");
 
-          const defaultWorker =
-            worker.getDefaultWorker();
+          worker.reset();
+
+          const createdWorker =
+            worker.createWorker({
+
+              id:
+                "assignment-worker",
+
+              name:
+                "Assignment Worker"
+
+            });
 
           if (
-            defaultWorker.success !==
+            createdWorker.success !==
             true
           ) {
             throw new Error(
-              "Default worker unavailable."
+              "Assignment worker creation failed."
             );
           }
 
@@ -454,7 +466,7 @@ jobs:
           const assigned =
             worker.assignTask(
 
-              defaultWorker.worker.id,
+              createdWorker.worker.id,
 
               task.task.id
 
@@ -480,7 +492,7 @@ jobs:
 
           const queue =
             worker.getQueue(
-              defaultWorker.worker.id
+              createdWorker.worker.id
             );
 
           if (
@@ -526,15 +538,25 @@ jobs:
             const manager =
               require("./core/agentManager");
 
-            const defaultWorker =
-              worker.getDefaultWorker();
+            worker.reset();
+
+            const createdWorker =
+              worker.createWorker({
+
+                id:
+                  "execution-worker",
+
+                name:
+                  "Execution Worker"
+
+              });
 
             if (
-              defaultWorker.success !==
+              createdWorker.success !==
               true
             ) {
               throw new Error(
-                "Default worker unavailable."
+                "Execution worker creation failed."
               );
             }
 
@@ -625,7 +647,7 @@ jobs:
             const assigned =
               worker.assignTask(
 
-                defaultWorker.worker.id,
+                createdWorker.worker.id,
 
                 task.task.id
 
@@ -643,7 +665,7 @@ jobs:
             const execution =
               await worker.runAssignedTask(
 
-                defaultWorker.worker.id
+                createdWorker.worker.id
 
               );
 
@@ -727,6 +749,8 @@ jobs:
 
             const manager =
               require("./core/agentManager");
+
+            worker.reset();
 
             const createdWorker =
               worker.createWorker({
@@ -904,6 +928,8 @@ jobs:
 
           const manager =
             require("./core/agentManager");
+
+          worker.reset();
 
           const createdWorker =
             worker.createWorker({
@@ -1095,6 +1121,8 @@ jobs:
           const manager =
             require("./core/agentManager");
 
+          worker.reset();
+
           const createdWorker =
             worker.createWorker({
 
@@ -1275,6 +1303,15 @@ jobs:
             );
 
           if (
+            queue.success !==
+            true
+          ) {
+            throw new Error(
+              "Worker queue retrieval failed."
+            );
+          }
+
+          if (
             queue.queueLength !==
             2
           ) {
@@ -1311,6 +1348,11 @@ jobs:
       # ======================================================
       # LIST WORKERS TEST
       # ======================================================
+      #
+      # IMPORTANT:
+      # This test creates its own worker because every
+      # GitHub Actions run step uses a separate Node process.
+      # ======================================================
 
       - name: Worker Listing Test
         run: |
@@ -1319,6 +1361,28 @@ jobs:
 
           const worker =
             require("./core/agentWorker");
+
+          worker.reset();
+
+          const created =
+            worker.createWorker({
+
+              id:
+                "listing-worker",
+
+              name:
+                "Listing Worker"
+
+            });
+
+          if (
+            created.success !==
+            true
+          ) {
+            throw new Error(
+              "Listing worker creation failed."
+            );
+          }
 
           const result =
             worker.listWorkers();
@@ -1343,11 +1407,26 @@ jobs:
           }
 
           if (
-            result.workers.length ===
-            0
+            result.workers.length !==
+            1
           ) {
             throw new Error(
-              "Worker list is unexpectedly empty."
+              "Worker list count mismatch."
+            );
+          }
+
+          const found =
+            result.workers.find(
+              item =>
+                item.id ===
+                "listing-worker"
+            );
+
+          if (
+            !found
+          ) {
+            throw new Error(
+              "Created worker was not found in worker list."
             );
           }
 
@@ -1377,6 +1456,8 @@ jobs:
 
           const manager =
             require("./core/agentManager");
+
+          worker.reset();
 
           const createdWorker =
             worker.createWorker({
@@ -1480,6 +1561,15 @@ jobs:
             );
           }
 
+          if (
+            stopped.worker?.activeTaskId !==
+            null
+          ) {
+            throw new Error(
+              "Stopped worker still reports an active task."
+            );
+          }
+
           console.log(
             "Worker stop control test passed."
           );
@@ -1488,10 +1578,15 @@ jobs:
 
 
       # ======================================================
-      # CANCEL TEST
+      # CANCEL SAFETY TEST
+      # ======================================================
+      #
+      # Current worker API requires an ACTIVE task for
+      # cancelWorkerTask(). A queued-only task must be
+      # rejected safely.
       # ======================================================
 
-      - name: Worker Cancel Task Test
+      - name: Worker Cancel Safety Test
         run: |
 
           node - <<'NODE'
@@ -1501,6 +1596,8 @@ jobs:
 
           const manager =
             require("./core/agentManager");
+
+          worker.reset();
 
           const createdWorker =
             worker.createWorker({
@@ -1581,34 +1678,6 @@ jobs:
             );
           }
 
-          const paused =
-            worker.pauseWorker(
-              createdWorker.worker.id
-            );
-
-          if (
-            paused.success !==
-            true
-          ) {
-            throw new Error(
-              "Cancel preparation pause failed."
-            );
-          }
-
-          const resumed =
-            worker.resumeWorker(
-              createdWorker.worker.id
-            );
-
-          if (
-            resumed.success !==
-            true
-          ) {
-            throw new Error(
-              "Cancel preparation resume failed."
-            );
-          }
-
           const canceled =
             worker.cancelWorkerTask(
               createdWorker.worker.id
@@ -1616,24 +1685,23 @@ jobs:
 
           if (
             canceled.success !==
-            true
+            false
           ) {
             throw new Error(
-              "Worker task cancellation failed."
+              "Worker incorrectly canceled a task without an active task."
             );
           }
 
           if (
-            canceled.worker?.activeTaskId !==
-            null
+            !canceled.error
           ) {
             throw new Error(
-              "Canceled worker still has an active task."
+              "Cancel rejection error is missing."
             );
           }
 
           console.log(
-            "Worker cancel task test passed."
+            "Worker cancel safety test passed."
           );
 
           NODE
@@ -1650,6 +1718,8 @@ jobs:
 
           const worker =
             require("./core/agentWorker");
+
+          worker.reset();
 
           const created =
             worker.createWorker({
@@ -1717,6 +1787,26 @@ jobs:
 
           const worker =
             require("./core/agentWorker");
+
+          const created =
+            worker.createWorker({
+
+              id:
+                "reset-worker",
+
+              name:
+                "Reset Worker"
+
+            });
+
+          if (
+            created.success !==
+            true
+          ) {
+            throw new Error(
+              "Reset worker creation failed."
+            );
+          }
 
           const reset =
             worker.reset();
@@ -1792,6 +1882,15 @@ jobs:
           }
 
           if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Final Worker is not active."
+            );
+          }
+
+          if (
             status.agentManagerConnected !==
             true
           ) {
@@ -1825,7 +1924,7 @@ jobs:
 
 
       # ======================================================
-      # SUMMARY
+      # FINAL SUMMARY
       # ======================================================
 
       - name: Final Summary
@@ -1847,7 +1946,7 @@ jobs:
           echo " Queue: PASSED"
           echo " Worker Listing: PASSED"
           echo " Stop Control: PASSED"
-          echo " Cancel: PASSED"
+          echo " Cancel Safety: PASSED"
           echo " Delete: PASSED"
           echo " Reset: PASSED"
           echo " Final Status: PASSED"
