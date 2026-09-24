@@ -112,7 +112,7 @@ jobs:
           if (
             autonomousAgent
               .AUTONOMOUS_AGENT_VERSION !==
-            "5.8.4"
+            "5.8.3"
           ) {
             throw new Error(
               "Autonomous Agent version mismatch."
