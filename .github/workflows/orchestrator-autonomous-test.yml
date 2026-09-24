@@ -1,0 +1,1345 @@
+name: AarHen Orchestrator Autonomous Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/orchestrator.js"
+      - "core/autonomousWorker.js"
+      - "core/autonomousAgent.js"
+      - "core/agentPlanner.js"
+      - "core/agentManager.js"
+      - "core/agentWorker.js"
+      - "core/agentRunner.js"
+      - "core/workerProvider.js"
+      - "core/providerBridge.js"
+      - "providers/providerManager.js"
+      - "providers/researchProvider.js"
+      - "skills/executor.js"
+      - "skills/router.js"
+      - "core/intent.js"
+      - ".github/workflows/orchestrator-autonomous-test.yml"
+
+jobs:
+
+  orchestrator-autonomous-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ======================================================
+      # SETUP
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+
+      # ======================================================
+      # LOAD TEST
+      # ======================================================
+
+      - name: Orchestrator Load Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const orchestrator =
+            require("./core/orchestrator");
+
+          const autonomousWorker =
+            require("./core/autonomousWorker");
+
+
+          if (!orchestrator) {
+            throw new Error(
+              "Master Orchestrator could not be loaded."
+            );
+          }
+
+
+          if (!autonomousWorker) {
+            throw new Error(
+              "Autonomous Worker could not be loaded."
+            );
+          }
+
+
+          if (
+            orchestrator.ORCHESTRATOR_VERSION !==
+            "5.0.0"
+          ) {
+            throw new Error(
+              "Orchestrator version mismatch."
+            );
+          }
+
+
+          if (
+            autonomousWorker
+              .AUTONOMOUS_WORKER_VERSION !==
+            "5.10.3"
+          ) {
+            throw new Error(
+              "Autonomous Worker version mismatch."
+            );
+          }
+
+
+          console.log(
+            "Master Orchestrator loaded successfully."
+          );
+
+
+          console.log(
+            "Orchestrator:",
+            orchestrator.ORCHESTRATOR_VERSION
+          );
+
+
+          console.log(
+            "Autonomous Worker:",
+            autonomousWorker
+              .AUTONOMOUS_WORKER_VERSION
+          );
+
+          NODE
+
+
+      # ======================================================
+      # ORCHESTRATOR STATUS TEST
+      # ======================================================
+
+      - name: Orchestrator Status Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const orchestrator =
+            require("./core/orchestrator");
+
+
+          const status =
+            orchestrator.getStatus();
+
+
+          if (
+            !status
+          ) {
+            throw new Error(
+              "Orchestrator status is missing."
+            );
+          }
+
+
+          if (
+            status.status !==
+            "active"
+          ) {
+            throw new Error(
+              "Orchestrator is not active."
+            );
+          }
+
+
+          if (
+            status.version !==
+            "5.0.0"
+          ) {
+            throw new Error(
+              "Orchestrator status version mismatch."
+            );
+          }
+
+
+          if (
+            !Array.isArray(
+              status.connectedLayers
+            )
+          ) {
+            throw new Error(
+              "Connected layer list is missing."
+            );
+          }
+
+
+          const requiredLayers = [
+
+            "Master Brain",
+            "Skill Executor",
+            "Research API",
+            "Provider Manager",
+            "Provider Bridge",
+            "Worker Provider",
+            "Agent Runner",
+            "Agent Worker",
+            "Agent Manager",
+            "Agent Planner",
+            "Autonomous Agent",
+            "Autonomous Worker"
+
+          ];
+
+
+          for (
+            const layer of
+            requiredLayers
+          ) {
+
+            if (
+              !status.connectedLayers
+                .includes(layer)
+            ) {
+
+              throw new Error(
+                `Orchestrator layer missing: ${layer}`
+              );
+
+            }
+
+          }
+
+
+          if (
+            !status.autonomousSystem
+          ) {
+            throw new Error(
+              "Autonomous system status is missing."
+            );
+          }
+
+
+          if (
+            status.autonomousSystem.enabled !==
+            true
+          ) {
+            throw new Error(
+              "Autonomous system is not enabled."
+            );
+          }
+
+
+          if (
+            status.autonomousSystem.mode !==
+            "opt-in"
+          ) {
+            throw new Error(
+              "Autonomous system mode mismatch."
+            );
+          }
+
+
+          if (
+            status.autonomousSystem.activation !==
+            "context.autonomous === true"
+          ) {
+            throw new Error(
+              "Autonomous activation rule mismatch."
+            );
+          }
+
+
+          if (
+            status.autonomousSystem.connected !==
+            true
+          ) {
+            throw new Error(
+              "Autonomous Worker is not connected to Orchestrator."
+            );
+          }
+
+
+          console.log(
+            "Orchestrator status test passed."
+          );
+
+
+          console.log(
+            JSON.stringify(
+              status.autonomousSystem,
+              null,
+              2
+            )
+          );
+
+          NODE
+
+
+      # ======================================================
+      # NORMAL MODE REGRESSION TEST
+      # ======================================================
+      #
+      # This confirms existing non-autonomous execution still
+      # uses the normal Skill Executor path.
+      #
+      # ======================================================
+
+      - name: Normal Mode Regression Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const orchestrator =
+              require("./core/orchestrator");
+
+
+            const result =
+              await orchestrator.process(
+
+                "Calculate 25 + 75"
+
+              );
+
+
+            if (
+              !result
+            ) {
+              throw new Error(
+                "Normal mode result is missing."
+              );
+            }
+
+
+            if (
+              result.success !==
+              true
+            ) {
+              throw new Error(
+                "Normal mode execution failed: " +
+                (
+                  result.error ||
+                  result.execution?.error ||
+                  "unknown error"
+                )
+              );
+            }
+
+
+            if (
+              result.autonomous?.enabled !==
+              false
+            ) {
+              throw new Error(
+                "Normal mode unexpectedly activated Autonomous Worker."
+              );
+            }
+
+
+            if (
+              result.status !==
+              "completed"
+            ) {
+              throw new Error(
+                "Normal mode status mismatch: " +
+                result.status
+              );
+            }
+
+
+            if (
+              !result.execution
+            ) {
+              throw new Error(
+                "Normal mode executor result is missing."
+              );
+            }
+
+
+            console.log(
+              "Normal mode regression test passed."
+            );
+
+
+            console.log(
+              "Status:",
+              result.status
+            );
+
+
+            console.log(
+              "Autonomous enabled:",
+              result.autonomous.enabled
+            );
+
+          })().catch(
+            error => {
+
+              console.error(
+                error
+              );
+
+              process.exitCode =
+                1;
+
+            }
+          );
+
+          NODE
+
+
+      # ======================================================
+      # AUTONOMOUS CALCULATION TEST
+      # ======================================================
+
+      - name: Autonomous Calculation Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const orchestrator =
+              require("./core/orchestrator");
+
+            const agentManager =
+              require("./core/agentManager");
+
+            const agentWorker =
+              require("./core/agentWorker");
+
+
+            const result =
+              await orchestrator.process(
+
+                "Calculate 100 + 200",
+
+                {
+
+                  autonomous:
+                    true
+
+                }
+
+              );
+
+
+            if (
+              !result
+            ) {
+              throw new Error(
+                "Autonomous calculation result is missing."
+              );
+            }
+
+
+            if (
+              result.success !==
+              true
+            ) {
+              throw new Error(
+                "Autonomous calculation through Orchestrator failed: " +
+                (
+                  result.error ||
+                  result.execution?.error ||
+                  result.execution?.result?.error ||
+                  "unknown error"
+                )
+              );
+            }
+
+
+            if (
+              result.status !==
+              "completed"
+            ) {
+              throw new Error(
+                "Autonomous calculation status mismatch: " +
+                result.status
+              );
+            }
+
+
+            if (
+              result.autonomous?.enabled !==
+              true
+            ) {
+              throw new Error(
+                "Autonomous mode was not activated."
+              );
+            }
+
+
+            if (
+              !result.autonomous?.task?.id
+            ) {
+              throw new Error(
+                "Autonomous task ID is missing."
+              );
+            }
+
+
+            if (
+              !result.autonomous?.worker?.id
+            ) {
+              throw new Error(
+                "Autonomous worker ID is missing."
+              );
+            }
+
+
+            if (
+              result.autonomous?.workerStatus !==
+              agentWorker.WORKER_STATES.IDLE
+            ) {
+              throw new Error(
+                "Autonomous calculation worker did not return to idle."
+              );
+            }
+
+
+            const finalTask =
+              agentManager.getTask(
+
+                result.autonomous.task.id
+
+              );
+
+
+            if (
+              finalTask.success !==
+              true
+            ) {
+              throw new Error(
+                "Autonomous calculation task could not be retrieved."
+              );
+            }
+
+
+            if (
+              finalTask.task.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+              throw new Error(
+                "Autonomous calculation task did not complete."
+              );
+            }
+
+
+            console.log(
+              "Autonomous calculation integration test passed."
+            );
+
+
+            console.log(
+              "Task:",
+              result.autonomous.task.id
+            );
+
+
+            console.log(
+              "Worker:",
+              result.autonomous.worker.id
+            );
+
+
+            console.log(
+              "Worker status:",
+              result.autonomous.workerStatus
+            );
+
+          })().catch(
+            error => {
+
+              console.error(
+                error
+              );
+
+              process.exitCode =
+                1;
+
+            }
+          );
+
+          NODE
+
+
+      # ======================================================
+      # AUTONOMOUS RESEARCH TEST
+      # ======================================================
+      #
+      # IMPORTANT:
+      #
+      # Orchestrator performs its own research decision first.
+      # A mock provider is therefore registered in the SAME
+      # Node process so that the orchestrator's Research API
+      # and Autonomous Worker both use the same Provider
+      # Manager state.
+      #
+      # The test specifically checks that Worker Provider can
+      # reuse the research context already produced by the
+      # Orchestrator instead of performing another search.
+      #
+      # ======================================================
+
+      - name: Autonomous Research Integration Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const orchestrator =
+              require("./core/orchestrator");
+
+            const providerManager =
+              require("./providers/providerManager");
+
+            const agentManager =
+              require("./core/agentManager");
+
+            const agentWorker =
+              require("./core/agentWorker");
+
+
+            // ------------------------------------------------
+            // RESET PROVIDER STATE
+            // ------------------------------------------------
+
+            providerManager.reset();
+
+
+            // ------------------------------------------------
+            // MOCK PROVIDER
+            // ------------------------------------------------
+
+            const mockProvider = {
+
+              getProviderStatus() {
+
+                return {
+
+                  provider:
+                    "mock-orchestrator-research",
+
+                  providerType:
+                    "web-search",
+
+                  connected:
+                    true,
+
+                  status:
+                    "connected",
+
+                  supportsSearch:
+                    true,
+
+                  supportsSourceValidation:
+                    true,
+
+                  supportsResultNormalization:
+                    true
+
+                };
+
+              },
+
+
+              async search({
+                query,
+                maxSources
+              } = {}) {
+
+                return {
+
+                  success:
+                    true,
+
+                  provider:
+                    "mock-orchestrator-research",
+
+                  providerType:
+                    "web-search",
+
+                  query,
+
+                  answer:
+                    `Mock current research answer for: ${query}`,
+
+                  summary:
+                    `Mock current research summary for: ${query}`,
+
+                  confidence:
+                    0.90,
+
+                  results:
+                    [
+
+                      {
+
+                        id:
+                          "orch-source-1",
+
+                        title:
+                          "Orchestrator Research Source",
+
+                        url:
+                          "https://example.com/orchestrator-source-1",
+
+                        publisher:
+                          "AarHen Orchestrator Test",
+
+                        snippet:
+                          `Primary mock research source for ${query}`,
+
+                        content:
+                          `Primary mock research content for ${query}`,
+
+                        score:
+                          0.96
+
+                      },
+
+                      {
+
+                        id:
+                          "orch-source-2",
+
+                        title:
+                          "Orchestrator Secondary Source",
+
+                        url:
+                          "https://example.com/orchestrator-source-2",
+
+                        publisher:
+                          "AarHen Orchestrator Test",
+
+                        snippet:
+                          `Secondary mock research source for ${query}`,
+
+                        content:
+                          `Secondary mock research content for ${query}`,
+
+                        score:
+                          0.91
+
+                      }
+
+                    ].slice(
+                      0,
+                      maxSources
+                    )
+
+                };
+
+              }
+
+            };
+
+
+            // ------------------------------------------------
+            // REGISTER MOCK PROVIDER
+            // ------------------------------------------------
+
+            const registered =
+              providerManager.registerProvider(
+
+                "mock-orchestrator-research",
+
+                mockProvider,
+
+                {
+
+                  priority:
+                    1,
+
+                  enabled:
+                    true,
+
+                  providerType:
+                    "web-search"
+
+                }
+
+              );
+
+
+            if (
+              registered.success !==
+              true
+            ) {
+              throw new Error(
+                "Mock orchestrator provider registration failed."
+              );
+            }
+
+
+            // ------------------------------------------------
+            // EXECUTE AUTONOMOUS RESEARCH
+            // ------------------------------------------------
+
+            const result =
+              await orchestrator.process(
+
+                "Research current AarHen provider integration",
+
+                {
+
+                  autonomous:
+                    true,
+
+                  provider:
+                    "mock-orchestrator-research",
+
+                  maxSources:
+                    2
+
+                }
+
+              );
+
+
+            if (
+              !result
+            ) {
+              throw new Error(
+                "Autonomous research result is missing."
+              );
+            }
+
+
+            if (
+              result.success !==
+              true
+            ) {
+              throw new Error(
+                "Autonomous research through Orchestrator failed: " +
+                (
+                  result.error ||
+                  result.execution?.error ||
+                  result.execution?.result?.error ||
+                  "unknown error"
+                )
+              );
+            }
+
+
+            if (
+              result.status !==
+              "completed"
+            ) {
+              throw new Error(
+                "Autonomous research status mismatch: " +
+                result.status
+              );
+            }
+
+
+            if (
+              result.autonomous?.enabled !==
+              true
+            ) {
+              throw new Error(
+                "Autonomous research mode was not activated."
+              );
+            }
+
+
+            if (
+              !result.autonomous?.task?.id
+            ) {
+              throw new Error(
+                "Autonomous research task ID is missing."
+              );
+            }
+
+
+            if (
+              !result.autonomous?.worker?.id
+            ) {
+              throw new Error(
+                "Autonomous research worker ID is missing."
+              );
+            }
+
+
+            if (
+              !result.research
+            ) {
+              throw new Error(
+                "Orchestrator research result is missing."
+              );
+            }
+
+
+            if (
+              result.research.required !==
+              true
+            ) {
+              throw new Error(
+                "Orchestrator did not mark research as required."
+              );
+            }
+
+
+            if (
+              !Array.isArray(
+                result.research.sources
+              )
+            ) {
+              throw new Error(
+                "Orchestrator research sources are missing."
+              );
+            }
+
+
+            if (
+              result.research.sources.length !==
+              2
+            ) {
+              throw new Error(
+                "Orchestrator research source count mismatch."
+              );
+            }
+
+
+            if (
+              result.research.provider !==
+              "mock-orchestrator-research"
+            ) {
+              throw new Error(
+                "Orchestrator research provider mismatch."
+              );
+            }
+
+
+            // ------------------------------------------------
+            // VERIFY WORKER PROVIDER REUSED CONTEXT
+            // ------------------------------------------------
+            //
+            // The Orchestrator already researched the request.
+            // Worker Provider should therefore reuse existing
+            // research context rather than search again.
+            //
+            // ------------------------------------------------
+
+            const autonomousProvider =
+              result.autonomous?.provider ||
+              {};
+
+
+            if (
+              autonomousProvider.required !==
+              true
+            ) {
+              throw new Error(
+                "Autonomous Worker did not detect research provider requirement."
+              );
+            }
+
+
+            if (
+              autonomousProvider.searched !==
+              false
+            ) {
+              throw new Error(
+                "Autonomous Worker performed an unnecessary second provider search."
+              );
+            }
+
+
+            if (
+              autonomousProvider.sourceCount !==
+              2
+            ) {
+              throw new Error(
+                "Autonomous Worker reused research context with the wrong source count."
+              );
+            }
+
+
+            if (
+              autonomousProvider.provider !==
+              "mock-orchestrator-research"
+            ) {
+              throw new Error(
+                "Autonomous Worker provider context mismatch."
+              );
+            }
+
+
+            if (
+              result.autonomous?.workerStatus !==
+              agentWorker.WORKER_STATES.IDLE
+            ) {
+              throw new Error(
+                "Autonomous research worker did not return to idle."
+              );
+            }
+
+
+            const finalTask =
+              agentManager.getTask(
+
+                result.autonomous.task.id
+
+              );
+
+
+            if (
+              finalTask.success !==
+              true
+            ) {
+              throw new Error(
+                "Autonomous research task could not be retrieved."
+              );
+            }
+
+
+            if (
+              finalTask.task.status !==
+              agentManager.TASK_STATES.COMPLETED
+            ) {
+              throw new Error(
+                "Autonomous research task did not complete."
+              );
+            }
+
+
+            console.log(
+              "Autonomous research integration test passed."
+            );
+
+
+            console.log(
+              "Provider:",
+              result.research.provider
+            );
+
+
+            console.log(
+              "Orchestrator sources:",
+              result.research.sources.length
+            );
+
+
+            console.log(
+              "Worker Provider required:",
+              autonomousProvider.required
+            );
+
+
+            console.log(
+              "Worker Provider searched again:",
+              autonomousProvider.searched
+            );
+
+
+            console.log(
+              "Worker status:",
+              result.autonomous.workerStatus
+            );
+
+          })().catch(
+            error => {
+
+              console.error(
+                error
+              );
+
+              process.exitCode =
+                1;
+
+            }
+          );
+
+          NODE
+
+
+      # ======================================================
+      # PROTECTED ACTION TEST
+      # ======================================================
+      #
+      # This confirms that Orchestrator autonomous mode still
+      # respects Agent Planner / Manager / Runner approval flow.
+      #
+      # send_email is NOT actually sent.
+      #
+      # ======================================================
+
+      - name: Autonomous Protected Action Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          (async () => {
+
+            const orchestrator =
+              require("./core/orchestrator");
+
+            const agentManager =
+              require("./core/agentManager");
+
+
+            const result =
+              await orchestrator.process(
+
+                "Send an email to the customer",
+
+                {
+
+                  autonomous:
+                    true
+
+                }
+
+              );
+
+
+            if (
+              !result
+            ) {
+              throw new Error(
+                "Protected autonomous result is missing."
+              );
+            }
+
+
+            if (
+              result.success !==
+              true
+            ) {
+              throw new Error(
+                "Protected autonomous request creation failed: " +
+                (
+                  result.error ||
+                  "unknown error"
+                )
+              );
+            }
+
+
+            if (
+              result.status !==
+              "approval-required"
+            ) {
+              throw new Error(
+                "Protected autonomous request did not enter approval state."
+              );
+            }
+
+
+            if (
+              result.autonomous?.enabled !==
+              true
+            ) {
+              throw new Error(
+                "Protected request did not use Autonomous Worker."
+              );
+            }
+
+
+            if (
+              result.autonomous?.waitingApproval !==
+              true
+            ) {
+              throw new Error(
+                "Protected request is not waiting for approval."
+              );
+            }
+
+
+            if (
+              !result.autonomous?.task?.id
+            ) {
+              throw new Error(
+                "Protected autonomous task ID is missing."
+              );
+            }
+
+
+            const task =
+              agentManager.getTask(
+
+                result.autonomous.task.id
+
+              );
+
+
+            if (
+              task.success !==
+              true
+            ) {
+              throw new Error(
+                "Protected autonomous task could not be retrieved."
+              );
+            }
+
+
+            if (
+              task.task.status !==
+              agentManager.TASK_STATES
+                .WAITING_APPROVAL
+            ) {
+              throw new Error(
+                "Protected autonomous task is not waiting for approval."
+              );
+            }
+
+
+            const waitingStep =
+              Array.isArray(
+                task.task.steps
+              )
+                ? task.task.steps.find(
+                    step =>
+                      step.requiresApproval ===
+                      true &&
+                      step.approved !==
+                      true
+                  )
+                : null;
+
+
+            if (
+              !waitingStep
+            ) {
+              throw new Error(
+                "Protected autonomous approval step was not created."
+              );
+            }
+
+
+            if (
+              waitingStep.action !==
+              "send_email"
+            ) {
+              throw new Error(
+                "Protected autonomous action mismatch: " +
+                waitingStep.action
+              );
+            }
+
+
+            console.log(
+              "Autonomous protected-action test passed."
+            );
+
+
+            console.log(
+              "Status:",
+              result.status
+            );
+
+
+            console.log(
+              "Task:",
+              result.autonomous.task.id
+            );
+
+
+            console.log(
+              "Action:",
+              waitingStep.action
+            );
+
+
+            console.log(
+              "Approval required:",
+              waitingStep.requiresApproval
+            );
+
+          })().catch(
+            error => {
+
+              console.error(
+                error
+              );
+
+              process.exitCode =
+                1;
+
+            }
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL API TEST
+      # ======================================================
+
+      - name: Orchestrator API Test
+        run: |
+
+          node --input-type=commonjs - <<'NODE'
+
+          const orchestrator =
+            require("./core/orchestrator");
+
+
+          const requiredFunctions = [
+
+            "process",
+            "orchestrate",
+            "selectSkill",
+            "shouldResearch",
+            "performResearch",
+            "determinePermission",
+            "determineMemoryAction",
+            "storeMemory",
+            "buildExecutionContext",
+            "shouldUseAutonomousWorker",
+            "buildAutonomousWorkerOptions",
+            "executeAutonomousWorker",
+            "buildAutonomousOrchestrationResult",
+            "getStatus"
+
+          ];
+
+
+          for (
+            const name of
+            requiredFunctions
+          ) {
+
+            if (
+              typeof orchestrator[name] !==
+              "function"
+            ) {
+
+              throw new Error(
+                `Orchestrator API missing: ${name}`
+              );
+
+            }
+
+          }
+
+
+          console.log(
+            "Orchestrator API test passed."
+          );
+
+          NODE
+
+
+      # ======================================================
+      # FINAL SUMMARY
+      # ======================================================
+
+      - name: Final Summary
+        run: |
+
+          echo ""
+          echo "=========================================================="
+          echo " AARHEN ORCHESTRATOR + AUTONOMOUS WORKER TEST"
+          echo "=========================================================="
+          echo " Load: PASSED"
+          echo " Orchestrator Status: PASSED"
+          echo " Normal Mode Regression: PASSED"
+          echo " Autonomous Calculation: PASSED"
+          echo " Autonomous Research: PASSED"
+          echo " Research Context Reuse: PASSED"
+          echo " Protected Approval Flow: PASSED"
+          echo " API Export Check: PASSED"
+          echo "=========================================================="
+          echo " ORCHESTRATOR + AUTONOMOUS WORKER INTEGRATION READY"
+          echo "=========================================================="
