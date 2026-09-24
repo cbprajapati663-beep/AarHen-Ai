@@ -1,0 +1,102 @@
+name: AarHen Worker Lifecycle Controls Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/agentWorker.js"
+      - ".github/workflows/worker-lifecycle-controls-test.yml"
+
+jobs:
+  worker-lifecycle-controls-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify pause, resume, stop, and stopped-worker assignment guard
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const workerApi = require("./core/agentWorker");
+          const manager = require("./core/agentManager");
+
+          workerApi.reset();
+
+          const created = workerApi.createWorker({
+            id: "lifecycle-control-worker",
+            name: "Lifecycle Control Worker"
+          });
+
+          if (created.success !== true) {
+            throw new Error("Worker creation failed.");
+          }
+
+          const workerId = created.worker.id;
+
+          const paused = workerApi.pauseWorker(workerId);
+          if (paused.success !== true || paused.worker?.status !== workerApi.WORKER_STATES.PAUSED) {
+            throw new Error("Pause control failed: " + (paused.error || "unexpected status"));
+          }
+
+          const blockedWhilePaused = workerApi.runAssignedTask(workerId);
+          if (blockedWhilePaused.success !== false || blockedWhilePaused.paused !== true) {
+            throw new Error("Paused worker did not reject execution.");
+          }
+
+          const resumed = workerApi.resumeWorker(workerId);
+          if (resumed.success !== true || resumed.worker?.status !== workerApi.WORKER_STATES.IDLE) {
+            throw new Error("Resume control failed: " + (resumed.error || "unexpected status"));
+          }
+
+          const stopped = workerApi.stopWorker(workerId);
+          if (stopped.success !== true || stopped.worker?.status !== workerApi.WORKER_STATES.STOPPED) {
+            throw new Error("Stop control failed: " + (stopped.error || "unexpected status"));
+          }
+
+          const blockedAfterStop = workerApi.runAssignedTask(workerId);
+          if (blockedAfterStop.success !== false || blockedAfterStop.stopped !== true) {
+            throw new Error("Stopped worker did not reject execution.");
+          }
+
+          const resumeStopped = workerApi.resumeWorker(workerId);
+          if (resumeStopped.success !== false || resumeStopped.stopped !== true) {
+            throw new Error("Stopped worker was unexpectedly resumed.");
+          }
+
+          const agent = manager.createAgent({
+            id: "lifecycle-guard-agent",
+            name: "Lifecycle Guard Agent"
+          });
+
+          if (agent.success !== true) {
+            throw new Error("Agent creation failed.");
+          }
+
+          const task = manager.createTask(agent.agent.id, {
+            request: "Verify stopped worker assignment guard"
+          });
+
+          if (task.success !== true) {
+            throw new Error("Task creation failed.");
+          }
+
+          const assignment = workerApi.assignTask(workerId, task.task.id);
+          if (assignment.success !== false || !String(assignment.error || "").includes("Stopped worker")) {
+            throw new Error("Stopped worker accepted a new task.");
+          }
+
+          console.log("Worker lifecycle controls test passed.");
+          console.log(JSON.stringify({
+            pause: paused.worker.status,
+            resume: resumed.worker.status,
+            stop: stopped.worker.status,
+            pausedExecutionBlocked: true,
+            stoppedExecutionBlocked: true,
+            stoppedAssignmentBlocked: true
+          }, null, 2));
+          NODE
