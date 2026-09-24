@@ -1,0 +1,95 @@
+name: AarHen Checkpoint Snapshot Integrity Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checkpoint-snapshot-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Verify checkpoint snapshot isolation and deletion
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const manager = require("./core/agentManager");
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          manager.reset();
+          engine.reset();
+
+          const agent = manager.createAgent({
+            id: "snapshot-integrity-agent",
+            name: "Snapshot integrity test"
+          });
+          assert(agent.success, "Agent creation failed.");
+
+          const task = manager.createTask(
+            "snapshot-integrity-agent",
+            "Verify checkpoint snapshot isolation",
+            { id: "snapshot-integrity-task" }
+          );
+          assert(task.success, "Task creation failed.");
+
+          const step = manager.addStep("snapshot-integrity-task", {
+            id: "snapshot-integrity-step",
+            name: "Pending work",
+            description: "Verify snapshot isolation",
+            action: "calculate",
+            input: { expression: "2 + 2" }
+          });
+          assert(step.success, "Step creation failed.");
+
+          const saved = engine.saveTaskCheckpoint("snapshot-integrity-task");
+          assert(saved.success, "Checkpoint save failed.");
+
+          const checkpointId = saved.checkpoint.id;
+          saved.checkpoint.task.request = "tampered";
+          saved.checkpoint.task.steps[0].name = "tampered";
+          saved.checkpoint.metadata.injected = true;
+
+          const fetched = engine.getCheckpoint(checkpointId);
+          assert(fetched.success, "Saved checkpoint could not be fetched.");
+          assert(
+            fetched.checkpoint.task.request !== "tampered",
+            "Returned checkpoint mutation changed stored task snapshot."
+          );
+          assert(
+            fetched.checkpoint.task.steps[0].name !== "tampered",
+            "Nested step mutation changed stored snapshot."
+          );
+          assert(
+            fetched.checkpoint.metadata.injected !== true,
+            "Metadata mutation changed stored checkpoint."
+          );
+
+          const deleted = engine.deleteCheckpoint(checkpointId);
+          assert(deleted.success, "Checkpoint deletion failed.");
+
+          const missing = engine.getCheckpoint(checkpointId);
+          assert(missing.success === false, "Deleted checkpoint is still retrievable.");
+
+          const latest = engine.getLatestCheckpoint("snapshot-integrity-task");
+          assert(latest.success === false, "Deleted checkpoint remains in latest-checkpoint index.");
+
+          console.log("Checkpoint snapshot integrity tests passed.");
+          console.log(JSON.stringify({
+            snapshotIsolation: true,
+            nestedIsolation: true,
+            metadataIsolation: true,
+            deletionRemovesIndex: true
+          }, null, 2));
+          NODE
