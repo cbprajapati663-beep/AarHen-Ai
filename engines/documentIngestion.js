@@ -1,23 +1,14 @@
 // ============================================================
 // AARHEN CORE V5
 // DOCUMENT INGESTION ENGINE
-// Version: 5.6.1
+// Version: 5.6.4
 //
-// Flow:
-// Document
-//   ↓
-// Document Learning Engine
-//   ↓
-// Chunk Analysis
-//   ↓
-// Continuous Learning Engine
-//   ↓
-// Knowledge Store
-//   ↓
-// Memory Manager
-//
-// This layer does NOT replace the existing learning engine.
-// It safely connects document processing with learning.
+// Purpose:
+// - Process documents through Document Learning Engine
+// - Send document chunks to Continuous Learning Engine
+// - Preserve real document filename as provenance/source
+// - Keep document knowledge identifiable for RAG
+// - Sync with Knowledge Store + Memory Manager
 // ============================================================
 
 const documentLearning =
@@ -27,7 +18,7 @@ const learning =
     require("../core/learning");
 
 const INGESTION_VERSION =
-    "5.6.1";
+    "5.6.4";
 
 
 // ============================================================
@@ -35,6 +26,7 @@ const INGESTION_VERSION =
 // ============================================================
 
 function safeString(value) {
+
     if (
         value === null ||
         value === undefined
@@ -47,6 +39,7 @@ function safeString(value) {
 
 
 function safeArray(value) {
+
     return Array.isArray(value)
         ? value
         : [];
@@ -58,6 +51,7 @@ function clamp(
     min = 0,
     max = 1
 ) {
+
     const number =
         Number(value);
 
@@ -98,14 +92,22 @@ function buildLearningInput(
             options.category
         ) ||
         safeString(
+            chunk.category
+        ) ||
+        safeString(
             document.chunks?.[0]?.category
         ) ||
         "knowledge";
 
+    // --------------------------------------------------------
+    // IMPORTANT:
+    // The actual document filename is the canonical source.
+    //
+    // This keeps provenance reliable for:
+    // PDF / DOCX / TXT / MD / JSON
+    // --------------------------------------------------------
+
     const source =
-        safeString(
-            options.source
-        ) ||
         fileName;
 
     const confidence =
@@ -114,6 +116,12 @@ function buildLearningInput(
                 ? options.confidence
                 : 0.60
         );
+
+    const documentSource =
+        safeString(
+            options.source
+        ) ||
+        "document-ingestion";
 
     return {
 
@@ -131,6 +139,33 @@ function buildLearningInput(
         category,
 
         source,
+
+        sourceType:
+            safeString(
+                document.extension
+            ) ||
+            null,
+
+        documentName:
+            fileName,
+
+        documentSource,
+
+        documentPath:
+            safeString(
+                document.filePath
+            ) ||
+            null,
+
+        chunkIndex:
+            Number(
+                chunk.chunkIndex
+            ) || 0,
+
+        totalChunks:
+            Number(
+                chunk.totalChunks
+            ) || 0,
 
         memoryType:
             options.memoryType ||
@@ -492,7 +527,16 @@ async function ingestDocument(
                 processed.wordCount,
 
             chunkCount:
-                processed.chunkCount
+                processed.chunkCount,
+
+            canonicalSource:
+                processed.fileName,
+
+            ingestionSource:
+                safeString(
+                    options.source
+                ) ||
+                "document-ingestion"
         },
 
         learning: {
@@ -522,7 +566,7 @@ async function ingestDocument(
 // ============================================================
 // TEXT INGESTION
 //
-// Useful when another engine already has the document text.
+// Useful when another engine already has document text.
 // ============================================================
 
 function ingestText(
@@ -531,7 +575,9 @@ function ingestText(
 ) {
 
     const content =
-        safeString(text);
+        safeString(
+            text
+        );
 
     if (!content) {
 
@@ -573,15 +619,17 @@ function ingestText(
         };
     }
 
+    const fileName =
+        safeString(
+            options.fileName
+        ) ||
+        "text-input.txt";
+
     const pseudoDocument = {
 
         success: true,
 
-        fileName:
-            safeString(
-                options.fileName
-            ) ||
-            "text-input.txt",
+        fileName,
 
         filePath:
             safeString(
@@ -643,6 +691,11 @@ function ingestText(
         textLength:
             content.length,
 
+        fileName,
+
+        source:
+            fileName,
+
         chunkCount:
             chunks.length,
 
@@ -689,6 +742,10 @@ function getStatus() {
 
             "duplicate-safe-learning",
 
+            "document-provenance",
+
+            "canonical-document-source",
+
             "learning-status-reporting"
         ],
 
@@ -707,6 +764,24 @@ function getStatus() {
                 true
         },
 
+        provenance: {
+
+            canonicalSource:
+                "document-filename",
+
+            ingestionSource:
+                "optional-source-label",
+
+            documentPath:
+                true,
+
+            documentType:
+                true,
+
+            chunkTracking:
+                true
+        },
+
         pipeline: [
 
             "document-input",
@@ -722,6 +797,8 @@ function getStatus() {
             "knowledge-storage",
 
             "memory-sync",
+
+            "document-provenance",
 
             "learning-result"
         ]
