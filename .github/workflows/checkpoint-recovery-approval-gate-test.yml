@@ -1,0 +1,54 @@
+name: AarHen Checkpoint Recovery Approval Gate Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  recovery-approval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify approval-waiting tasks are not auto-recoverable
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+          const bridge = require("./core/checkpointBridge");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          bridge.reset();
+
+          const waiting = engine.saveCheckpoint({
+            id: "approval-gate-task",
+            status: "waiting_approval",
+            approvalRequired: true,
+            approved: false,
+            steps: [{ id: "approval-step", status: "waiting_approval", requiresApproval: true, approved: false }]
+          }, { id: "approval-gate-checkpoint" });
+
+          assert(waiting.success, "Approval-waiting checkpoint should save.");
+          assert(waiting.checkpoint.recoveryEligible === false,
+            "Approval-waiting task must not be automatically recoverable.");
+
+          const candidate = engine.getRecoveryCandidate("approval-gate-task");
+          assert(candidate.success, "Recovery candidate lookup should succeed.");
+          assert(candidate.recoverable === false,
+            "Approval-waiting candidate must not be marked recoverable.");
+
+          const plan = engine.buildRecoveryPlan("approval-gate-task");
+          assert(plan.success, "Recovery plan lookup should succeed.");
+          assert(plan.recoverable === false, "Approval-waiting recovery plan must not be recoverable.");
+          assert(plan.plan.action === "no-recovery", "Approval-waiting plan should use no-recovery action.");
+
+          console.log("Checkpoint recovery approval gate tests passed.");
+          NODE
