@@ -1,0 +1,55 @@
+name: AarHen Waiting Approval Recovery Block Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  waiting-approval-recovery-block:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify waiting approval is blocked from recovery
+        run: |
+          node --input-type=commonjs - <<'NODE'
+          const engine = require("./core/checkpointEngine");
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          engine.reset();
+
+          const saved = engine.saveCheckpoint({
+            id: "waiting-approval-recovery-task",
+            status: "waiting_approval",
+            approvalRequired: true,
+            approved: false,
+            steps: [
+              { id: "approval-pending", status: "pending", requiresApproval: true, approved: false }
+            ]
+          }, { id: "waiting-approval-recovery-checkpoint" });
+
+          assert(saved.success, "Checkpoint save should succeed.");
+          assert(saved.checkpoint.state === engine.CHECKPOINT_STATES.WAITING_APPROVAL,
+            "Checkpoint state should be waiting approval.");
+          assert(saved.checkpoint.recoveryEligible === false,
+            "Waiting-approval checkpoint must not be recovery eligible.");
+
+          const candidate = engine.getRecoveryCandidate("waiting-approval-recovery-task");
+          assert(candidate.success && candidate.recoverable === false,
+            "Waiting-approval task must not be a recoverable candidate.");
+
+          const plan = engine.buildRecoveryPlan("waiting-approval-recovery-task");
+          assert(plan.success && plan.recoverable === false,
+            "Waiting-approval task must produce a non-recoverable plan.");
+          assert(plan.plan.action === "no-recovery",
+            "Waiting-approval plan action must be no-recovery.");
+
+          console.log("Waiting approval recovery block tests passed.");
+          NODE
