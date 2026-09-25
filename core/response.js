@@ -1723,6 +1723,47 @@ function formatDocument(
     }
 
 
+    const evidenceCandidates = [
+        input.documentEvidence,
+        input.executionContext?.documentEvidence,
+        input.execution?.documentEvidence,
+        input.execution?.context?.documentEvidence,
+        input.brain?.knowledge?.documentEvidence
+    ];
+
+    const evidence =
+        evidenceCandidates.find(
+            candidate =>
+                Array.isArray(candidate) &&
+                candidate.length > 0
+        ) || [];
+
+    if (evidence.length > 0) {
+        response += "\n\n📌 Evidence references:";
+
+        evidence
+            .slice(0, 5)
+            .forEach((item, index) => {
+                const reference =
+                    firstNonEmpty(
+                        item.reference,
+                        item.ref,
+                        item.id,
+                        `DOC-${index + 1}`
+                    );
+
+                const title =
+                    firstNonEmpty(
+                        item.title,
+                        item.source,
+                        `Document evidence ${index + 1}`
+                    );
+
+                response += `\n${reference} — ${title}`;
+            });
+    }
+
+
     const sources =
         status.sources;
 
