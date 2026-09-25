@@ -473,10 +473,34 @@ function getRecoveryCandidate(
     }
 
 
-    return checkpointEngine
-        .getRecoveryCandidate(
-            id
-        );
+    const candidate =
+        checkpointEngine.getRecoveryCandidate(id);
+
+    if (!candidate.success) {
+        return candidate;
+    }
+
+    const comparison = compareWithCheckpoint(id);
+
+    if (!comparison.success) {
+        return {
+            ...candidate,
+            recoverable: false,
+            reason: "comparison-unavailable",
+            error: comparison.error || "Unable to compare live task with checkpoint."
+        };
+    }
+
+    if (comparison.checkpointExists && comparison.changed) {
+        return {
+            ...candidate,
+            recoverable: false,
+            reason: "live-task-drift",
+            differences: clone(comparison.differences || [])
+        };
+    }
+
+    return candidate;
 
 }
 
