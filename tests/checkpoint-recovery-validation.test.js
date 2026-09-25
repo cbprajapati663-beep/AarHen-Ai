@@ -21,6 +21,24 @@ function checkpoint(overrides = {}) {
 const valid = checkpoint();
 assert.equal(engine.validateCheckpointForRecovery(valid).valid, true);
 
+// Step-level edits must be detected even when aggregate counters are unchanged.
+engine.reset();
+const stepSnapshotTask = {
+  id: "step-drift-task",
+  agentId: "validation-agent",
+  status: manager.TASK_STATES.RUNNING,
+  currentStepIndex: 0,
+  steps: [{ id: "step-drift", index: 0, name: "Original", action: "inspect", status: manager.STEP_STATES.PENDING }]
+};
+assert.equal(engine.saveCheckpoint(stepSnapshotTask).success, true);
+const changedStepTask = structuredClone(stepSnapshotTask);
+changedStepTask.steps[0].name = "Modified";
+const stepComparison = engine.compareWithLatestCheckpoint(changedStepTask);
+assert.equal(stepComparison.success, true);
+assert.equal(stepComparison.changed, true);
+assert.equal(stepComparison.differences.some(item => item.field === "steps"), true);
+engine.reset();
+
 const badSummary = structuredClone(valid);
 badSummary.pendingSteps = 0;
 assert.equal(engine.validateCheckpointForRecovery(badSummary).valid, false);
