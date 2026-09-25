@@ -116,3 +116,36 @@ test("createResponse appends answer context from nested execution context", () =
     assert.match(output, /Document Knowledge/);
     assert.match(output, /Grounded context from nested executor\\./);
 });
+
+
+test("formatDocument resolves evidence from nested brain knowledge contexts", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        execution: {
+            context: {
+                brain: {
+                    knowledge: {
+                        documentEvidence: [
+                            { reference: "DOC-BRAIN", title: "Nested brain evidence.pdf" }
+                        ]
+                    }
+                }
+            }
+        }
+    });
+
+    assert.match(output, /DOC-BRAIN — Nested brain evidence\.pdf/);
+});
+
+test("formatDocument resolves evidence from requestContext", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        requestContext: {
+            documentEvidence: [
+                { reference: "DOC-REQUEST", title: "Request evidence.pdf" }
+            ]
+        }
+    });
+
+    assert.match(output, /DOC-REQUEST — Request evidence\.pdf/);
+});
