@@ -180,3 +180,21 @@ test("createResponse does not append stale document evidence when disabled", () 
     assert.doesNotMatch(output, /DOC-STALE/);
     assert.doesNotMatch(output, /Stale content/);
 });
+
+
+test("formatDocument suppresses nested execution document context when disabled", () => {
+    const output = response.formatDocument({
+        execution: {
+            context: {
+                documentKnowledgeEnabled: false,
+                documentKnowledge: [{ title: "Stale nested policy", content: "Do not show" }],
+                documentEvidence: [
+                    { reference: "DOC-NESTED-STALE", title: "Stale nested.pdf" }
+                ],
+                answerContext: "Stale nested answer context."
+            }
+        }
+    });
+
+    assert.equal(output, "");
+});
