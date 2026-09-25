@@ -341,4 +341,15 @@ const builtSnapshot = engine.buildCheckpoint(checkpointInput, { id: "snapshot-pu
 assert.equal(builtSnapshot.taskId, "snapshot-purity-task");
 assert.deepEqual(checkpointInput, checkpointInputBefore);
 
+// Returned checkpoint objects must be detached from the engine's stored snapshot.
+const isolationSave = engine.saveCheckpoint(checkpointInput, { id: "snapshot-isolation-checkpoint" });
+assert.equal(isolationSave.success, true);
+isolationSave.checkpoint.task.steps[0].result.payload.preserved = false;
+const isolationRead = engine.getCheckpoint("snapshot-isolation-checkpoint");
+assert.equal(isolationRead.success, true);
+assert.equal(isolationRead.checkpoint.task.steps[0].result.payload.preserved, true);
+isolationRead.checkpoint.task.steps[0].result.payload.preserved = "caller-change";
+const isolationReadAgain = engine.getCheckpoint("snapshot-isolation-checkpoint");
+assert.equal(isolationReadAgain.checkpoint.task.steps[0].result.payload.preserved, true);
+
 console.log("Checkpoint recovery validation tests passed.");
