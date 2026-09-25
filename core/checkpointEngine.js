@@ -1343,6 +1343,8 @@ function compareWithLatestCheckpoint(
 
     const fields = [
 
+        "agentId",
+
         "request",
 
         "description",
