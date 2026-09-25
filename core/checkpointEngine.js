@@ -1363,15 +1363,11 @@ function compareWithLatestCheckpoint(
 
         "totalSteps",
 
-        "steps",
-
         "completedSteps",
 
         "failedSteps",
 
         "pendingSteps",
-
-        "steps",
 
         "retries",
 
