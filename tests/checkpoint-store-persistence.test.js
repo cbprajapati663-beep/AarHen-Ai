@@ -26,6 +26,16 @@ try {
   assert.deepEqual(restartedStore.get("cp-1"), checkpoint);
   assert.deepEqual(restartedStore.list(), [checkpoint]);
 
+  // Returned values are detached from persisted JSON; caller edits must not leak back.
+  const readCopy = restartedStore.get("cp-1");
+  readCopy.task.steps[0].status = "caller-mutated";
+  readCopy.task.extra = true;
+  assert.deepEqual(restartedStore.get("cp-1"), checkpoint);
+
+  const listCopy = restartedStore.list();
+  listCopy[0].task.steps[0].status = "list-mutated";
+  assert.deepEqual(restartedStore.get("cp-1"), checkpoint);
+
   assert.throws(() => store.get("../outside"), /valid checkpoint ID/);
   assert.throws(() => store.save({ id: "../escape", taskId: "task-1" }), /valid checkpoint ID/);
   assert.equal(store.remove("cp-1").deleted, true);
