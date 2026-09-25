@@ -2159,7 +2159,30 @@ async function process(
         ragKnowledge;
 
     executionContext.documentKnowledge =
+        ragKnowledge.results;
+
+    executionContext.documentDocuments = {
+        results: ragKnowledge.results,
+        count: ragKnowledge.count,
+        available: ragKnowledge.count > 0
+    };
+
+    executionContext.documentRag =
         ragKnowledge;
+
+    executionContext.documentAware =
+        ragKnowledge.count > 0;
+
+    executionContext.documentKnowledgeEnabled =
+        context.documentKnowledgeEnabled !== false;
+
+    executionContext.answerContext =
+        ragKnowledge.results
+            .slice(0, 5)
+            .map((item, index) =>
+                String(index + 1) + ". " + item.title + ": " + item.content
+            )
+            .join("\n");
 
 
     // --------------------------------------------------------
