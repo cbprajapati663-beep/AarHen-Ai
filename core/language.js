@@ -27,17 +27,17 @@ const HINGLISH_WORDS = new Set([
 ]);
 
 function tokenize(value) {
-    return value.toLowerCase().match(/[\\p{L}\\p{N}]+/gu) || [];
+    return value.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
 }
 
 function detectLanguage(text) {
     const value = String(text ?? "");
 
-    if (/[\\u0A80-\\u0AFF]/u.test(value)) {
+    if (/[\u0A80-\u0AFF]/u.test(value)) {
         return "gujarati";
     }
 
-    if (/[\\u0900-\\u097F]/u.test(value)) {
+    if (/[\u0900-\u097F]/u.test(value)) {
         return "hindi";
     }
 
