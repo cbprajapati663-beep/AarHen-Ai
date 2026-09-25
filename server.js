@@ -6,6 +6,7 @@ const learningApi = require("./core/learningApi");
 const memory = require("./core/memory");
 const memoryHistory = require("./core/memoryHistory");
 const memoryApi = require("./core/memoryApi");
+const documentLearningApi = require("./core/documentLearningApi");
 
 const PORT = process.env.PORT || 3000;
 
@@ -295,6 +296,48 @@ const server = http.createServer(
                     );
 
                 return sendJson(res, 200, result);
+            }
+
+
+            /* =================================================
+               DOCUMENT LEARNING
+               ================================================= */
+
+            if (pathname === "/learning/document/status" && req.method === "GET") {
+                return sendJson(res, 200, documentLearningApi.getDocumentLearningStatus());
+            }
+
+            if (pathname === "/learn/document" && req.method === "POST") {
+                const body = await readBody(req);
+                const encoded = body.base64 || body.data;
+                if (typeof encoded !== "string" || !encoded.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "base64 document content is required"
+                    });
+                }
+
+                const normalized = encoded.replace(/^data:.*?;base64,/i, "").replace(/\\s/g, "");
+                if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(normalized)) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Invalid base64 document content"
+                    });
+                }
+
+                const buffer = Buffer.from(normalized, "base64");
+                const result = await documentLearningApi.learnDocument({
+                    buffer,
+                    fileName: body.fileName || body.filename || "",
+                    extension: body.extension || "",
+                    title: body.title,
+                    source: body.source || "document-api",
+                    category: body.category || "document",
+                    learn: body.learn !== false
+                });
+
+                const statusCode = result && result.success ? 200 : 422;
+                return sendJson(res, statusCode, result);
             }
 
 
