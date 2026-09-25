@@ -243,7 +243,16 @@ for (const [field, value] of [
   ["warnings", ["new warning"]],
   ["retries", 2],
   ["maxRetries", 99],
-  ["error", "changed error"]
+  ["error", "changed error"],
+  ["startedAt", "2026-09-25T08:00:00.000Z"],
+  ["completedAt", "2026-09-25T08:01:00.000Z"],
+  ["stoppedAt", "2026-09-25T08:02:00.000Z"],
+  ["approvalRequired", true],
+  ["approved", true],
+  ["stopRequested", true],
+  ["pauseRequested", true],
+  ["currentStepIndex", 7],
+  ["currentStepId", "different-step"]
 ]) {
   const alteredTask = structuredClone(beforeInspectSnapshot);
   alteredTask[field] = value;
