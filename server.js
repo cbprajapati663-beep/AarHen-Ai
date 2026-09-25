@@ -451,7 +451,7 @@ const server = http.createServer(
                 }
 
                 const suppliedName = typeof body.fileName === "string" ? body.fileName.trim() : "";
-                const fileName = path.basename(suppliedName.replace(/\\\\/g, "/"));
+                const fileName = path.basename(suppliedName.replace(/\\/g, "/"));
                 const extension = path.extname(fileName).toLowerCase();
                 const supported = documentIngestion.getStatus().capabilities &&
                     [".pdf", ".docx", ".txt", ".md", ".markdown", ".json"];
