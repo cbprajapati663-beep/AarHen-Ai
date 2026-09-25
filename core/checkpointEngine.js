@@ -1344,62 +1344,32 @@ function compareWithLatestCheckpoint(
     const fields = [
 
         "agentId",
-
         "request",
-
         "description",
-
         "status",
-
         "checkpointState",
-
         "priority",
-
         "autonomy",
-
         "currentStepIndex",
-
         "currentStepId",
-
         "totalSteps",
-
         "completedSteps",
-
         "failedSteps",
-
         "pendingSteps",
-
-        "totalSteps",
-
         "steps",
-
         "retries",
-
         "maxRetries",
-
         "error",
-
         "warnings",
-
         "startedAt",
-
         "completedAt",
-
         "stoppedAt",
-
         "approvalRequired",
-
         "approved",
-
         "stopRequested",
-
-        "pauseRequested",
-
-        // Detect changes inside individual step snapshots as well as counters.
-        "steps"
+        "pauseRequested"
 
     ];
-
 
     for (
         const field of fields
