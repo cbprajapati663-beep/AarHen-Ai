@@ -1343,9 +1343,17 @@ function compareWithLatestCheckpoint(
 
     const fields = [
 
+        "request",
+
+        "description",
+
         "status",
 
         "checkpointState",
+
+        "priority",
+
+        "autonomy",
 
         "currentStepIndex",
 
@@ -1362,6 +1370,18 @@ function compareWithLatestCheckpoint(
         "pendingSteps",
 
         "retries",
+
+        "maxRetries",
+
+        "error",
+
+        "warnings",
+
+        "startedAt",
+
+        "completedAt",
+
+        "stoppedAt",
 
         "approvalRequired",
 
