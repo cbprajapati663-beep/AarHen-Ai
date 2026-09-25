@@ -1,8 +1,10 @@
 "use strict";
 
 const { VoiceEngine, VoiceEngineError } = require("./voice");
+const { createOpenAIVoiceProvider } = require("./openaiVoiceProvider");
 
-let engine = new VoiceEngine();
+const openAIProvider = process.env.OPENAI_API_KEY ? createOpenAIVoiceProvider() : null;
+let engine = new VoiceEngine(openAIProvider ? { speechToText: openAIProvider, textToSpeech: openAIProvider } : {});
 
 function configureVoiceEngine(options = {}) {
   engine = new VoiceEngine(options);
