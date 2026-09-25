@@ -167,4 +167,23 @@ assert.equal(stepActionDrift.success, true);
 assert.equal(stepActionDrift.changed, true);
 assert.equal(stepActionDrift.differences.some(item => item.field === "steps"), true);
 
+// Verify drift detection covers key task metadata beyond status and steps.
+for (const [field, value] of [
+  ["request", "Modified request"],
+  ["priority", "critical"],
+  ["warnings", ["new warning"]],
+  ["maxRetries", 99]
+]) {
+  const alteredTask = structuredClone(beforeInspectSnapshot);
+  alteredTask[field] = value;
+  const metadataDrift = engine.compareWithLatestCheckpoint(alteredTask);
+  assert.equal(metadataDrift.success, true, field);
+  assert.equal(metadataDrift.changed, true, field);
+  assert.equal(
+    metadataDrift.differences.some(item => item.field === field),
+    true,
+    field
+  );
+}
+
 console.log("Checkpoint recovery validation tests passed.");
