@@ -169,6 +169,7 @@ assert.equal(stepActionDrift.differences.some(item => item.field === "steps"), t
 
 // Verify drift detection covers key task metadata beyond status and steps.
 for (const [field, value] of [
+  ["agentId", "different-agent"],
   ["request", "Modified request"],
   ["description", "Changed description"],
   ["priority", "critical"],
