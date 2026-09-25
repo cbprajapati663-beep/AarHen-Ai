@@ -1173,8 +1173,8 @@ function validateCheckpointForRecovery(checkpoint) {
         const step = task.steps[index];
         if (!step || typeof step !== "object" ||
             !safeString(step.id) ||
-            !Number.isInteger(step.index) ||
-            step.index !== index ||
+            (step.index !== null && step.index !== undefined &&
+                (!Number.isInteger(step.index) || step.index !== index)) ||
             !allowedStepStatuses.has(step.status)) {
             return { valid: false, reason: "Checkpoint contains an invalid step identity, index, or status." };
         }
