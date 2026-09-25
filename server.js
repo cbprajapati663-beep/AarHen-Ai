@@ -311,10 +311,11 @@ const server = http.createServer(
                     });
                 }
 
-                const result = await voiceApi.transcribeAudio(audio, {
-                    language: body.language,
-                    mimeType
-                });
+                const result = await multilingualMedia.transcribeMultilingual(
+                    (input, options) => voiceApi.transcribeAudio(input, options),
+                    audio,
+                    { language: body.language, mimeType }
+                );
                 const statusCode = result.success ? 200 :
                     result.code === "STT_UNAVAILABLE" ? 503 : 422;
                 return sendJson(res, statusCode, result);
@@ -338,11 +339,11 @@ const server = http.createServer(
                     });
                 }
 
-                const result = await voiceApi.synthesizeSpeech(body.text, {
-                    language: body.language,
-                    voice: body.voice,
-                    format: body.format
-                });
+                const result = await multilingualMedia.synthesizeMultilingual(
+                    (text, options) => voiceApi.synthesizeSpeech(text, options),
+                    body.text,
+                    { language: body.language, voice: body.voice, format: body.format }
+                );
                 const statusCode = result.success ? 200 :
                     result.code === "TTS_UNAVAILABLE" ? 503 : 422;
                 return sendJson(res, statusCode, result);
