@@ -46,3 +46,31 @@ test("formatDocument uses stable fallback references for evidence without an id"
     assert.match(output, /DOC-1 — First source/);
     assert.match(output, /DOC-2 — Second source/);
 });
+
+test("createResponse appends nested execution evidence references", () => {
+    const output = response.createResponse({
+        execution: {
+            message: "Task completed.",
+            documentKnowledge: [
+                { title: "Policy", content: "Eligibility details" }
+            ],
+            context: {
+                documentEvidence: [
+                    { reference: "DOC-X", title: "Policy.pdf" }
+                ]
+            }
+        }
+    });
+
+    assert.match(output, /Task completed\./);
+    assert.match(output, /Evidence references:/);
+    assert.match(output, /DOC-X — Policy\.pdf/);
+});
+
+test("formatDocument omits evidence section when no evidence is supplied", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }]
+    });
+
+    assert.doesNotMatch(output, /Evidence references:/);
+});
