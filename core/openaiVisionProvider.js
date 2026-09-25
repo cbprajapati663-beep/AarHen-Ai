@@ -27,7 +27,7 @@ function createOpenAIVisionProvider({
         ? `Respond in ${options.language}. `
         : "";
       const prompt = options.prompt || "Describe the image accurately.";
-      const response = await fetchImpl(`${baseUrl.replace(/\\/$/, "")}/chat/completions`, {
+      const response = await fetchImpl(`${(baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl)}/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
