@@ -135,6 +135,15 @@ assert.equal(createdTask.success, true);
 assert.equal(manager.addSteps("inspection-task", [{ id: "inspection-step", name: "Step", action: "inspect" }]).success, true);
 const saved = bridge.saveTaskCheckpoint("inspection-task");
 assert.equal(saved.success, true);
+
+// Drift comparison must notice step-level edits even when aggregate counters stay equal.
+const changedStepSnapshot = structuredClone(manager.getTask("inspection-task").task);
+changedStepSnapshot.steps[0].name = "Edited step name";
+const stepDrift = engine.compareWithLatestCheckpoint(changedStepSnapshot);
+assert.equal(stepDrift.success, true);
+assert.equal(stepDrift.changed, true);
+assert.equal(stepDrift.differences.some(item => item.field === "steps"), true);
+
 const beforeInspectSnapshot = structuredClone(manager.getTask("inspection-task").task);
 const inspection = controller.inspectTask("inspection-task");
 assert.equal(inspection.success, true);
