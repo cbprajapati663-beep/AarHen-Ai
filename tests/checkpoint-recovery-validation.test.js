@@ -250,4 +250,21 @@ for (const [field, value] of [
   );
 }
 
+// Step-list changes must also be detected as checkpoint drift.
+manager.reset();
+assert.equal(manager.createAgent({ id: "step-drift-agent" }).success, true);
+assert.equal(manager.createTask("step-drift-agent", "Detect step drift", { id: "step-drift-task" }).success, true);
+assert.equal(manager.addSteps("step-drift-task", [
+  { id: "step-drift-1", name: "First", action: "inspect" }
+]).success, true);
+assert.equal(bridge.saveTaskCheckpoint("step-drift-task").success, true);
+assert.equal(manager.addSteps("step-drift-task", [
+  { id: "step-drift-2", name: "Second", action: "inspect" }
+]).success, true);
+const stepDrift = controller.inspectTask("step-drift-task");
+assert.equal(stepDrift.success, true);
+assert.equal(stepDrift.comparison.changed, true);
+assert.equal(stepDrift.comparison.differences.some(item => item.field === "steps"), true);
+assert.equal(stepDrift.comparison.differences.some(item => item.field === "totalSteps"), true);
+
 console.log("Checkpoint recovery validation tests passed.");
