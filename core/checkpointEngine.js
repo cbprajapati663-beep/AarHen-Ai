@@ -1167,6 +1167,22 @@ function validateCheckpointForRecovery(checkpoint) {
     if (!Array.isArray(task.steps) || task.totalSteps !== task.steps.length) {
         return { valid: false, reason: "Checkpoint step data is inconsistent." };
     }
+    const allowedStepStatuses = new Set(Object.values(agentManager.STEP_STATES));
+    const seenStepIds = new Set();
+    for (let index = 0; index < task.steps.length; index += 1) {
+        const step = task.steps[index];
+        if (!step || typeof step !== "object" ||
+            !safeString(step.id) ||
+            !Number.isInteger(step.index) ||
+            step.index !== index ||
+            !allowedStepStatuses.has(step.status)) {
+            return { valid: false, reason: "Checkpoint contains an invalid step identity, index, or status." };
+        }
+        if (seenStepIds.has(step.id)) {
+            return { valid: false, reason: "Checkpoint contains duplicate step IDs." };
+        }
+        seenStepIds.add(step.id);
+    }
     if (checkpoint.totalSteps !== task.totalSteps ||
         checkpoint.completedSteps !== task.completedSteps ||
         checkpoint.failedSteps !== task.failedSteps ||
