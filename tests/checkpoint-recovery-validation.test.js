@@ -143,4 +143,20 @@ assert.equal(
 );
 assert.deepEqual(manager.getTask("inspection-task").task, afterStart);
 
+// Changes to step metadata must be detected even when aggregate counters stay equal.
+manager.reset();
+const driftAgent = manager.createAgent({ id: "step-drift-agent" });
+assert.equal(driftAgent.success, true);
+const driftTask = manager.createTask("step-drift-agent", "Detect step metadata drift", { id: "step-drift-task" });
+assert.equal(driftTask.success, true);
+assert.equal(manager.addSteps("step-drift-task", [{ id: "step-drift-step", name: "Original step", action: "inspect" }]).success, true);
+const stepCheckpoint = bridge.saveTaskCheckpoint("step-drift-task");
+assert.equal(stepCheckpoint.success, true);
+const liveDriftTask = manager.getTask("step-drift-task").task;
+liveDriftTask.steps[0].action = "changed-action";
+const stepDrift = engine.compareWithLatestCheckpoint(liveDriftTask);
+assert.equal(stepDrift.success, true);
+assert.equal(stepDrift.changed, true);
+assert.equal(stepDrift.differences.some(item => item.field === "steps"), true);
+
 console.log("Checkpoint recovery validation tests passed.");
