@@ -154,6 +154,11 @@ assert.equal(driftInspection.recoveryPlan.recoverable, false);
 assert.equal(driftInspection.recoveryPlan.reason, "live-task-drift");
 assert.equal(driftInspection.recoveryPlan.plan.executable, false);
 assert.equal(driftInspection.recoveryPlan.plan.executionMode, "inspection-only");
+assert.equal(Array.isArray(driftInspection.recoveryPlan.plan.differences), true);
+assert.equal(
+  driftInspection.recoveryPlan.plan.differences.some(item => item.field === "status"),
+  true
+);
 
 // Changes to step metadata must be detected even when aggregate counters stay equal.
 manager.reset();
