@@ -116,13 +116,11 @@ assert.equal(createdAgent.success, true);
 const createdTask = manager.createTask("inspection-agent", "Inspect recovery safely", { id: "inspection-task" });
 assert.equal(createdTask.success, true);
 assert.equal(manager.addSteps("inspection-task", [{ id: "inspection-step", name: "Step", action: "inspect" }]).success, true);
-const beforeInspection = manager.getTask("inspection-task").task;
 const saved = bridge.saveTaskCheckpoint("inspection-task");
 assert.equal(saved.success, true);
 const beforeInspectSnapshot = structuredClone(manager.getTask("inspection-task").task);
 const inspection = controller.inspectTask("inspection-task");
 assert.equal(inspection.success, true);
 assert.deepEqual(manager.getTask("inspection-task").task, beforeInspectSnapshot);
-assert.deepEqual(beforeInspectSnapshot, beforeInspection === undefined ? null : beforeInspectSnapshot);
 
 console.log("Checkpoint recovery validation tests passed.");
