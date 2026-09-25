@@ -2184,17 +2184,33 @@ async function process(
             )
             .join("\n");
 
+    executionContext.documentEvidence =
+        ragKnowledge.results.slice(0, 5).map((item, index) => ({
+            reference: "DOC-" + String(index + 1),
+            title: String(item.title || "Learned Knowledge"),
+            source: item.source || null,
+            content: String(item.content || ""),
+            confidence: item.confidence ?? null,
+            verified: item.verified === true
+        }));
+
     executionContext.documentGrounding = {
         enabled:
             context.documentKnowledgeEnabled !== false &&
             ragKnowledge.count > 0,
         mode: "retrieved-evidence",
         evidenceCount: ragKnowledge.count,
-        sourceTitles: ragKnowledge.results
-            .slice(0, 5)
-            .map(item => String(item.title || "Learned Knowledge")),
+        sourceTitles: executionContext.documentEvidence
+            .map(item => item.title),
+        evidence: executionContext.documentEvidence.map(item => ({
+            reference: item.reference,
+            title: item.title,
+            source: item.source,
+            confidence: item.confidence,
+            verified: item.verified
+        })),
         instruction:
-            "Use retrieved document evidence only for claims it supports. If the evidence is missing or insufficient, clearly say that the documents do not provide the answer. Do not invent document facts or citations."
+            "Use retrieved document evidence only for claims it supports. Cite a source using its provided DOC reference when supported. If the evidence is missing or insufficient, clearly say that the documents do not provide the answer. Do not invent document facts or citations."
     };
 
 
