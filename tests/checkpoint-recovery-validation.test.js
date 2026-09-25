@@ -5,6 +5,7 @@ const engine = require("../core/checkpointEngine");
 const manager = require("../core/agentManager");
 const controller = require("../core/checkpointRecoveryController");
 const bridge = require("../core/checkpointBridge");
+const bridge = require("../core/checkpointBridge");
 
 function checkpoint(overrides = {}) {
   const task = {
@@ -106,5 +107,22 @@ assert.equal(controller.getRecoveryCandidate("").success, false);
 assert.equal(controller.inspectTask("unknown-validation-task").success, false);
 assert.equal(controller.buildRecoveryPlan("unknown-validation-task").success, false);
 assert.equal(controller.getRecoveryCandidate("unknown-validation-task").success, false);
+
+
+// Recovery inspection remains read-only: it must not change Agent Manager task state.
+manager.reset();
+const createdAgent = manager.createAgent({ id: "inspection-agent" });
+assert.equal(createdAgent.success, true);
+const createdTask = manager.createTask("inspection-agent", "Inspect recovery safely", { id: "inspection-task" });
+assert.equal(createdTask.success, true);
+assert.equal(manager.addSteps("inspection-task", [{ id: "inspection-step", name: "Step", action: "inspect" }]).success, true);
+const beforeInspection = manager.getTask("inspection-task").task;
+const saved = bridge.saveTaskCheckpoint("inspection-task");
+assert.equal(saved.success, true);
+const beforeInspectSnapshot = structuredClone(manager.getTask("inspection-task").task);
+const inspection = controller.inspectTask("inspection-task");
+assert.equal(inspection.success, true);
+assert.deepEqual(manager.getTask("inspection-task").task, beforeInspectSnapshot);
+assert.deepEqual(beforeInspectSnapshot, beforeInspection === undefined ? null : beforeInspectSnapshot);
 
 console.log("Checkpoint recovery validation tests passed.");
