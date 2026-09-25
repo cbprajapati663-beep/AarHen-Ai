@@ -162,9 +162,9 @@ const stepCheckpoint = bridge.saveTaskCheckpoint("step-drift-task");
 assert.equal(stepCheckpoint.success, true);
 const liveDriftTask = manager.getTask("step-drift-task").task;
 liveDriftTask.steps[0].action = "changed-action";
-const stepDrift = engine.compareWithLatestCheckpoint(liveDriftTask);
-assert.equal(stepDrift.success, true);
-assert.equal(stepDrift.changed, true);
-assert.equal(stepDrift.differences.some(item => item.field === "steps"), true);
+const stepActionDrift = engine.compareWithLatestCheckpoint(liveDriftTask);
+assert.equal(stepActionDrift.success, true);
+assert.equal(stepActionDrift.changed, true);
+assert.equal(stepActionDrift.differences.some(item => item.field === "steps"), true);
 
 console.log("Checkpoint recovery validation tests passed.");
