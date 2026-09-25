@@ -20,6 +20,8 @@ test("resolveMediaLanguage honors supported explicit language aliases", () => {
   assert.equal(resolveMediaLanguage({ language: "gujarati", text: "Hello" }), "gujarati");
   assert.equal(resolveMediaLanguage({ language: "gu", text: "Hello" }), "gujarati");
   assert.equal(resolveMediaLanguage({ language: "hi", text: "Hello" }), "hindi");
+  assert.equal(resolveMediaLanguage({ language: "en", text: "નમસ્તે" }), "english");
+  assert.equal(resolveMediaLanguage({ language: "hi-en", text: "Hello" }), "hinglish");
 });
 
 test("transcribeMultilingual detects language from returned transcript", async () => {
