@@ -1393,7 +1393,10 @@ function compareWithLatestCheckpoint(
 
         "stopRequested",
 
-        "pauseRequested"
+        "pauseRequested",
+
+        // Detect changes inside individual step snapshots as well as counters.
+        "steps"
 
     ];
 
