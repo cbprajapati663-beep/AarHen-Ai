@@ -2155,38 +2155,25 @@ async function process(
         .memoryAction =
             memoryAction;
 
-    executionContext.ragKnowledge =
-        ragKnowledge;
+    const existingDocumentKnowledge =
+        Array.isArray(context.documentKnowledge)
+            ? context.documentKnowledge
+            : [];
 
-    executionContext.documentKnowledge =
-        ragKnowledge.results;
+    const existingDocumentResults =
+        Array.isArray(context.documentDocuments?.results)
+            ? context.documentDocuments.results
+            : [];
 
-    executionContext.documentDocuments = {
-        results: ragKnowledge.results,
-        count: ragKnowledge.count,
-        available: ragKnowledge.count > 0
-    };
+    const existingEvidence =
+        Array.isArray(context.documentEvidence)
+            ? context.documentEvidence
+            : [];
 
-    executionContext.documentRag =
-        ragKnowledge;
-
-    executionContext.documentAware =
-        ragKnowledge.count > 0;
-
-    executionContext.documentKnowledgeEnabled =
-        context.documentKnowledgeEnabled !== false;
-
-    executionContext.answerContext =
-        ragKnowledge.results
-            .slice(0, 5)
-            .map((item, index) =>
-                String(index + 1) + ". " + item.title + ": " + item.content
-            )
-            .join("\n");
-
-    executionContext.documentEvidence =
-        ragKnowledge.results.slice(0, 5).map((item, index) => ({
-            reference: "DOC-" + String(index + 1),
+    const retrievedEvidence = ragKnowledge.results
+        .slice(0, 5)
+        .map((item, index) => ({
+            reference: "RAG-" + String(index + 1),
             title: String(item.title || "Learned Knowledge"),
             source: item.source || null,
             content: String(item.content || ""),
@@ -2194,12 +2181,59 @@ async function process(
             verified: item.verified === true
         }));
 
+    executionContext.ragKnowledge = ragKnowledge;
+    executionContext.documentKnowledge = [
+        ...existingDocumentKnowledge,
+        ...ragKnowledge.results
+    ];
+    executionContext.documentDocuments = {
+        results: [
+            ...existingDocumentResults,
+            ...ragKnowledge.results
+        ],
+        count: existingDocumentResults.length + ragKnowledge.results.length,
+        available:
+            existingDocumentResults.length + ragKnowledge.results.length > 0
+    };
+    executionContext.documentRag = {
+        ...(context.documentRag && typeof context.documentRag === "object"
+            ? context.documentRag
+            : {}),
+        learnedKnowledge: ragKnowledge
+    };
+    executionContext.documentAware =
+        context.documentAware === true ||
+        existingDocumentKnowledge.length > 0 ||
+        existingDocumentResults.length > 0 ||
+        ragKnowledge.count > 0;
+    executionContext.documentKnowledgeEnabled =
+        context.documentKnowledgeEnabled !== false;
+
+    const ragAnswerContext = ragKnowledge.results
+        .slice(0, 5)
+        .map((item, index) =>
+            String(index + 1) + ". " + item.title + ": " + item.content
+        )
+        .join("\n");
+
+    executionContext.answerContext = [
+        String(context.answerContext || "").trim(),
+        ragAnswerContext
+            ? "LEARNED KNOWLEDGE CONTEXT:\n" + ragAnswerContext
+            : ""
+    ].filter(Boolean).join("\n\n");
+
+    executionContext.documentEvidence = [
+        ...existingEvidence,
+        ...retrievedEvidence
+    ];
+
     executionContext.documentGrounding = {
         enabled:
             context.documentKnowledgeEnabled !== false &&
-            ragKnowledge.count > 0,
+            executionContext.documentEvidence.length > 0,
         mode: "retrieved-evidence",
-        evidenceCount: ragKnowledge.count,
+        evidenceCount: executionContext.documentEvidence.length,
         sourceTitles: executionContext.documentEvidence
             .map(item => item.title),
         evidence: executionContext.documentEvidence.map(item => ({
@@ -2210,11 +2244,12 @@ async function process(
             verified: item.verified
         })),
         instruction:
-            "Use retrieved document evidence only for claims it supports. Cite a source using its provided DOC reference when supported. If the evidence is missing or insufficient, clearly say that the documents do not provide the answer. Do not invent document facts or citations."
+            "Use retrieved document evidence only for claims it supports. Cite a source using its provided reference when supported. If the evidence is missing or insufficient, clearly say that the documents do not provide the answer. Do not invent document facts or citations."
     };
 
 
     // --------------------------------------------------------
+    // RESEARCH CONTEXT    // --------------------------------------------------------
     // RESEARCH CONTEXT
     // --------------------------------------------------------
 
