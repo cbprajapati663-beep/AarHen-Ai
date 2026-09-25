@@ -16,8 +16,10 @@ test("resolveMediaLanguage detects Hindi, Gujarati, Hinglish and defaults to Eng
   assert.equal(resolveMediaLanguage({ text: "Good morning" }), "english");
 });
 
-test("resolveMediaLanguage honors supported explicit language", () => {
+test("resolveMediaLanguage honors supported explicit language aliases", () => {
   assert.equal(resolveMediaLanguage({ language: "gujarati", text: "Hello" }), "gujarati");
+  assert.equal(resolveMediaLanguage({ language: "gu", text: "Hello" }), "gujarati");
+  assert.equal(resolveMediaLanguage({ language: "hi", text: "Hello" }), "hindi");
 });
 
 test("transcribeMultilingual detects language from returned transcript", async () => {
@@ -43,13 +45,23 @@ test("synthesizeMultilingual passes detected language to provider", async () => 
   assert.equal(result.result.audioBase64, "YWJj");
 });
 
-test("synthesizeMultilingual preserves provider failures", async () => {\n  const failure = { success: false, error: "offline", code: "TTS_UNAVAILABLE" };\n  assert.equal(await synthesizeMultilingual(async () => failure, "hello"), failure);\n});\n\ntest("analyzeMultilingual passes prompt language to provider", async () => {
+test("synthesizeMultilingual preserves provider failures", async () => {
+  const failure = { success: false, error: "offline", code: "TTS_UNAVAILABLE" };
+  assert.equal(await synthesizeMultilingual(async () => failure, "hello"), failure);
+});
+
+test("analyzeMultilingual passes prompt language to provider", async () => {
   const result = await analyzeMultilingual(async (_image, options) => {
     assert.equal(options.language, "gujarati");
     return { description: "વાહન" };
   }, Buffer.from("image"), { prompt: "આ તસવીરમાં શું છે?" });
   assert.equal(result.language, "gujarati");
   assert.equal(result.result.description, "વાહન");
+});
+
+test("analyzeMultilingual preserves provider failures", async () => {
+  const failure = { success: false, error: "offline", code: "VISION_UNAVAILABLE" };
+  assert.equal(await analyzeMultilingual(async () => failure, "image"), failure);
 });
 
 test("helpers reject missing adapters", async () => {
