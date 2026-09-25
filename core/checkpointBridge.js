@@ -543,6 +543,7 @@ function buildRecoveryPlan(
                 action: "no-recovery",
                 taskId: id,
                 reason: "Live task differs from the latest checkpoint; inspect and reconcile before recovery.",
+                differences: clone(comparison.differences || []),
                 executable: false,
                 executionMode: "inspection-only",
                 requiresControlledExecution: true
