@@ -130,6 +130,15 @@ assert.equal(inspection.recoveryPlan.plan.executable, false);
 assert.equal(inspection.recoveryPlan.plan.executionMode, "inspection-only");
 assert.deepEqual(manager.getTask("inspection-task").task, beforeInspectSnapshot);
 
+// Detect changes inside step metadata even when aggregate counters remain equal.
+const changedStepSnapshot = structuredClone(beforeInspectSnapshot);
+changedStepSnapshot.steps[0].name = "Changed step metadata";
+const stepDrift = engine.compareWithLatestCheckpoint(changedStepSnapshot);
+assert.equal(stepDrift.success, true);
+assert.equal(stepDrift.changed, true);
+assert.equal(stepDrift.differences.some(item => item.field === "steps"), true);
+assert.deepEqual(manager.getTask("inspection-task").task, beforeInspectSnapshot);
+
 // A live task change after checkpointing must be reported as drift, not restored.
 assert.equal(manager.startTask("inspection-task").success, true);
 const afterStart = manager.getTask("inspection-task").task;
