@@ -523,6 +523,33 @@ function buildRecoveryPlan(
     }
 
 
+    const comparison = compareWithCheckpoint(id);
+
+    if (!comparison.success) {
+        return {
+            success: false,
+            recoverable: false,
+            error: comparison.error || "Unable to compare live task with checkpoint.",
+            plan: null
+        };
+    }
+
+    if (comparison.checkpointExists && comparison.changed) {
+        return {
+            success: true,
+            recoverable: false,
+            reason: "live-task-drift",
+            plan: {
+                action: "no-recovery",
+                taskId: id,
+                reason: "Live task differs from the latest checkpoint; inspect and reconcile before recovery.",
+                executable: false,
+                executionMode: "inspection-only",
+                requiresControlledExecution: true
+            }
+        };
+    }
+
     return checkpointEngine
         .buildRecoveryPlan(
             id
