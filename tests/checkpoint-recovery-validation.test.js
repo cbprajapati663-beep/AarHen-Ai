@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const engine = require("../core/checkpointEngine");
 const manager = require("../core/agentManager");
+const controller = require("../core/checkpointRecoveryController");
 const bridge = require("../core/checkpointBridge");
 
 function checkpoint(overrides = {}) {
@@ -90,5 +91,11 @@ assert.equal(plan.plan.executable, false);
 assert.equal(plan.plan.executionMode, "inspection-only");
 assert.equal(plan.plan.requiresControlledExecution, true);
 assert.deepEqual(valid.task, before);
+
+const capabilities = controller.getStatus().capabilities;
+assert.equal(capabilities.recoveryPlanInspectionOnly, true);
+assert.equal(capabilities.automaticCheckpointRestore, false);
+assert.equal(capabilities.automaticTaskResume, false);
+assert.equal(capabilities.controlledExecutionRequired, true);
 
 console.log("Checkpoint recovery validation tests passed.");
