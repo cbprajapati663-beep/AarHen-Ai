@@ -307,4 +307,18 @@ assert.deepEqual(noCheckpointComparison.differences, []);
 assert.equal(engine.compareWithLatestCheckpoint(null).success, false);
 assert.equal(engine.compareWithLatestCheckpoint(undefined).success, false);
 
+// Checkpoint comparison must remain read-only for caller-owned task data.
+const comparisonInput = structuredClone(manager.getTask("step-drift-task").task);
+const comparisonInputBefore = structuredClone(comparisonInput);
+const readOnlyComparison = engine.compareWithLatestCheckpoint(comparisonInput);
+assert.equal(readOnlyComparison.success, true);
+assert.deepEqual(comparisonInput, comparisonInputBefore);
+
+// A frozen caller snapshot must also be safely comparable.
+const frozenInput = structuredClone(comparisonInput);
+Object.freeze(frozenInput.steps[0]);
+Object.freeze(frozenInput.steps);
+Object.freeze(frozenInput);
+assert.equal(engine.compareWithLatestCheckpoint(frozenInput).success, true);
+
 console.log("Checkpoint recovery validation tests passed.");
