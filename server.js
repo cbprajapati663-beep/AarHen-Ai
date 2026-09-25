@@ -284,7 +284,8 @@ const server = http.createServer(
                 const result = await visionApi.analyzeImage(image, {
                     prompt: body.prompt,
                     language: body.language,
-                    detail: body.detail
+                    detail: body.detail,
+                    mimeType
                 });
 
                 const statusCode = result.success ? 200 :
