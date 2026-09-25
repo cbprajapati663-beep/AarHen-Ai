@@ -43,7 +43,7 @@ test("synthesizeMultilingual passes detected language to provider", async () => 
   assert.equal(result.result.audioBase64, "YWJj");
 });
 
-test("analyzeMultilingual passes prompt language to provider", async () => {
+test("synthesizeMultilingual preserves provider failures", async () => {\n  const failure = { success: false, error: "offline", code: "TTS_UNAVAILABLE" };\n  assert.equal(await synthesizeMultilingual(async () => failure, "hello"), failure);\n});\n\ntest("analyzeMultilingual passes prompt language to provider", async () => {
   const result = await analyzeMultilingual(async (_image, options) => {
     assert.equal(options.language, "gujarati");
     return { description: "વાહન" };
