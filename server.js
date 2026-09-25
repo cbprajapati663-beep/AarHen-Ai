@@ -517,6 +517,40 @@ const server = http.createServer(
                 }
             }
 
+            if (pathname === "/document/search" && req.method === "GET") {
+                const query = (url.searchParams.get("q") || "").trim();
+                if (!query) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Search query parameter q is required"
+                    });
+                }
+                if (query.length > 500) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Search query must not exceed 500 characters"
+                    });
+                }
+
+                const requestedLimit = Number(url.searchParams.get("limit")) || 10;
+                const limit = Math.max(1, Math.min(50, Math.floor(requestedLimit)));
+                const result = await learningApi.searchLearnedKnowledge(query, limit);
+                const nested = result && result.results;
+                const results = Array.isArray(nested)
+                    ? nested
+                    : Array.isArray(nested?.results)
+                        ? nested.results
+                        : [];
+                return sendJson(res, result.success ? 200 : 500, {
+                    success: Boolean(result.success),
+                    query,
+                    count: results.length,
+                    results,
+                    source: "AarHen learned knowledge store",
+                    status: result.success ? "document-knowledge-search-complete" : "search-failed"
+                });
+            }
+
             /* =================================================
                LEARNING API
                ================================================= */
