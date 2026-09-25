@@ -150,6 +150,10 @@ assert.equal(
   true
 );
 assert.deepEqual(manager.getTask("inspection-task").task, afterStart);
+assert.equal(driftInspection.recoveryPlan.recoverable, false);
+assert.equal(driftInspection.recoveryPlan.reason, "live-task-drift");
+assert.equal(driftInspection.recoveryPlan.plan.executable, false);
+assert.equal(driftInspection.recoveryPlan.plan.executionMode, "inspection-only");
 
 // Changes to step metadata must be detected even when aggregate counters stay equal.
 manager.reset();
