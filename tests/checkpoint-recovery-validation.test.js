@@ -292,4 +292,19 @@ assert.equal(stepDrift.comparison.changed, true);
 assert.equal(stepDrift.comparison.differences.some(item => item.field === "steps"), true);
 assert.equal(stepDrift.comparison.differences.some(item => item.field === "totalSteps"), true);
 
+// Comparing a valid task with no saved checkpoint must be a safe no-op.
+const noCheckpointComparison = engine.compareWithLatestCheckpoint({
+  id: "no-checkpoint-comparison-task",
+  status: manager.TASK_STATES.READY,
+  steps: []
+});
+assert.equal(noCheckpointComparison.success, true);
+assert.equal(noCheckpointComparison.checkpointExists, false);
+assert.equal(noCheckpointComparison.changed, false);
+assert.deepEqual(noCheckpointComparison.differences, []);
+
+// Invalid comparison input must fail closed.
+assert.equal(engine.compareWithLatestCheckpoint(null).success, false);
+assert.equal(engine.compareWithLatestCheckpoint(undefined).success, false);
+
 console.log("Checkpoint recovery validation tests passed.");
