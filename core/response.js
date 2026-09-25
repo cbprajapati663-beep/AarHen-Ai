@@ -1476,6 +1476,14 @@ function resolveDocumentAnswerContext(
             execution.documentContext
                 ?.answerContext,
 
+            execution.context
+                ?.answerContext,
+
+            execution.context
+                ?.brain
+                ?.knowledge
+                ?.documentAnswerContext,
+
             root.requestContext
                 ?.answerContext,
 
