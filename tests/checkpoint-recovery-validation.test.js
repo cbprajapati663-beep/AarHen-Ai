@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const engine = require("../core/checkpointEngine");
 const manager = require("../core/agentManager");
+const bridge = require("../core/checkpointBridge");
 
 function checkpoint(overrides = {}) {
   const task = {
@@ -79,5 +80,15 @@ assert.equal(engine.validateCheckpointForRecovery(stopped).valid, false);
 
 const cancelled = checkpoint({ status: manager.TASK_STATES.CANCELLED });
 assert.equal(engine.validateCheckpointForRecovery(cancelled).valid, false);
+
+// Recovery plans are descriptive only and must not mutate live task state.
+const before = structuredClone(valid.task);
+const plan = engine.buildRecoveryPlan(valid.task.id);
+assert.equal(plan.success, true);
+assert.equal(plan.recoverable, true);
+assert.equal(plan.plan.executable, false);
+assert.equal(plan.plan.executionMode, "inspection-only");
+assert.equal(plan.plan.requiresControlledExecution, true);
+assert.deepEqual(valid.task, before);
 
 console.log("Checkpoint recovery validation tests passed.");
