@@ -89,3 +89,31 @@ test("buildRequestContext caps requested knowledge limit at ten", () => {
     knowledge.augmentBrainResult = originalAugment;
   }
 });
+
+test("buildRequestContext clears stale document data when document knowledge is disabled", () => {
+  const result = pipeline.buildRequestContext("Question", {
+    documentKnowledge: false,
+    answerContext: "Sensitive prior document text",
+    documentEvidence: [{ reference: "DOC-OLD" }],
+    documentGrounding: { enabled: true },
+    documentRag: { old: true },
+    documentDocuments: { results: [{ title: "Old file" }] },
+    brain: {
+      knowledge: {
+        keep: "yes",
+        documentAnswerContext: "Sensitive prior document text",
+        documentEvidence: [{ reference: "DOC-OLD" }]
+      }
+    }
+  });
+
+  assert.equal(result.context.answerContext, "");
+  assert.deepEqual(result.context.documentEvidence, []);
+  assert.equal(result.context.documentGrounding, null);
+  assert.equal(result.context.documentRag, null);
+  assert.equal(result.context.documentDocuments, null);
+  assert.equal(result.context.brain.knowledge.keep, "yes");
+  assert.equal(result.context.brain.knowledge.documentAnswerContext, "");
+  assert.deepEqual(result.context.brain.knowledge.documentEvidence, []);
+  assert.equal(result.context.documentKnowledgeEnabled, false);
+});
