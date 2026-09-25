@@ -152,6 +152,9 @@ assert.equal(
 assert.deepEqual(manager.getTask("inspection-task").task, afterStart);
 assert.equal(driftInspection.recoveryPlan.recoverable, false);
 assert.equal(driftInspection.recoveryPlan.reason, "live-task-drift");
+assert.equal(driftInspection.recoveryCandidate.recoverable, false);
+assert.equal(driftInspection.recoveryCandidate.reason, "live-task-drift");
+assert.equal(Array.isArray(driftInspection.recoveryCandidate.differences), true);
 assert.equal(driftInspection.recoveryPlan.plan.executable, false);
 assert.equal(driftInspection.recoveryPlan.plan.executionMode, "inspection-only");
 assert.equal(Array.isArray(driftInspection.recoveryPlan.plan.differences), true);
