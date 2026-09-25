@@ -1654,7 +1654,10 @@ function formatDocument(
         resolveDocumentStatus(input);
 
 
+    // Respect explicit document-knowledge disable flags before
+    // rendering any stale document context or evidence.
     if (
+        !status.enabled ||
         !status.detected
     ) {
 
