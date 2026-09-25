@@ -345,6 +345,25 @@ function buildStepSnapshot(
                 input.action
             ),
 
+        policy:
+            clone(
+                input.policy
+            ) || null,
+
+        input:
+            clone(
+                input.input
+            ) || {},
+
+        metadata:
+            clone(
+                input.metadata
+            ) || {},
+
+        createdAt:
+            input.createdAt ||
+            null,
+
         status:
             safeString(
                 input.status
