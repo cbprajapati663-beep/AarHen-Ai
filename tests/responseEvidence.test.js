@@ -149,3 +149,34 @@ test("formatDocument resolves evidence from requestContext", () => {
 
     assert.match(output, /DOC-REQUEST — Request evidence\.pdf/);
 });
+
+
+test("formatDocument suppresses stale document context when document knowledge is disabled", () => {
+    const output = response.formatDocument({
+        documentKnowledgeEnabled: false,
+        documentKnowledge: [{ title: "Old policy", content: "Stale content" }],
+        documentEvidence: [
+            { reference: "DOC-STALE", title: "Stale evidence.pdf" }
+        ],
+        answerContext: "Stale answer context."
+    });
+
+    assert.equal(output, "");
+});
+
+test("createResponse does not append stale document evidence when disabled", () => {
+    const output = response.createResponse({
+        documentKnowledgeEnabled: false,
+        execution: {
+            message: "Task completed.",
+            documentKnowledge: [{ title: "Old policy", content: "Stale content" }],
+            documentEvidence: [
+                { reference: "DOC-STALE", title: "Stale evidence.pdf" }
+            ]
+        }
+    });
+
+    assert.match(output, /Task completed\./);
+    assert.doesNotMatch(output, /DOC-STALE/);
+    assert.doesNotMatch(output, /Stale content/);
+});
