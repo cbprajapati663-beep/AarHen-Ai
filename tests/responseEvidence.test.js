@@ -101,3 +101,18 @@ test("formatDocument resolves answer context from nested execution context", () 
 
     assert.match(output, /Grounded answer context from executor\\./);
 });
+
+test("createResponse appends answer context from nested execution context", () => {
+    const output = response.createResponse({
+        execution: {
+            message: "Task completed.",
+            context: {
+                answerContext: "Grounded context from nested executor."
+            }
+        }
+    });
+
+    assert.match(output, /Task completed\\./);
+    assert.match(output, /Document Knowledge/);
+    assert.match(output, /Grounded context from nested executor\\./);
+});
