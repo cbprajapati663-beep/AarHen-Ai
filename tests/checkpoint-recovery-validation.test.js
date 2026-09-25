@@ -321,4 +321,24 @@ Object.freeze(frozenInput.steps);
 Object.freeze(frozenInput);
 assert.equal(engine.compareWithLatestCheckpoint(frozenInput).success, true);
 
+// Building a checkpoint must not mutate the caller-owned task or nested step data.
+const checkpointInput = {
+  id: "snapshot-purity-task",
+  agentId: "snapshot-purity-agent",
+  status: manager.TASK_STATES.RUNNING,
+  currentStepIndex: 0,
+  retries: 1,
+  warnings: ["keep this warning"],
+  steps: [{
+    id: "snapshot-purity-step",
+    index: 0,
+    status: manager.STEP_STATES.PENDING,
+    result: { payload: { preserved: true } }
+  }]
+};
+const checkpointInputBefore = structuredClone(checkpointInput);
+const builtSnapshot = engine.buildCheckpoint(checkpointInput, { id: "snapshot-purity-checkpoint" });
+assert.equal(builtSnapshot.taskId, "snapshot-purity-task");
+assert.deepEqual(checkpointInput, checkpointInputBefore);
+
 console.log("Checkpoint recovery validation tests passed.");
