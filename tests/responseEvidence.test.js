@@ -198,3 +198,24 @@ test("formatDocument suppresses nested execution document context when disabled"
 
     assert.equal(output, "");
 });
+
+
+test("formatDocument respects nested brain document knowledge disable flags", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Stale policy", content: "Hidden content" }],
+        execution: {
+            context: {
+                brain: {
+                    knowledge: {
+                        documentKnowledgeEnabled: false,
+                        documentEvidence: [
+                            { reference: "DOC-BRAIN-DISABLED", title: "Hidden source.pdf" }
+                        ]
+                    }
+                }
+            }
+        }
+    });
+
+    assert.equal(output, "");
+});
