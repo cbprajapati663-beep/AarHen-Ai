@@ -227,6 +227,36 @@ function buildRequestContext(
 
                 ...existingContext,
 
+                // Remove stale document-derived data so disabling
+                // document knowledge cannot leak prior evidence.
+                documentContext: null,
+                documentRag: null,
+                documentDocuments: null,
+                documentKnowledge: null,
+                documentEvidence: [],
+                documentGrounding: null,
+                answerContext: "",
+                knowledgeContext: null,
+
+                brain: {
+                    ...safeObject(existingContext.brain),
+                    documentAware: false,
+                    knowledge: {
+                        ...safeObject(existingContext.brain?.knowledge),
+                        documentKnowledge: [],
+                        documentDocuments: null,
+                        documentRag: null,
+                        documentUnifiedKnowledge: null,
+                        documentAnswerContext: "",
+                        documentKnowledgeContext: null,
+                        documentKnowledgeAvailable: false,
+                        documentDetected: false,
+                        documentEvidence: [],
+                        documentGrounding: null
+                    }
+                },
+
+                documentAware: false,
                 documentKnowledgeEnabled:
                     false
             },
