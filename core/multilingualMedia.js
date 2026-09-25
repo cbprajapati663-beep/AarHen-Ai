@@ -47,6 +47,7 @@ async function synthesizeMultilingual(synthesize, text, options = {}) {
   }
   const language = resolveMediaLanguage({ language: options.language, text });
   const result = await synthesize(text, { ...options, language });
+  if (result && result.success === false) return result;
   return { success: true, language, languageInfo: getLanguageInfo(language), result };
 }
 
