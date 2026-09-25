@@ -1,8 +1,9 @@
 "use strict";
 
 const { VisionEngine, VisionEngineError } = require("./vision");
+const { createOpenAIVisionProvider } = require("./openaiVisionProvider");
 
-let engine = new VisionEngine();
+let engine = new VisionEngine(process.env.OPENAI_API_KEY ? { analyzer: createOpenAIVisionProvider() } : {});
 
 function configureVisionEngine(options = {}) {
   engine = new VisionEngine(options);
