@@ -1608,6 +1608,11 @@ function resolveDocumentStatus(
 
             executionContext
                 .documentKnowledgeEnabled !==
+                false &&
+
+            root.execution
+                ?.context
+                ?.documentKnowledgeEnabled !==
                 false,
 
         aware:
