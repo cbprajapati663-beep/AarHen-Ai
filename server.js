@@ -7,6 +7,8 @@ const memory = require("./core/memory");
 const memoryHistory = require("./core/memoryHistory");
 const memoryApi = require("./core/memoryApi");
 const voiceApi = require("./core/voiceApi");
+const language = require("./core/language");
+const multilingualMedia = require("./core/multilingualMedia");
 
 const PORT = process.env.PORT || 3000;
 
@@ -221,6 +223,33 @@ const server = http.createServer(
                 });
             }
 
+
+            /* =================================================
+               MULTILINGUAL API
+               ================================================= */
+
+            if (pathname === "/language/detect" && req.method === "POST") {
+                const body = await readBody(req);
+                if (typeof body.text !== "string" || !body.text.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "text is required"
+                    });
+                }
+                const detected = language.detectLanguage(body.text);
+                return sendJson(res, 200, {
+                    success: true,
+                    language: detected,
+                    languageInfo: language.getLanguageInfo(detected)
+                });
+            }
+
+            if (pathname === "/language/status" && req.method === "GET") {
+                return sendJson(res, 200, {
+                    success: true,
+                    languages: language.LANGUAGES
+                });
+            }
 
             /* =================================================
                VOICE ENGINE API
