@@ -1733,9 +1733,12 @@ function formatDocument(
 
     const evidenceCandidates = [
         input.documentEvidence,
+        input.requestContext?.documentEvidence,
         input.executionContext?.documentEvidence,
+        input.executionContext?.brain?.knowledge?.documentEvidence,
         input.execution?.documentEvidence,
         input.execution?.context?.documentEvidence,
+        input.execution?.context?.brain?.knowledge?.documentEvidence,
         input.brain?.knowledge?.documentEvidence
     ];
 
