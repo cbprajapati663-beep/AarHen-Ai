@@ -89,3 +89,15 @@ test("formatDocument safely handles malformed evidence entries", () => {
     assert.match(output, /DOC-2 — Document evidence 2/);
     assert.match(output, /DOC-3 — Valid source/);
 });
+
+test("formatDocument resolves answer context from nested execution context", () => {
+    const output = response.formatDocument({
+        execution: {
+            context: {
+                answerContext: "Grounded answer context from executor."
+            }
+        }
+    });
+
+    assert.match(output, /Grounded answer context from executor\\./);
+});
