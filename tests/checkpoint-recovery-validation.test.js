@@ -352,4 +352,12 @@ isolationRead.checkpoint.task.steps[0].result.payload.preserved = "caller-change
 const isolationReadAgain = engine.getCheckpoint("snapshot-isolation-checkpoint");
 assert.equal(isolationReadAgain.checkpoint.task.steps[0].result.payload.preserved, true);
 
+// Mutating checkpoint data returned by inspection must not alter stored checkpoint state.
+const storedBeforeMutation = bridge.getLatestCheckpoint("inspection-task");
+assert.equal(storedBeforeMutation.success, true);
+const exposedInspection = controller.inspectTask("inspection-task");
+exposedInspection.latestCheckpoint.task.steps[0].name = "caller-mutated";
+const storedAfterMutation = bridge.getLatestCheckpoint("inspection-task");
+assert.equal(storedAfterMutation.checkpoint.task.steps[0].name, storedBeforeMutation.checkpoint.task.steps[0].name);
+
 console.log("Checkpoint recovery validation tests passed.");
