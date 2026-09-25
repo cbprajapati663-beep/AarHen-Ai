@@ -2155,97 +2155,7 @@ async function process(
         .memoryAction =
             memoryAction;
 
-    const existingDocumentKnowledge =
-        Array.isArray(context.documentKnowledge)
-            ? context.documentKnowledge
-            : [];
-
-    const existingDocumentResults =
-        Array.isArray(context.documentDocuments?.results)
-            ? context.documentDocuments.results
-            : [];
-
-    const existingEvidence =
-        Array.isArray(context.documentEvidence)
-            ? context.documentEvidence
-            : [];
-
-    const retrievedEvidence = ragKnowledge.results
-        .slice(0, 5)
-        .map((item, index) => ({
-            reference: "RAG-" + String(index + 1),
-            title: String(item.title || "Learned Knowledge"),
-            source: item.source || null,
-            content: String(item.content || ""),
-            confidence: item.confidence ?? null,
-            verified: item.verified === true
-        }));
-
-    executionContext.ragKnowledge = ragKnowledge;
-    executionContext.documentKnowledge = [
-        ...existingDocumentKnowledge,
-        ...ragKnowledge.results
-    ];
-    executionContext.documentDocuments = {
-        results: [
-            ...existingDocumentResults,
-            ...ragKnowledge.results
-        ],
-        count: existingDocumentResults.length + ragKnowledge.results.length,
-        available:
-            existingDocumentResults.length + ragKnowledge.results.length > 0
-    };
-    executionContext.documentRag = {
-        ...(context.documentRag && typeof context.documentRag === "object"
-            ? context.documentRag
-            : {}),
-        learnedKnowledge: ragKnowledge
-    };
-    executionContext.documentAware =
-        context.documentAware === true ||
-        existingDocumentKnowledge.length > 0 ||
-        existingDocumentResults.length > 0 ||
-        ragKnowledge.count > 0;
-    executionContext.documentKnowledgeEnabled =
-        context.documentKnowledgeEnabled !== false;
-
-    const ragAnswerContext = ragKnowledge.results
-        .slice(0, 5)
-        .map((item, index) =>
-            String(index + 1) + ". " + item.title + ": " + item.content
-        )
-        .join("\n");
-
-    executionContext.answerContext = [
-        String(context.answerContext || "").trim(),
-        ragAnswerContext
-            ? "LEARNED KNOWLEDGE CONTEXT:\n" + ragAnswerContext
-            : ""
-    ].filter(Boolean).join("\n\n");
-
-    executionContext.documentEvidence = [
-        ...existingEvidence,
-        ...retrievedEvidence
-    ];
-
-    executionContext.documentGrounding = {
-        enabled:
-            context.documentKnowledgeEnabled !== false &&
-            executionContext.documentEvidence.length > 0,
-        mode: "retrieved-evidence",
-        evidenceCount: executionContext.documentEvidence.length,
-        sourceTitles: executionContext.documentEvidence
-            .map(item => item.title),
-        evidence: executionContext.documentEvidence.map(item => ({
-            reference: item.reference,
-            title: item.title,
-            source: item.source,
-            confidence: item.confidence,
-            verified: item.verified
-        })),
-        instruction:
-            "Use retrieved document evidence only for claims it supports. Cite a source using its provided reference when supported. If the evidence is missing or insufficient, clearly say that the documents do not provide the answer. Do not invent document facts or citations."
-    };
+    mergeKnowledgeIntoExecutionContext(executionContext, context, ragKnowledge);
 
 
     // --------------------------------------------------------
@@ -2636,6 +2546,78 @@ async function process(
 
     return orchestrationResult;
 
+}
+
+
+// ============================================================
+// MERGE LEARNED KNOWLEDGE WITH EXISTING DOCUMENT CONTEXT
+// ============================================================
+
+function mergeKnowledgeIntoExecutionContext(
+    executionContext,
+    context = {},
+    ragKnowledge = { enabled: false, count: 0, results: [] }
+) {
+    const results = Array.isArray(ragKnowledge.results) ? ragKnowledge.results : [];
+    const existingDocumentKnowledge = Array.isArray(context.documentKnowledge) ? context.documentKnowledge : [];
+    const existingDocumentResults = Array.isArray(context.documentDocuments?.results)
+        ? context.documentDocuments.results
+        : [];
+    const existingEvidence = Array.isArray(context.documentEvidence) ? context.documentEvidence : [];
+
+    const retrievedEvidence = results.slice(0, 5).map((item, index) => ({
+        reference: "RAG-" + String(index + 1),
+        title: String(item.title || "Learned Knowledge"),
+        source: item.source || null,
+        content: String(item.content || ""),
+        confidence: item.confidence ?? null,
+        verified: item.verified === true
+    }));
+
+    executionContext.ragKnowledge = ragKnowledge;
+    executionContext.documentKnowledge = [...existingDocumentKnowledge, ...results];
+    executionContext.documentDocuments = {
+        results: [...existingDocumentResults, ...results],
+        count: existingDocumentResults.length + results.length,
+        available: existingDocumentResults.length + results.length > 0
+    };
+    executionContext.documentRag = {
+        ...(context.documentRag && typeof context.documentRag === "object" ? context.documentRag : {}),
+        learnedKnowledge: ragKnowledge
+    };
+    executionContext.documentAware =
+        context.documentAware === true ||
+        existingDocumentKnowledge.length > 0 ||
+        existingDocumentResults.length > 0 ||
+        results.length > 0;
+    executionContext.documentKnowledgeEnabled = context.documentKnowledgeEnabled !== false;
+
+    const ragAnswerContext = results.slice(0, 5)
+        .map((item, index) => String(index + 1) + ". " + (item.title || "Learned Knowledge") + ": " + item.content)
+        .join("\n");
+
+    executionContext.answerContext = [
+        String(context.answerContext || "").trim(),
+        ragAnswerContext ? "LEARNED KNOWLEDGE CONTEXT:\n" + ragAnswerContext : ""
+    ].filter(Boolean).join("\n\n");
+
+    executionContext.documentEvidence = [...existingEvidence, ...retrievedEvidence];
+    executionContext.documentGrounding = {
+        enabled: context.documentKnowledgeEnabled !== false && executionContext.documentEvidence.length > 0,
+        mode: "retrieved-evidence",
+        evidenceCount: executionContext.documentEvidence.length,
+        sourceTitles: executionContext.documentEvidence.map(item => item.title),
+        evidence: executionContext.documentEvidence.map(item => ({
+            reference: item.reference,
+            title: item.title,
+            source: item.source,
+            confidence: item.confidence,
+            verified: item.verified
+        })),
+        instruction:
+            "Use retrieved document evidence only for claims it supports. Cite a source using its provided reference when supported. If the evidence is missing or insufficient, clearly say that the documents do not provide the answer. Do not invent document facts or citations."
+    };
+    return executionContext;
 }
 
 
@@ -3089,6 +3071,7 @@ module.exports = {
     buildExecutionContext,
 
     retrieveKnowledgeContext,
+    mergeKnowledgeIntoExecutionContext,
 
     shouldUseAutonomousWorker,
 
