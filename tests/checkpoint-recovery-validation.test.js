@@ -5,7 +5,6 @@ const engine = require("../core/checkpointEngine");
 const manager = require("../core/agentManager");
 const controller = require("../core/checkpointRecoveryController");
 const bridge = require("../core/checkpointBridge");
-const bridge = require("../core/checkpointBridge");
 
 function checkpoint(overrides = {}) {
   const task = {
