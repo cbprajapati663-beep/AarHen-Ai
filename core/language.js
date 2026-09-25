@@ -10,6 +10,14 @@ const LANGUAGES = {
     hinglish: { name: "Hinglish", code: "hi-en" }
 };
 
+const LANGUAGE_ALIASES = {
+    hi: "hindi",
+    en: "english",
+    gu: "gujarati",
+    "hi-en": "hinglish",
+    "hinglish": "hinglish"
+};
+
 const HINGLISH_WORDS = new Set([
     "hai", "hain", "haan", "kya", "kaise", "kaisa", "kaisi",
     "mujhe", "mujhko", "mera", "meri", "mere", "tum", "aap",
@@ -19,17 +27,17 @@ const HINGLISH_WORDS = new Set([
 ]);
 
 function tokenize(value) {
-    return value.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+    return value.toLowerCase().match(/[\\p{L}\\p{N}]+/gu) || [];
 }
 
 function detectLanguage(text) {
     const value = String(text ?? "");
 
-    if (/[\u0A80-\u0AFF]/u.test(value)) {
+    if (/[\\u0A80-\\u0AFF]/u.test(value)) {
         return "gujarati";
     }
 
-    if (/[\u0900-\u097F]/u.test(value)) {
+    if (/[\\u0900-\\u097F]/u.test(value)) {
         return "hindi";
     }
 
@@ -44,9 +52,10 @@ function detectLanguage(text) {
 
 function resolveLanguage(requestedLanguage, text) {
     const requested = String(requestedLanguage ?? "").trim().toLowerCase();
+    const canonical = LANGUAGE_ALIASES[requested] || requested;
 
-    if (requested && Object.prototype.hasOwnProperty.call(LANGUAGES, requested)) {
-        return requested;
+    if (canonical && Object.prototype.hasOwnProperty.call(LANGUAGES, canonical)) {
+        return canonical;
     }
 
     return detectLanguage(text);
@@ -54,11 +63,13 @@ function resolveLanguage(requestedLanguage, text) {
 
 function getLanguageInfo(language) {
     const key = String(language ?? "").trim().toLowerCase();
-    return LANGUAGES[key] || LANGUAGES.english;
+    const canonical = LANGUAGE_ALIASES[key] || key;
+    return LANGUAGES[canonical] || LANGUAGES.english;
 }
 
 module.exports = {
     LANGUAGES,
+    LANGUAGE_ALIASES,
     detectLanguage,
     resolveLanguage,
     getLanguageInfo
