@@ -36,4 +36,28 @@ assert.equal(engine.validateCheckpointForRecovery(approval).valid, false);
 const completed = checkpoint({ status: manager.TASK_STATES.COMPLETED });
 assert.equal(engine.validateCheckpointForRecovery(completed).valid, false);
 
+
+const wrongTaskIdentity = structuredClone(valid);
+wrongTaskIdentity.task.id = "different-task";
+assert.equal(engine.validateCheckpointForRecovery(wrongTaskIdentity).valid, false);
+
+const missingSteps = structuredClone(valid);
+missingSteps.task.steps = null;
+assert.equal(engine.validateCheckpointForRecovery(missingSteps).valid, false);
+
+const notEligible = structuredClone(valid);
+notEligible.recoveryEligible = false;
+assert.equal(engine.validateCheckpointForRecovery(notEligible).valid, false);
+
+const noPendingSteps = checkpoint({
+  steps: [{ id: "step-1", index: 0, status: manager.STEP_STATES.COMPLETED }]
+});
+assert.equal(engine.validateCheckpointForRecovery(noPendingSteps).valid, false);
+
+const stopped = checkpoint({ status: manager.TASK_STATES.STOPPED });
+assert.equal(engine.validateCheckpointForRecovery(stopped).valid, false);
+
+const cancelled = checkpoint({ status: manager.TASK_STATES.CANCELLED });
+assert.equal(engine.validateCheckpointForRecovery(cancelled).valid, false);
+
 console.log("Checkpoint recovery validation tests passed.");
