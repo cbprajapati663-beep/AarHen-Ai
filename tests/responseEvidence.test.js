@@ -33,3 +33,16 @@ test("formatDocument limits displayed evidence references to five", () => {
     assert.match(output, /DOC-5 — File 5/);
     assert.doesNotMatch(output, /DOC-6 — File 6/);
 });
+
+test("formatDocument uses stable fallback references for evidence without an id", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        documentEvidence: [
+            { title: "First source" },
+            { title: "Second source" }
+        ]
+    });
+
+    assert.match(output, /DOC-1 — First source/);
+    assert.match(output, /DOC-2 — Second source/);
+});
