@@ -1351,6 +1351,10 @@ function compareWithLatestCheckpoint(
 
         "currentStepId",
 
+        "totalSteps",
+
+        "steps",
+
         "completedSteps",
 
         "failedSteps",
