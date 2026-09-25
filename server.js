@@ -1,4 +1,7 @@
 const http = require("http");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 const { orchestrate } = require("./core/orchestrator");
 const auth = require("./core/auth");
@@ -435,6 +438,83 @@ const server = http.createServer(
                     confidence: body.confidence
                 });
                 return sendJson(res, result.success ? 200 : 422, result);
+            }
+
+            if (pathname === "/document/ingest" && req.method === "POST") {
+                const body = await readBody(req);
+                const raw = body.base64 || body.data;
+                if (typeof raw !== "string" || !raw.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "base64 document data is required"
+                    });
+                }
+
+                const suppliedName = typeof body.fileName === "string" ? body.fileName.trim() : "";
+                const fileName = path.basename(suppliedName.replace(/\\\\/g, "/"));
+                const extension = path.extname(fileName).toLowerCase();
+                const supported = documentIngestion.getStatus().capabilities &&
+                    [".pdf", ".docx", ".txt", ".md", ".markdown", ".json"];
+                if (!fileName || !supported.includes(extension)) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "fileName must use a supported extension",
+                        supportedExtensions: supported
+                    });
+                }
+
+                const encoded = raw.trim().replace(/^data:[^;,]+;base64,/, "");
+                const maxBytes = 25 * 1024 * 1024;
+                if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) ||
+                    encoded.length % 4 !== 0) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Invalid base64 document data"
+                    });
+                }
+                if (!encoded.length || encoded.length > Math.ceil(maxBytes / 3) * 4) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Document must not exceed 25 MiB"
+                    });
+                }
+
+                const buffer = Buffer.from(encoded, "base64");
+                if (!buffer.length || buffer.length > maxBytes) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Document must be between 1 byte and 25 MiB"
+                    });
+                }
+
+                let tempDir;
+                try {
+                    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-document-"));
+                    const tempPath = path.join(tempDir, fileName);
+                    fs.writeFileSync(tempPath, buffer, { flag: "wx", mode: 0o600 });
+                    const result = await documentIngestion.ingestDocument(tempPath, {
+                        category: body.category,
+                        source: body.source || "document-upload-api",
+                        chunkSize: body.chunkSize,
+                        chunkOverlap: body.chunkOverlap,
+                        confidence: body.confidence
+                    });
+                    const statusCode = result.success ? 200 :
+                        result.document?.dependencyMissing ? 503 : 422;
+                    return sendJson(res, statusCode, result);
+                } catch (error) {
+                    return sendJson(res, 500, {
+                        success: false,
+                        error: "Document ingestion failed",
+                        details: error.message
+                    });
+                } finally {
+                    if (tempDir) {
+                        try {
+                            fs.rmSync(tempDir, { recursive: true, force: true });
+                        } catch {}
+                    }
+                }
             }
 
             /* =================================================
