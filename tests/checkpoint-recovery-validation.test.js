@@ -121,6 +121,14 @@ assert.equal(saved.success, true);
 const beforeInspectSnapshot = structuredClone(manager.getTask("inspection-task").task);
 const inspection = controller.inspectTask("inspection-task");
 assert.equal(inspection.success, true);
+assert.equal(inspection.taskId, "inspection-task");
+assert.equal(inspection.checkpointExists, true);
+assert.equal(inspection.latestCheckpoint.taskId, "inspection-task");
+assert.equal(inspection.comparison.success, true);
+assert.equal(inspection.comparison.changed, false);
+assert.equal(inspection.recoveryPlan.success, true);
+assert.equal(inspection.recoveryPlan.plan.executable, false);
+assert.equal(inspection.recoveryPlan.plan.executionMode, "inspection-only");
 assert.deepEqual(manager.getTask("inspection-task").task, beforeInspectSnapshot);
 
 console.log("Checkpoint recovery validation tests passed.");
