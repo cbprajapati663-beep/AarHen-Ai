@@ -2184,6 +2184,19 @@ async function process(
             )
             .join("\n");
 
+    executionContext.documentGrounding = {
+        enabled:
+            context.documentKnowledgeEnabled !== false &&
+            ragKnowledge.count > 0,
+        mode: "retrieved-evidence",
+        evidenceCount: ragKnowledge.count,
+        sourceTitles: ragKnowledge.results
+            .slice(0, 5)
+            .map(item => String(item.title || "Learned Knowledge")),
+        instruction:
+            "Use retrieved document evidence only for claims it supports. If the evidence is missing or insufficient, clearly say that the documents do not provide the answer. Do not invent document facts or citations."
+    };
+
 
     // --------------------------------------------------------
     // RESEARCH CONTEXT
