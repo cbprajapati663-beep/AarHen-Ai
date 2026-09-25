@@ -170,9 +170,13 @@ assert.equal(stepActionDrift.differences.some(item => item.field === "steps"), t
 // Verify drift detection covers key task metadata beyond status and steps.
 for (const [field, value] of [
   ["request", "Modified request"],
+  ["description", "Changed description"],
   ["priority", "critical"],
+  ["autonomy", false],
   ["warnings", ["new warning"]],
-  ["maxRetries", 99]
+  ["retries", 2],
+  ["maxRetries", 99],
+  ["error", "changed error"]
 ]) {
   const alteredTask = structuredClone(beforeInspectSnapshot);
   alteredTask[field] = value;
