@@ -1744,18 +1744,19 @@ function formatDocument(
         evidence
             .slice(0, 5)
             .forEach((item, index) => {
+                const evidenceItem = safeObject(item);
                 const reference =
                     firstNonEmpty(
-                        item.reference,
-                        item.ref,
-                        item.id,
+                        evidenceItem.reference,
+                        evidenceItem.ref,
+                        evidenceItem.id,
                         `DOC-${index + 1}`
                     );
 
                 const title =
                     firstNonEmpty(
-                        item.title,
-                        item.source,
+                        evidenceItem.title,
+                        evidenceItem.source,
                         `Document evidence ${index + 1}`
                     );
 
