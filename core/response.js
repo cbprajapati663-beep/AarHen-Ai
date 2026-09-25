@@ -1611,7 +1611,19 @@ function resolveDocumentStatus(
                 false &&
 
             root.execution
+                ?.documentKnowledgeEnabled !==
+                false &&
+
+            root.execution
                 ?.context
+                ?.brain
+                ?.knowledge
+                ?.documentKnowledgeEnabled !==
+                false &&
+
+            root.executionContext
+                ?.brain
+                ?.knowledge
                 ?.documentKnowledgeEnabled !==
                 false,
 
