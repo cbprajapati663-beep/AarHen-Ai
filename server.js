@@ -10,6 +10,7 @@ const voiceApi = require("./core/voiceApi");
 const visionApi = require("./core/visionApi");
 const language = require("./core/language");
 const multilingualMedia = require("./core/multilingualMedia");
+const documentIngestion = require("./engines/documentIngestion");
 
 const PORT = process.env.PORT || 3000;
 
@@ -396,6 +397,44 @@ const server = http.createServer(
                 const statusCode = result.success ? 200 :
                     result.code === "VISION_UNAVAILABLE" ? 503 : 422;
                 return sendJson(res, statusCode, result);
+            }
+
+            /* =================================================
+               DOCUMENT LEARNING / INGESTION API
+               ================================================= */
+
+            if (pathname === "/document/status" && req.method === "GET") {
+                return sendJson(res, 200, {
+                    success: true,
+                    documentLearning: require("./engines/documentLearning").getStatus(),
+                    ingestion: documentIngestion.getStatus()
+                });
+            }
+
+            if (pathname === "/document/ingest-text" && req.method === "POST") {
+                const body = await readBody(req);
+                if (typeof body.text !== "string" || !body.text.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "text is required"
+                    });
+                }
+                if (body.text.length > 500000) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Text must not exceed 500000 characters"
+                    });
+                }
+
+                const result = documentIngestion.ingestText(body.text, {
+                    fileName: body.fileName,
+                    category: body.category,
+                    source: body.source,
+                    chunkSize: body.chunkSize,
+                    chunkOverlap: body.chunkOverlap,
+                    confidence: body.confidence
+                });
+                return sendJson(res, result.success ? 200 : 422, result);
             }
 
             /* =================================================
