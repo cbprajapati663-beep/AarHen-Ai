@@ -18,5 +18,12 @@ assert.equal(language.resolveLanguage(" GUJARATI ", "Hello"), "gujarati");
 assert.equal(language.resolveLanguage("unknown", "नमस्ते"), "hindi");
 assert.equal(language.getLanguageInfo("unknown").code, "en");
 assert.equal(language.detectLanguage(""), "english");
+assert.equal(language.detectLanguage("12345 !!!"), "english");
+assert.equal(language.detectLanguage("Kya haal hai"), "hinglish");
+assert.equal(language.detectLanguage("Kya"), "english");
+assert.equal(language.resolveLanguage("english", "નમસ્તે"), "english");
+assert.equal(language.getLanguageInfo("hindi").code, "hi");
+assert.equal(language.getLanguageInfo("gujarati").code, "gu");
+assert.equal(language.getLanguageInfo("hinglish").code, "hi-en");
 
 console.log("Multilingual language engine tests passed.");
