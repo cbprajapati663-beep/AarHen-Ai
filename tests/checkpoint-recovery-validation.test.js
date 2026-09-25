@@ -21,6 +21,31 @@ function checkpoint(overrides = {}) {
 const valid = checkpoint();
 assert.equal(engine.validateCheckpointForRecovery(valid).valid, true);
 
+// Checkpoint snapshots must preserve step execution inputs and metadata.
+const metadataTask = {
+  id: "step-metadata-snapshot",
+  agentId: "validation-agent",
+  status: manager.TASK_STATES.RUNNING,
+  currentStepIndex: 0,
+  steps: [{
+    id: "metadata-step",
+    index: 0,
+    name: "Metadata step",
+    description: "Test snapshot fields",
+    action: "inspect",
+    policy: { scope: "read-only" },
+    input: { prompt: "safe inspection" },
+    metadata: { source: "validation" },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    status: manager.STEP_STATES.PENDING
+  }]
+};
+const metadataCheckpoint = engine.buildCheckpoint(metadataTask, { id: "metadata-checkpoint" });
+assert.deepEqual(metadataCheckpoint.task.steps[0].policy, { scope: "read-only" });
+assert.deepEqual(metadataCheckpoint.task.steps[0].input, { prompt: "safe inspection" });
+assert.deepEqual(metadataCheckpoint.task.steps[0].metadata, { source: "validation" });
+assert.equal(metadataCheckpoint.task.steps[0].createdAt, "2026-01-01T00:00:00.000Z");
+
 // Step-level edits must be detected even when aggregate counters are unchanged.
 engine.reset();
 const stepSnapshotTask = {
