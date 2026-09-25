@@ -74,3 +74,18 @@ test("formatDocument omits evidence section when no evidence is supplied", () =>
 
     assert.doesNotMatch(output, /Evidence references:/);
 });
+
+test("formatDocument safely handles malformed evidence entries", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        documentEvidence: [
+            null,
+            "unexpected evidence value",
+            { title: "Valid source" }
+        ]
+    });
+
+    assert.match(output, /DOC-1 — Document evidence 1/);
+    assert.match(output, /DOC-2 — Document evidence 2/);
+    assert.match(output, /DOC-3 — Valid source/);
+});
