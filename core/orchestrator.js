@@ -26,6 +26,9 @@
 const Brain =
     require("./brain");
 
+const learningApi =
+    require("./learningApi");
+
 
 const router =
     require("../skills/router");
@@ -1888,6 +1891,14 @@ async function process(
 
 
     // --------------------------------------------------------
+    // LEARNED KNOWLEDGE CONTEXT (RAG)
+    // --------------------------------------------------------
+
+    const ragKnowledge =
+        await retrieveKnowledgeContext(request, context);
+
+
+    // --------------------------------------------------------
     // ROUTING
     // --------------------------------------------------------
 
@@ -2143,6 +2154,12 @@ async function process(
     executionContext
         .memoryAction =
             memoryAction;
+
+    executionContext.ragKnowledge =
+        ragKnowledge;
+
+    executionContext.documentKnowledge =
+        ragKnowledge;
 
 
     // --------------------------------------------------------
@@ -2533,6 +2550,56 @@ async function process(
 
     return orchestrationResult;
 
+}
+
+
+// ============================================================
+// RETRIEVE LEARNED KNOWLEDGE FOR CONTEXT
+// ============================================================
+
+async function retrieveKnowledgeContext(request, context = {}) {
+    if (context.rag === false || context.documentRag === false) {
+        return {
+            enabled: false,
+            status: "rag-disabled",
+            count: 0,
+            results: []
+        };
+    }
+
+    const limit = Math.max(1, Math.min(10, Math.floor(Number(context.ragLimit) || 5)));
+    try {
+        const response = await learningApi.searchLearnedKnowledge(request, limit);
+        const raw = response && response.results;
+        const results = Array.isArray(raw)
+            ? raw
+            : Array.isArray(raw?.results)
+                ? raw.results
+                : [];
+        const normalized = results.map(item => ({
+            title: item.title || "Learned Knowledge",
+            content: item.content || item.text || "",
+            source: item.source || null,
+            category: item.category || null,
+            confidence: typeof item.confidence === "number" ? item.confidence : null,
+            verified: item.verified === true
+        })).filter(item => item.content.trim());
+
+        return {
+            enabled: true,
+            status: response?.success === false ? "retrieval-failed" : "retrieval-complete",
+            count: normalized.length,
+            results: normalized
+        };
+    } catch (error) {
+        return {
+            enabled: true,
+            status: "retrieval-error",
+            count: 0,
+            results: [],
+            error: error.message
+        };
+    }
 }
 
 
@@ -2934,6 +3001,8 @@ module.exports = {
     storeMemory,
 
     buildExecutionContext,
+
+    retrieveKnowledgeContext,
 
     shouldUseAutonomousWorker,
 
