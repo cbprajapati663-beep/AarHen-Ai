@@ -190,4 +190,22 @@ for (const [field, value] of [
   );
 }
 
+// Verify nested step approval and result payload changes are included in drift checks.
+for (const [field, value] of [
+  ["requiresApproval", true],
+  ["approved", true],
+  ["result", { output: "altered result" }]
+]) {
+  const alteredTask = structuredClone(beforeInspectSnapshot);
+  alteredTask.steps[0][field] = value;
+  const nestedStepDrift = engine.compareWithLatestCheckpoint(alteredTask);
+  assert.equal(nestedStepDrift.success, true, field);
+  assert.equal(nestedStepDrift.changed, true, field);
+  assert.equal(
+    nestedStepDrift.differences.some(item => item.field === "steps"),
+    true,
+    field
+  );
+}
+
 console.log("Checkpoint recovery validation tests passed.");
