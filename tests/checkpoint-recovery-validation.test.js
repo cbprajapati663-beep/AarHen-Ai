@@ -98,4 +98,13 @@ assert.equal(capabilities.automaticCheckpointRestore, false);
 assert.equal(capabilities.automaticTaskResume, false);
 assert.equal(capabilities.controlledExecutionRequired, true);
 
+
+// Inspection endpoints must fail closed for missing or unknown task IDs.
+assert.equal(controller.inspectTask("").success, false);
+assert.equal(controller.buildRecoveryPlan("").success, false);
+assert.equal(controller.getRecoveryCandidate("").success, false);
+assert.equal(controller.inspectTask("unknown-validation-task").success, false);
+assert.equal(controller.buildRecoveryPlan("unknown-validation-task").success, false);
+assert.equal(controller.getRecoveryCandidate("unknown-validation-task").success, false);
+
 console.log("Checkpoint recovery validation tests passed.");
