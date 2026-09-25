@@ -145,6 +145,7 @@ assert.equal(preInspectStepDrift.changed, true);
 assert.equal(preInspectStepDrift.differences.some(item => item.field === "steps"), true);
 
 const beforeInspectSnapshot = structuredClone(manager.getTask("inspection-task").task);
+const checkpointBeforeInspection = structuredClone(saved.checkpoint);
 const inspection = controller.inspectTask("inspection-task");
 assert.equal(inspection.success, true);
 assert.equal(inspection.taskId, "inspection-task");
@@ -177,6 +178,7 @@ assert.equal(
   true
 );
 assert.deepEqual(manager.getTask("inspection-task").task, afterStart);
+assert.deepEqual(bridge.getLatestCheckpoint("inspection-task").checkpoint, checkpointBeforeInspection);
 assert.equal(driftInspection.recoveryPlan.recoverable, false);
 assert.equal(driftInspection.recoveryPlan.reason, "live-task-drift");
 assert.equal(driftInspection.recoveryCandidate.recoverable, false);
