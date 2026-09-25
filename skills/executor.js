@@ -164,6 +164,12 @@ function prepareContext(
         documentContext?.documentGrounding ||
         null;
 
+    const documentEvidence =
+        context.documentEvidence ||
+        context.brain?.knowledge?.documentEvidence ||
+        documentContext?.documentEvidence ||
+        [];
+
 
     return {
 
@@ -208,6 +214,8 @@ function prepareContext(
         knowledgeContext,
 
         documentGrounding,
+
+        documentEvidence,
 
 
         // ----------------------------------------------------
