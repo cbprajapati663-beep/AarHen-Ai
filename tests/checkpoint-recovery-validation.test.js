@@ -54,6 +54,26 @@ const noPendingSteps = checkpoint({
 });
 assert.equal(engine.validateCheckpointForRecovery(noPendingSteps).valid, false);
 
+const invalidStepIndex = structuredClone(valid);
+invalidStepIndex.task.steps[0].index = 4;
+assert.equal(engine.validateCheckpointForRecovery(invalidStepIndex).valid, false);
+
+const missingStepId = structuredClone(valid);
+missingStepId.task.steps[0].id = null;
+assert.equal(engine.validateCheckpointForRecovery(missingStepId).valid, false);
+
+const unknownStepStatus = structuredClone(valid);
+unknownStepStatus.task.steps[0].status = "mystery";
+assert.equal(engine.validateCheckpointForRecovery(unknownStepStatus).valid, false);
+
+const duplicateStepIds = checkpoint({
+  steps: [
+    { id: "same-step", index: 0, status: manager.STEP_STATES.PENDING },
+    { id: "same-step", index: 1, status: manager.STEP_STATES.PENDING }
+  ]
+});
+assert.equal(engine.validateCheckpointForRecovery(duplicateStepIds).valid, false);
+
 const stopped = checkpoint({ status: manager.TASK_STATES.STOPPED });
 assert.equal(engine.validateCheckpointForRecovery(stopped).valid, false);
 
