@@ -131,4 +131,16 @@ assert.equal(inspection.recoveryPlan.plan.executable, false);
 assert.equal(inspection.recoveryPlan.plan.executionMode, "inspection-only");
 assert.deepEqual(manager.getTask("inspection-task").task, beforeInspectSnapshot);
 
+// A live task change after checkpointing must be reported as drift, not restored.
+assert.equal(manager.startTask("inspection-task").success, true);
+const afterStart = manager.getTask("inspection-task").task;
+const driftInspection = controller.inspectTask("inspection-task");
+assert.equal(driftInspection.success, true);
+assert.equal(driftInspection.comparison.changed, true);
+assert.equal(
+  driftInspection.comparison.differences.some(item => item.field === "status"),
+  true
+);
+assert.deepEqual(manager.getTask("inspection-task").task, afterStart);
+
 console.log("Checkpoint recovery validation tests passed.");
