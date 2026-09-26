@@ -310,3 +310,34 @@ test("formatDocument resolves generic evidence from execution brain knowledge", 
 
     assert.match(output, /EXEC-E1 — Execution evidence\.pdf/);
 });
+
+
+test("formatDocument resolves document knowledge from root brain knowledge", () => {
+    const output = response.formatDocument({
+        brain: {
+            knowledge: {
+                documentKnowledge: [
+                    { title: "Brain Policy", content: "Grounded policy text" }
+                ]
+            }
+        }
+    });
+
+    assert.match(output, /Brain Policy — Grounded policy text/);
+});
+
+test("formatDocument resolves document knowledge from execution brain knowledge alias", () => {
+    const output = response.formatDocument({
+        executionContext: {
+            brain: {
+                knowledge: {
+                    knowledgeDocuments: [
+                        { title: "Execution Policy", content: "Execution grounded text" }
+                    ]
+                }
+            }
+        }
+    });
+
+    assert.match(output, /Execution Policy — Execution grounded text/);
+});
