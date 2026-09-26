@@ -1048,6 +1048,19 @@ function resolveDocumentKnowledge(
             ?.knowledge
             ?.documentKnowledge,
 
+        root.brain
+            ?.knowledge
+            ?.documentKnowledge,
+
+        root.brain
+            ?.knowledge
+            ?.knowledgeDocuments,
+
+        executionContext
+            .brain
+            ?.knowledge
+            ?.knowledgeDocuments,
+
         documentObject.results,
 
         documentObject.documents
