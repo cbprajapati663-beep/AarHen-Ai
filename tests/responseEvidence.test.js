@@ -374,3 +374,19 @@ test("formatDocument resolves knowledge evidence from execution context", () => 
 
     assert.match(output, /CTX-E1 — Context evidence\.pdf/);
 });
+
+
+test("appendDocumentKnowledge normalizes surrounding whitespace", () => {
+    const output = response.appendDocumentKnowledge(
+        "  Task completed.  ",
+        {
+            documentKnowledge: [
+                { title: "Policy", content: "Grounded policy text" }
+            ]
+        }
+    );
+
+    assert.match(output, /^Task completed\./);
+    assert.doesNotMatch(output, /^\s/);
+    assert.match(output, /Document Knowledge/);
+});
