@@ -1293,12 +1293,20 @@ function resolveDocumentSources(
 
         brainKnowledge.documents,
 
+        brainKnowledge.knowledgeDocuments,
+
+        brainKnowledge.knowledgeSources,
+
         // Execution brain
         executionBrainKnowledge.documentDocuments,
 
         executionBrainKnowledge.documentSources,
 
         executionBrainKnowledge.documents,
+
+        executionBrainKnowledge.knowledgeDocuments,
+
+        executionBrainKnowledge.knowledgeSources,
 
         executionBrain.documentDocuments,
 
