@@ -2247,7 +2247,7 @@ function appendDocumentKnowledge(
 
         return (
 
-            `${normalizedBaseResponse}\\n\\n` +
+            `${normalizedBaseResponse}\n\n` +
 
             documentResponse
 
@@ -2256,6 +2256,7 @@ function appendDocumentKnowledge(
 
 
     return documentResponse;
+}
 
 
 // ============================================================
