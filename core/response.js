@@ -1473,6 +1473,10 @@ function resolveDocumentAnswerContext(
                 ?.knowledge
                 ?.documentAnswerContext,
 
+            root.brain
+                ?.knowledge
+                ?.documentAnswerContext,
+
             execution.documentContext
                 ?.answerContext,
 
