@@ -1048,6 +1048,19 @@ function resolveDocumentKnowledge(
             ?.knowledge
             ?.documentKnowledge,
 
+        root.brain
+            ?.knowledge
+            ?.documentKnowledge,
+
+        root.brain
+            ?.knowledge
+            ?.knowledgeDocuments,
+
+        executionContext
+            .brain
+            ?.knowledge
+            ?.knowledgeDocuments,
+
         documentObject.results,
 
         documentObject.documents
@@ -1293,12 +1306,20 @@ function resolveDocumentSources(
 
         brainKnowledge.documents,
 
+        brainKnowledge.knowledgeDocuments,
+
+        brainKnowledge.knowledgeSources,
+
         // Execution brain
         executionBrainKnowledge.documentDocuments,
 
         executionBrainKnowledge.documentSources,
 
         executionBrainKnowledge.documents,
+
+        executionBrainKnowledge.knowledgeDocuments,
+
+        executionBrainKnowledge.knowledgeSources,
 
         executionBrain.documentDocuments,
 
@@ -1473,8 +1494,20 @@ function resolveDocumentAnswerContext(
                 ?.knowledge
                 ?.documentAnswerContext,
 
+            root.brain
+                ?.knowledge
+                ?.documentAnswerContext,
+
             execution.documentContext
                 ?.answerContext,
+
+            execution.context
+                ?.answerContext,
+
+            execution.context
+                ?.brain
+                ?.knowledge
+                ?.documentAnswerContext,
 
             root.requestContext
                 ?.answerContext,
@@ -1600,6 +1633,23 @@ function resolveDocumentStatus(
 
             executionContext
                 .documentKnowledgeEnabled !==
+                false &&
+
+            root.execution
+                ?.documentKnowledgeEnabled !==
+                false &&
+
+            root.execution
+                ?.context
+                ?.brain
+                ?.knowledge
+                ?.documentKnowledgeEnabled !==
+                false &&
+
+            root.executionContext
+                ?.brain
+                ?.knowledge
+                ?.documentKnowledgeEnabled !==
                 false,
 
         aware:
@@ -1646,7 +1696,10 @@ function formatDocument(
         resolveDocumentStatus(input);
 
 
+    // Respect explicit document-knowledge disable flags before
+    // rendering any stale document context or evidence.
     if (
+        !status.enabled ||
         !status.detected
     ) {
 
@@ -1720,6 +1773,56 @@ function formatDocument(
                     }
                 }
             );
+    }
+
+
+    const evidenceCandidates = [
+        input.documentEvidence,
+        input.requestContext?.documentEvidence,
+        input.executionContext?.documentEvidence,
+        input.executionContext?.brain?.knowledge?.documentEvidence,
+        input.executionContext?.brain?.knowledge?.knowledgeEvidence,
+        input.execution?.documentEvidence,
+        input.execution?.context?.knowledgeEvidence,
+        input.execution?.context?.documentEvidence,
+        input.execution?.context?.brain?.knowledge?.documentEvidence,
+        input.brain?.knowledge?.documentEvidence,
+        input.brain?.knowledge?.evidence,
+        input.executionContext?.brain?.knowledge?.evidence,
+        input.execution?.context?.brain?.knowledge?.evidence
+    ];
+
+    const evidence =
+        evidenceCandidates.find(
+            candidate =>
+                Array.isArray(candidate) &&
+                candidate.length > 0
+        ) || [];
+
+    if (evidence.length > 0) {
+        response += "\n\n📌 Evidence references:";
+
+        evidence
+            .slice(0, 5)
+            .forEach((item, index) => {
+                const evidenceItem = safeObject(item);
+                const reference =
+                    firstNonEmpty(
+                        evidenceItem.reference,
+                        evidenceItem.ref,
+                        evidenceItem.id,
+                        `DOC-${index + 1}`
+                    );
+
+                const title =
+                    firstNonEmpty(
+                        evidenceItem.title,
+                        evidenceItem.source,
+                        `Document evidence ${index + 1}`
+                    );
+
+                response += `\n${reference} — ${title}`;
+            });
     }
 
 
@@ -2134,13 +2237,17 @@ function appendDocumentKnowledge(
     }
 
 
+    const normalizedBaseResponse =
+        normalize(baseResponse);
+
+
     if (
-        normalize(baseResponse)
+        normalizedBaseResponse
     ) {
 
         return (
 
-            `${baseResponse}\n\n` +
+            `${normalizedBaseResponse}\n\n` +
 
             documentResponse
 

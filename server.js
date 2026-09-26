@@ -1,4 +1,7 @@
 const http = require("http");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 const { orchestrate } = require("./core/orchestrator");
 const auth = require("./core/auth");
@@ -6,6 +9,11 @@ const learningApi = require("./core/learningApi");
 const memory = require("./core/memory");
 const memoryHistory = require("./core/memoryHistory");
 const memoryApi = require("./core/memoryApi");
+const voiceApi = require("./core/voiceApi");
+const visionApi = require("./core/visionApi");
+const language = require("./core/language");
+const multilingualMedia = require("./core/multilingualMedia");
+const documentIngestion = require("./engines/documentIngestion");
 
 const PORT = process.env.PORT || 3000;
 
@@ -220,6 +228,328 @@ const server = http.createServer(
                 });
             }
 
+
+            /* =================================================
+               MULTILINGUAL API
+               ================================================= */
+
+            if (pathname === "/language/detect" && req.method === "POST") {
+                const body = await readBody(req);
+                if (typeof body.text !== "string" || !body.text.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "text is required"
+                    });
+                }
+                const detected = language.detectLanguage(body.text);
+                return sendJson(res, 200, {
+                    success: true,
+                    language: detected,
+                    languageInfo: language.getLanguageInfo(detected)
+                });
+            }
+
+            if (pathname === "/language/status" && req.method === "GET") {
+                return sendJson(res, 200, {
+                    success: true,
+                    languages: language.LANGUAGES
+                });
+            }
+
+            /* =================================================
+               VOICE ENGINE API
+               ================================================= */
+
+            if (
+                pathname === "/voice/status" &&
+                req.method === "GET"
+            ) {
+                return sendJson(res, 200, {
+                    success: true,
+                    ...voiceApi.getVoiceStatus()
+                });
+            }
+
+            if (
+                pathname === "/voice/transcribe" &&
+                req.method === "POST"
+            ) {
+                const body = await readBody(req);
+                const raw = body.base64 || body.data;
+
+                if (typeof raw !== "string" || !raw.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "base64 audio data is required"
+                    });
+                }
+
+                let encoded = raw.trim();
+                let mimeType = body.mimeType || "audio/mpeg";
+                const dataUrl = encoded.match(/^data:(audio\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/);
+                if (dataUrl) {
+                    mimeType = dataUrl[1].toLowerCase();
+                    encoded = dataUrl[2];
+                }
+
+                if (!/^audio\/[a-zA-Z0-9.+-]+$/i.test(mimeType)) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "A valid audio MIME type is required"
+                    });
+                }
+
+                if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Invalid base64 audio data"
+                    });
+                }
+
+                const audio = Buffer.from(encoded, "base64");
+                const maxBytes = 10 * 1024 * 1024;
+                if (!audio.length || audio.length > maxBytes) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Audio must be between 1 byte and 10 MiB"
+                    });
+                }
+
+                const result = await multilingualMedia.transcribeMultilingual(
+                    (input, options) => voiceApi.transcribeAudio(input, options),
+                    audio,
+                    { language: body.language, mimeType }
+                );
+                const statusCode = result.success ? 200 :
+                    result.code === "STT_UNAVAILABLE" ? 503 : 422;
+                return sendJson(res, statusCode, result);
+            }
+
+            if (
+                pathname === "/voice/synthesize" &&
+                req.method === "POST"
+            ) {
+                const body = await readBody(req);
+                if (typeof body.text !== "string" || !body.text.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "text is required"
+                    });
+                }
+                if (body.text.length > 10000) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Text must not exceed 10000 characters"
+                    });
+                }
+
+                const result = await multilingualMedia.synthesizeMultilingual(
+                    (text, options) => voiceApi.synthesizeSpeech(text, options),
+                    body.text,
+                    { language: body.language, voice: body.voice, format: body.format }
+                );
+                const statusCode = result.success ? 200 :
+                    result.code === "TTS_UNAVAILABLE" ? 503 : 422;
+                return sendJson(res, statusCode, result);
+            }
+
+
+            /* =================================================
+               MULTILINGUAL VISION API
+               ================================================= */
+
+            if (pathname === "/vision/status" && req.method === "GET") {
+                return sendJson(res, 200, {
+                    success: true,
+                    ...visionApi.getVisionStatus()
+                });
+            }
+
+            if (pathname === "/vision/analyze" && req.method === "POST") {
+                const body = await readBody(req);
+                const raw = body.base64 || body.data;
+                if (typeof raw !== "string" || !raw.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "base64 image data is required"
+                    });
+                }
+
+                let encoded = raw.trim();
+                let mimeType = String(body.mimeType || "image/jpeg").toLowerCase();
+                const dataUrl = encoded.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/);
+                if (dataUrl) {
+                    mimeType = dataUrl[1].toLowerCase();
+                    encoded = dataUrl[2];
+                }
+                if (!/^image\/(jpeg|jpg|png|webp|gif)$/i.test(mimeType)) {
+                    return sendJson(res, 400, { success: false, error: "Unsupported image MIME type" });
+                }
+                if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+                    return sendJson(res, 400, { success: false, error: "Invalid base64 image data" });
+                }
+                const image = Buffer.from(encoded, "base64");
+                if (!image.length || image.length > 5 * 1024 * 1024) {
+                    return sendJson(res, 413, { success: false, error: "Image must be between 1 byte and 5 MiB" });
+                }
+                const result = await multilingualMedia.analyzeMultilingual(
+                    (input, options) => visionApi.analyzeImage(input, options),
+                    image,
+                    { prompt: body.prompt, language: body.language, detail: body.detail, mimeType }
+                );
+                const statusCode = result.success ? 200 :
+                    result.code === "VISION_UNAVAILABLE" ? 503 : 422;
+                return sendJson(res, statusCode, result);
+            }
+
+            /* =================================================
+               DOCUMENT LEARNING / INGESTION API
+               ================================================= */
+
+            if (pathname === "/document/status" && req.method === "GET") {
+                return sendJson(res, 200, {
+                    success: true,
+                    documentLearning: require("./engines/documentLearning").getStatus(),
+                    ingestion: documentIngestion.getStatus()
+                });
+            }
+
+            if (pathname === "/document/ingest-text" && req.method === "POST") {
+                const body = await readBody(req);
+                if (typeof body.text !== "string" || !body.text.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "text is required"
+                    });
+                }
+                if (body.text.length > 500000) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Text must not exceed 500000 characters"
+                    });
+                }
+
+                const result = documentIngestion.ingestText(body.text, {
+                    fileName: body.fileName,
+                    category: body.category,
+                    source: body.source,
+                    chunkSize: body.chunkSize,
+                    chunkOverlap: body.chunkOverlap,
+                    confidence: body.confidence
+                });
+                return sendJson(res, result.success ? 200 : 422, result);
+            }
+
+            if (pathname === "/document/ingest" && req.method === "POST") {
+                const body = await readBody(req);
+                const raw = body.base64 || body.data;
+                if (typeof raw !== "string" || !raw.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "base64 document data is required"
+                    });
+                }
+
+                const suppliedName = typeof body.fileName === "string" ? body.fileName.trim() : "";
+                const fileName = path.basename(suppliedName.replace(/\\/g, "/"));
+                const extension = path.extname(fileName).toLowerCase();
+                const supported = documentIngestion.getStatus().capabilities &&
+                    [".pdf", ".docx", ".txt", ".md", ".markdown", ".json"];
+                if (!fileName || !supported.includes(extension)) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "fileName must use a supported extension",
+                        supportedExtensions: supported
+                    });
+                }
+
+                const encoded = raw.trim().replace(/^data:[^;,]+;base64,/, "");
+                const maxBytes = 25 * 1024 * 1024;
+                if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) ||
+                    encoded.length % 4 !== 0) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Invalid base64 document data"
+                    });
+                }
+                if (!encoded.length || encoded.length > Math.ceil(maxBytes / 3) * 4) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Document must not exceed 25 MiB"
+                    });
+                }
+
+                const buffer = Buffer.from(encoded, "base64");
+                if (!buffer.length || buffer.length > maxBytes) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Document must be between 1 byte and 25 MiB"
+                    });
+                }
+
+                let tempDir;
+                try {
+                    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-document-"));
+                    const tempPath = path.join(tempDir, fileName);
+                    fs.writeFileSync(tempPath, buffer, { flag: "wx", mode: 0o600 });
+                    const result = await documentIngestion.ingestDocument(tempPath, {
+                        category: body.category,
+                        source: body.source || "document-upload-api",
+                        chunkSize: body.chunkSize,
+                        chunkOverlap: body.chunkOverlap,
+                        confidence: body.confidence
+                    });
+                    const statusCode = result.success ? 200 :
+                        result.document?.dependencyMissing ? 503 : 422;
+                    return sendJson(res, statusCode, result);
+                } catch (error) {
+                    return sendJson(res, 500, {
+                        success: false,
+                        error: "Document ingestion failed",
+                        details: error.message
+                    });
+                } finally {
+                    if (tempDir) {
+                        try {
+                            fs.rmSync(tempDir, { recursive: true, force: true });
+                        } catch {}
+                    }
+                }
+            }
+
+            if (pathname === "/document/search" && req.method === "GET") {
+                const query = (url.searchParams.get("q") || "").trim();
+                if (!query) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Search query parameter q is required"
+                    });
+                }
+                if (query.length > 500) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Search query must not exceed 500 characters"
+                    });
+                }
+
+                const requestedLimit = Number(url.searchParams.get("limit")) || 10;
+                const limit = Math.max(1, Math.min(50, Math.floor(requestedLimit)));
+                const result = await learningApi.searchLearnedKnowledge(query, limit);
+                const nested = result && result.results;
+                const results = Array.isArray(nested)
+                    ? nested
+                    : Array.isArray(nested?.results)
+                        ? nested.results
+                        : [];
+                return sendJson(res, result.success ? 200 : 500, {
+                    success: Boolean(result.success),
+                    query,
+                    count: results.length,
+                    results,
+                    source: "AarHen learned knowledge store",
+                    status: result.success ? "document-knowledge-search-complete" : "search-failed"
+                });
+            }
 
             /* =================================================
                LEARNING API

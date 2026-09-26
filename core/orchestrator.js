@@ -26,6 +26,9 @@
 const Brain =
     require("./brain");
 
+const learningApi =
+    require("./learningApi");
+
 
 const router =
     require("../skills/router");
@@ -1888,6 +1891,14 @@ async function process(
 
 
     // --------------------------------------------------------
+    // LEARNED KNOWLEDGE CONTEXT (RAG)
+    // --------------------------------------------------------
+
+    const ragKnowledge =
+        await retrieveKnowledgeContext(request, context);
+
+
+    // --------------------------------------------------------
     // ROUTING
     // --------------------------------------------------------
 
@@ -2143,6 +2154,8 @@ async function process(
     executionContext
         .memoryAction =
             memoryAction;
+
+    mergeKnowledgeIntoExecutionContext(executionContext, context, ragKnowledge);
 
 
     // --------------------------------------------------------
@@ -2533,6 +2546,128 @@ async function process(
 
     return orchestrationResult;
 
+}
+
+
+// ============================================================
+// MERGE LEARNED KNOWLEDGE WITH EXISTING DOCUMENT CONTEXT
+// ============================================================
+
+function mergeKnowledgeIntoExecutionContext(
+    executionContext,
+    context = {},
+    ragKnowledge = { enabled: false, count: 0, results: [] }
+) {
+    const results = Array.isArray(ragKnowledge.results) ? ragKnowledge.results : [];
+    const existingDocumentKnowledge = Array.isArray(context.documentKnowledge) ? context.documentKnowledge : [];
+    const existingDocumentResults = Array.isArray(context.documentDocuments?.results)
+        ? context.documentDocuments.results
+        : [];
+    const existingEvidence = Array.isArray(context.documentEvidence) ? context.documentEvidence : [];
+
+    const retrievedEvidence = results.slice(0, 5).map((item, index) => ({
+        reference: "RAG-" + String(index + 1),
+        title: String(item.title || "Learned Knowledge"),
+        source: item.source || null,
+        content: String(item.content || ""),
+        confidence: item.confidence ?? null,
+        verified: item.verified === true
+    }));
+
+    executionContext.ragKnowledge = ragKnowledge;
+    executionContext.documentKnowledge = [...existingDocumentKnowledge, ...results];
+    executionContext.documentDocuments = {
+        results: [...existingDocumentResults, ...results],
+        count: existingDocumentResults.length + results.length,
+        available: existingDocumentResults.length + results.length > 0
+    };
+    executionContext.documentRag = {
+        ...(context.documentRag && typeof context.documentRag === "object" ? context.documentRag : {}),
+        learnedKnowledge: ragKnowledge
+    };
+    executionContext.documentAware =
+        context.documentAware === true ||
+        existingDocumentKnowledge.length > 0 ||
+        existingDocumentResults.length > 0 ||
+        results.length > 0;
+    executionContext.documentKnowledgeEnabled = context.documentKnowledgeEnabled !== false;
+
+    const ragAnswerContext = results.slice(0, 5)
+        .map((item, index) => String(index + 1) + ". " + (item.title || "Learned Knowledge") + ": " + item.content)
+        .join("\n");
+
+    executionContext.answerContext = [
+        String(context.answerContext || "").trim(),
+        ragAnswerContext ? "LEARNED KNOWLEDGE CONTEXT:\n" + ragAnswerContext : ""
+    ].filter(Boolean).join("\n\n");
+
+    executionContext.documentEvidence = [...existingEvidence, ...retrievedEvidence];
+    executionContext.documentGrounding = {
+        enabled: context.documentKnowledgeEnabled !== false && executionContext.documentEvidence.length > 0,
+        mode: "retrieved-evidence",
+        evidenceCount: executionContext.documentEvidence.length,
+        sourceTitles: executionContext.documentEvidence.map(item => item.title),
+        evidence: executionContext.documentEvidence.map(item => ({
+            reference: item.reference,
+            title: item.title,
+            source: item.source,
+            confidence: item.confidence,
+            verified: item.verified
+        })),
+        instruction:
+            "Use retrieved document evidence only for claims it supports. Cite a source using its provided reference when supported. If the evidence is missing or insufficient, clearly say that the documents do not provide the answer. Do not invent document facts or citations."
+    };
+    return executionContext;
+}
+
+
+// ============================================================
+// RETRIEVE LEARNED KNOWLEDGE FOR CONTEXT
+// ============================================================
+
+async function retrieveKnowledgeContext(request, context = {}) {
+    if (context.rag === false || context.documentRag === false) {
+        return {
+            enabled: false,
+            status: "rag-disabled",
+            count: 0,
+            results: []
+        };
+    }
+
+    const limit = Math.max(1, Math.min(10, Math.floor(Number(context.ragLimit) || 5)));
+    try {
+        const response = await learningApi.searchLearnedKnowledge(request, limit);
+        const raw = response && response.results;
+        const results = Array.isArray(raw)
+            ? raw
+            : Array.isArray(raw?.results)
+                ? raw.results
+                : [];
+        const normalized = results.map(item => ({
+            title: item.title || "Learned Knowledge",
+            content: item.content || item.text || "",
+            source: item.source || null,
+            category: item.category || null,
+            confidence: typeof item.confidence === "number" ? item.confidence : null,
+            verified: item.verified === true
+        })).filter(item => item.content.trim());
+
+        return {
+            enabled: true,
+            status: response?.success === false ? "retrieval-failed" : "retrieval-complete",
+            count: normalized.length,
+            results: normalized
+        };
+    } catch (error) {
+        return {
+            enabled: true,
+            status: "retrieval-error",
+            count: 0,
+            results: [],
+            error: error.message
+        };
+    }
 }
 
 
@@ -2934,6 +3069,9 @@ module.exports = {
     storeMemory,
 
     buildExecutionContext,
+
+    retrieveKnowledgeContext,
+    mergeKnowledgeIntoExecutionContext,
 
     shouldUseAutonomousWorker,
 

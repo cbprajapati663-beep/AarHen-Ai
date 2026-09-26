@@ -158,6 +158,18 @@ function prepareContext(
             ?.knowledgeContext ||
         null;
 
+    const documentGrounding =
+        context.documentGrounding ||
+        context.brain?.knowledge?.documentGrounding ||
+        documentContext?.documentGrounding ||
+        null;
+
+    const documentEvidence =
+        context.documentEvidence ||
+        context.brain?.knowledge?.documentEvidence ||
+        documentContext?.documentEvidence ||
+        [];
+
 
     return {
 
@@ -200,6 +212,10 @@ function prepareContext(
         answerContext,
 
         knowledgeContext,
+
+        documentGrounding,
+
+        documentEvidence,
 
 
         // ----------------------------------------------------
