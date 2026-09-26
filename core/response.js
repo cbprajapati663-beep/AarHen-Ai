@@ -2237,13 +2237,17 @@ function appendDocumentKnowledge(
     }
 
 
+    const normalizedBaseResponse =
+        normalize(baseResponse);
+
+
     if (
-        normalize(baseResponse)
+        normalizedBaseResponse
     ) {
 
         return (
 
-            `${baseResponse}\n\n` +
+            `${normalizedBaseResponse}\\n\\n` +
 
             documentResponse
 
@@ -2252,7 +2256,6 @@ function appendDocumentKnowledge(
 
 
     return documentResponse;
-}
 
 
 // ============================================================
