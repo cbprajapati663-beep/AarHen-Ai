@@ -219,3 +219,26 @@ test("formatDocument respects nested brain document knowledge disable flags", ()
 
     assert.equal(output, "");
 });
+
+
+test("formatDocument resolves answer context from root and executionContext brain knowledge", () => {
+    const rootOutput = response.formatDocument({
+        brain: {
+            knowledge: {
+                documentAnswerContext: "Root brain grounded context."
+            }
+        }
+    });
+    assert.match(rootOutput, /Root brain grounded context\./);
+
+    const executionOutput = response.formatDocument({
+        executionContext: {
+            brain: {
+                knowledge: {
+                    documentAnswerContext: "Execution brain grounded context."
+                }
+            }
+        }
+    });
+    assert.match(executionOutput, /Execution brain grounded context\./);
+});
