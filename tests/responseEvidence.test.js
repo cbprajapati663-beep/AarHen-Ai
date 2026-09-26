@@ -341,3 +341,36 @@ test("formatDocument resolves document knowledge from execution brain knowledge 
 
     assert.match(output, /Execution Policy — Execution grounded text/);
 });
+
+
+test("formatDocument resolves knowledge evidence from execution brain knowledge", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        executionContext: {
+            brain: {
+                knowledge: {
+                    knowledgeEvidence: [
+                        { reference: "KB-E1", title: "Knowledge evidence.pdf" }
+                    ]
+                }
+            }
+        }
+    });
+
+    assert.match(output, /KB-E1 — Knowledge evidence\.pdf/);
+});
+
+test("formatDocument resolves knowledge evidence from execution context", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        execution: {
+            context: {
+                knowledgeEvidence: [
+                    { reference: "CTX-E1", title: "Context evidence.pdf" }
+                ]
+            }
+        }
+    });
+
+    assert.match(output, /CTX-E1 — Context evidence\.pdf/);
+});
