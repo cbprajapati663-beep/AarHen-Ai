@@ -1771,7 +1771,10 @@ function formatDocument(
         input.execution?.documentEvidence,
         input.execution?.context?.documentEvidence,
         input.execution?.context?.brain?.knowledge?.documentEvidence,
-        input.brain?.knowledge?.documentEvidence
+        input.brain?.knowledge?.documentEvidence,
+        input.brain?.knowledge?.evidence,
+        input.executionContext?.brain?.knowledge?.evidence,
+        input.execution?.context?.brain?.knowledge?.evidence
     ];
 
     const evidence =
