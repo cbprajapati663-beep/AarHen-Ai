@@ -275,3 +275,38 @@ test("formatDocument resolves sources from execution brain knowledge source alia
 
     assert.match(output, /Execution source\.pdf/);
 });
+
+
+test("formatDocument resolves generic evidence from root brain knowledge", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        brain: {
+            knowledge: {
+                evidence: [
+                    { reference: "BRAIN-E1", title: "Brain evidence.pdf" }
+                ]
+            }
+        }
+    });
+
+    assert.match(output, /BRAIN-E1 — Brain evidence\.pdf/);
+});
+
+test("formatDocument resolves generic evidence from execution brain knowledge", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        execution: {
+            context: {
+                brain: {
+                    knowledge: {
+                        evidence: [
+                            { reference: "EXEC-E1", title: "Execution evidence.pdf" }
+                        ]
+                    }
+                }
+            }
+        }
+    });
+
+    assert.match(output, /EXEC-E1 — Execution evidence\.pdf/);
+});
