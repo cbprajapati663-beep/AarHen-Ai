@@ -242,3 +242,36 @@ test("formatDocument resolves answer context from root and executionContext brai
     });
     assert.match(executionOutput, /Execution brain grounded context\./);
 });
+
+
+test("formatDocument resolves sources from root brain knowledge source aliases", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        brain: {
+            knowledge: {
+                knowledgeSources: [
+                    { title: "Brain source.pdf" }
+                ]
+            }
+        }
+    });
+
+    assert.match(output, /Brain source\.pdf/);
+});
+
+test("formatDocument resolves sources from execution brain knowledge source aliases", () => {
+    const output = response.formatDocument({
+        documentKnowledge: [{ title: "Policy", content: "Policy text" }],
+        executionContext: {
+            brain: {
+                knowledge: {
+                    knowledgeDocuments: [
+                        { title: "Execution source.pdf" }
+                    ]
+                }
+            }
+        }
+    });
+
+    assert.match(output, /Execution source\.pdf/);
+});
