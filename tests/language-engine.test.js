@@ -26,4 +26,14 @@ assert.equal(language.getLanguageInfo("hindi").code, "hi");
 assert.equal(language.getLanguageInfo("gujarati").code, "gu");
 assert.equal(language.getLanguageInfo("hinglish").code, "hi-en");
 
+// ISO-style language codes and mixed-language alias should normalize.
+assert.equal(language.resolveLanguage("en", "नमस्ते"), "english");
+assert.equal(language.resolveLanguage("hi", "Hello"), "hindi");
+assert.equal(language.resolveLanguage("gu", "Hello"), "gujarati");
+assert.equal(language.resolveLanguage("hi-en", "Hello"), "hinglish");
+assert.equal(language.getLanguageInfo("en").code, "en");
+assert.equal(language.getLanguageInfo("hi").code, "hi");
+assert.equal(language.getLanguageInfo("gu").code, "gu");
+assert.equal(language.getLanguageInfo("hi-en").code, "hi-en");
+
 console.log("Multilingual language engine tests passed.");
