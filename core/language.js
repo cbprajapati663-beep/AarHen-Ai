@@ -10,6 +10,19 @@ const LANGUAGES = {
     hinglish: { name: "Hinglish", code: "hi-en" }
 };
 
+const LANGUAGE_ALIASES = {
+    en: "english",
+    hi: "hindi",
+    gu: "gujarati",
+    "hi-en": "hinglish",
+    hinglish: "hinglish"
+};
+
+function normalizeLanguageKey(value) {
+    const key = String(value ?? "").trim().toLowerCase();
+    return LANGUAGE_ALIASES[key] || key;
+}
+
 const HINGLISH_WORDS = new Set([
     "hai", "hain", "haan", "kya", "kaise", "kaisa", "kaisi",
     "mujhe", "mujhko", "mera", "meri", "mere", "tum", "aap",
@@ -43,7 +56,7 @@ function detectLanguage(text) {
 }
 
 function resolveLanguage(requestedLanguage, text) {
-    const requested = String(requestedLanguage ?? "").trim().toLowerCase();
+    const requested = normalizeLanguageKey(requestedLanguage);
 
     if (requested && Object.prototype.hasOwnProperty.call(LANGUAGES, requested)) {
         return requested;
@@ -53,12 +66,13 @@ function resolveLanguage(requestedLanguage, text) {
 }
 
 function getLanguageInfo(language) {
-    const key = String(language ?? "").trim().toLowerCase();
+    const key = normalizeLanguageKey(language);
     return LANGUAGES[key] || LANGUAGES.english;
 }
 
 module.exports = {
     LANGUAGES,
+    LANGUAGE_ALIASES,
     detectLanguage,
     resolveLanguage,
     getLanguageInfo
