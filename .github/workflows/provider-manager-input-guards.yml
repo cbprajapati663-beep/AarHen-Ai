@@ -1,0 +1,27 @@
+name: Provider Manager Input Guard Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "providers/providerManager.js"
+      - "tests/provider-manager-input-guards.test.js"
+      - ".github/workflows/provider-manager-input-guards.yml"
+  push:
+    paths:
+      - "providers/providerManager.js"
+      - "tests/provider-manager-input-guards.test.js"
+      - ".github/workflows/provider-manager-input-guards.yml"
+
+jobs:
+  provider-manager-input-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run input guard regression tests
+        run: node tests/provider-manager-input-guards.test.js
