@@ -108,8 +108,34 @@ async function searchWeb(data = {}) {
                     providerResult.confidence || 0
             });
 
-        const result =
-            research.createResearchResult({
+        const providerMetadata = {
+
+            provider:
+                providerResult.provider ||
+                "web-research-provider",
+
+            providerType:
+                providerResult.providerType ||
+                null,
+
+            attemptedProviders:
+                Array.isArray(
+                    providerResult.attemptedProviders
+                )
+                    ? providerResult.attemptedProviders.slice()
+                    : [],
+
+            fallbackUsed:
+                providerResult.fallbackUsed === true,
+
+            providerManagerVersion:
+                providerResult.providerManagerVersion ||
+                null
+        };
+
+        const result = {
+
+            ...research.createResearchResult({
 
                 query:
                     request.query,
@@ -119,12 +145,19 @@ async function searchWeb(data = {}) {
                 summary,
 
                 confidence
-            });
+            }),
 
-        const context =
-            research.buildResearchContext(
+            ...providerMetadata
+        };
+
+        const context = {
+
+            ...research.buildResearchContext(
                 result
-            );
+            ),
+
+            ...providerMetadata
+        };
 
         return {
 
@@ -139,8 +172,19 @@ async function searchWeb(data = {}) {
             context,
 
             provider:
-                providerResult.provider ||
-                "web-research-provider",
+                providerMetadata.provider,
+
+            providerType:
+                providerMetadata.providerType,
+
+            attemptedProviders:
+                providerMetadata.attemptedProviders,
+
+            fallbackUsed:
+                providerMetadata.fallbackUsed,
+
+            providerManagerVersion:
+                providerMetadata.providerManagerVersion,
 
             sourceCount:
                 sources.length,
