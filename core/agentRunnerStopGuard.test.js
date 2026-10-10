@@ -102,3 +102,39 @@ test("emergency STOP blocks custom action handlers even when approved", async ()
   assert.equal(result.executionStatus, "autonomous-stop");
   assert.equal(handlerCalled, false);
 });
+
+test("STOP cannot be cleared while owner identity is unconfigured", () => {
+  autonomousGuard.activateStop("Test STOP");
+
+  const result = autonomousGuard.clearStop();
+
+  assert.equal(result.success, false);
+  assert.equal(result.authorized, false);
+  assert.equal(result.stopped, true);
+  assert.match(result.error, /owner identity must be configured/i);
+  assert.equal(autonomousGuard.isStopped(), true);
+});
+
+test("STOP cannot be cleared by a mismatched owner", () => {
+  autonomousGuard.configureOwner("owner-1");
+  autonomousGuard.activateStop("Test STOP", "owner-1");
+
+  const result = autonomousGuard.clearStop("owner-2");
+
+  assert.equal(result.success, false);
+  assert.equal(result.authorized, false);
+  assert.equal(result.stopped, true);
+  assert.equal(autonomousGuard.isStopped(), true);
+});
+
+test("configured owner can clear STOP", () => {
+  autonomousGuard.configureOwner("owner-1");
+  autonomousGuard.activateStop("Test STOP", "owner-1");
+
+  const result = autonomousGuard.clearStop("owner-1");
+
+  assert.equal(result.success, true);
+  assert.equal(result.stopped, false);
+  assert.equal(autonomousGuard.isStopped(), false);
+});
+

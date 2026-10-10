@@ -2,6 +2,12 @@ name: AarHen Agent Runner STOP Guard Regression Test
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "core/agentRunner.js"
+      - "core/agentRunnerStopGuard.test.js"
+      - "core/autonomousGuard.js"
+      - ".github/workflows/agent-runner-stop-guard-test.yml"
   push:
     paths:
       - "core/agentRunner.js"
