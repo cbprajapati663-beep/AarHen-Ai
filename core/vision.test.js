@@ -15,10 +15,11 @@ test("passes image and options to injected analyzer", async () => {
       assert.equal(image, bytes);
       assert.equal(options.prompt, "Read the sign");
       assert.equal(options.language, "gu");
+      assert.equal(options.mimeType, "image/png");
       return { description: "નમસ્તે", labels: ["text"] };
     } },
   });
-  assert.deepEqual(await engine.analyze(bytes, { prompt: "Read the sign", language: "gu" }), {
+  assert.deepEqual(await engine.analyze(bytes, { prompt: "Read the sign", language: "gu", mimeType: "image/png" }), {
     description: "નમસ્તે", labels: ["text"],
   });
 });
