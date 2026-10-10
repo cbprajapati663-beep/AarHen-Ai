@@ -7,6 +7,7 @@ const memory = require("./core/memory");
 const memoryHistory = require("./core/memoryHistory");
 const memoryApi = require("./core/memoryApi");
 const voiceApi = require("./core/voiceApi");
+const visionApi = require("./core/visionApi");
 
 const PORT = process.env.PORT || 3000;
 
@@ -315,6 +316,78 @@ const server = http.createServer(
                 });
                 const statusCode = result.success ? 200 :
                     result.code === "TTS_UNAVAILABLE" ? 503 : 422;
+                return sendJson(res, statusCode, result);
+            }
+
+
+            /* =================================================
+               VISION ENGINE API
+               ================================================= */
+
+            if (
+                pathname === "/vision/status" &&
+                req.method === "GET"
+            ) {
+                return sendJson(res, 200, {
+                    success: true,
+                    ...visionApi.getVisionStatus()
+                });
+            }
+
+            if (
+                pathname === "/vision/analyze" &&
+                req.method === "POST"
+            ) {
+                const body = await readBody(req);
+                const raw = body.base64 || body.data;
+
+                if (typeof raw !== "string" || !raw.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "base64 image data is required"
+                    });
+                }
+
+                let encoded = raw.trim();
+                let mimeType = body.mimeType || "image/jpeg";
+                const dataUrl = encoded.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/);
+                if (dataUrl) {
+                    mimeType = dataUrl[1].toLowerCase();
+                    encoded = dataUrl[2];
+                }
+
+                if (!/^image\/(jpeg|jpg|png|webp|gif)$/i.test(mimeType)) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Unsupported image MIME type"
+                    });
+                }
+
+                if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Invalid base64 image data"
+                    });
+                }
+
+                const image = Buffer.from(encoded, "base64");
+                const maxBytes = 5 * 1024 * 1024;
+                if (!image.length || image.length > maxBytes) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Image must be between 1 byte and 5 MiB"
+                    });
+                }
+
+                const result = await visionApi.analyzeImage(image, {
+                    prompt: body.prompt,
+                    language: body.language,
+                    detail: body.detail,
+                    mimeType
+                });
+
+                const statusCode = result.success ? 200 :
+                    result.code === "VISION_UNAVAILABLE" ? 503 : 422;
                 return sendJson(res, statusCode, result);
             }
 
