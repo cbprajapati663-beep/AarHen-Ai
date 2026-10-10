@@ -4,11 +4,14 @@
   "description": "AarHen AI Core - Personal and Business AI System",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test.js",
+    "test:cancellation": "node --test core/agentManagerCancellation.test.js",
+    "test:all": "npm test && npm run test:cancellation"
   },
   "keywords": [
     "aarhen",
-    "ai",
+    "aarhen-ai",
     "personal-ai",
     "business-ai",
     "vehicle-finance"
