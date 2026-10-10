@@ -1734,6 +1734,16 @@ async function runTask(
         }
     }
 
+    const terminalStates = [
+        agentManager.TASK_STATES.COMPLETED,
+        agentManager.TASK_STATES.FAILED,
+        agentManager.TASK_STATES.STOPPED,
+        agentManager.TASK_STATES.CANCELLED
+    ];
+    if (result.task && terminalStates.includes(result.task.status)) {
+        taskRunners.delete(key);
+    }
+
     return {
         success: result.success === true,
         runnerVersion: AGENT_RUNNER_VERSION,
