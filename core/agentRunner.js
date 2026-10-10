@@ -2210,23 +2210,27 @@ function getStatus() {
 
 function reset() {
 
+    // Do not discard runner/context state while a task is executing.
+    // Clearing taskRunners during an active run would make the
+    // lifecycle harder to reason about and could allow a second
+    // execution loop to be started by a later resume call.
+    if (activeRuns.size > 0) {
+        return {
+            success: false,
+            status: "agent-runner-reset-blocked",
+            activeRunCount: activeRuns.size,
+            error: "Cannot reset Agent Runner while tasks are executing."
+        };
+    }
+
     customActions.clear();
     taskRunners.clear();
 
-
     return {
-
-        success:
-            true,
-
-        status:
-            "agent-runner-reset",
-
-        version:
-            AGENT_RUNNER_VERSION
-
+        success: true,
+        status: "agent-runner-reset",
+        version: AGENT_RUNNER_VERSION
     };
-
 }
 
 
