@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+  pull_request:
+    branches:
+      - main
+
   workflow_dispatch:
 
 
@@ -452,10 +456,16 @@ jobs:
 
             guard.reset();
 
+            const ownerId = "ci-agent-runner-owner";
+            const owner = guard.configureOwner(ownerId);
+            if (owner.success !== true) {
+              throw new Error("Owner identity could not be configured for the integration test.");
+            }
 
             const stop =
               guard.activateStop(
-                "Agent Runner integration STOP test."
+                "Agent Runner integration STOP test.",
+                ownerId
               );
 
 
@@ -584,7 +594,7 @@ jobs:
 
 
             const clear =
-              guard.clearStop();
+              guard.clearStop(ownerId);
 
 
             if (
