@@ -59,4 +59,10 @@ jobs:
           test "$authorized_status" = "200"
           node -e 'const r=require("/tmp/auth-valid.json"); if(r.authenticated!==true) process.exit(1)'
 
-          echo "Auth status rejects invalid keys and accepts the configured key."
+          protected_invalid=$(curl --silent --output /tmp/protected-invalid.json --write-out "%{http_code}" http://127.0.0.1:3137/learning-status -H "Authorization: Bearer wrong-token")
+          test "$protected_invalid" = "401"
+
+          protected_valid=$(curl --silent --output /tmp/protected-valid.json --write-out "%{http_code}" http://127.0.0.1:3137/learning-status -H "Authorization: Bearer test-only-secret")
+          test "$protected_valid" = "200"
+
+          echo "Auth status and protected routes correctly validate API keys."
