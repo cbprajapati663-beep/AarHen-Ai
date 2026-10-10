@@ -22,6 +22,12 @@
 const researchProvider =
     require("./researchProvider");
 
+const { createOpenAIVoiceProvider } =
+    require("../core/openaiVoiceProvider");
+
+const voiceProvider =
+    createOpenAIVoiceProvider();
+
 
 // ============================================================
 // VERSION
@@ -48,6 +54,19 @@ const DEFAULT_CONFIG = Object.freeze({
         providerType:
             "web-search"
 
+    },
+
+    voice: {
+
+        priority:
+            20,
+
+        enabled:
+            true,
+
+        providerType:
+            "speech"
+
     }
 
 });
@@ -60,7 +79,10 @@ const DEFAULT_CONFIG = Object.freeze({
 const providers = {
 
     research:
-        researchProvider
+        researchProvider,
+
+    voice:
+        voiceProvider
 
 };
 
@@ -74,6 +96,12 @@ const providerConfig = {
     research: {
 
         ...DEFAULT_CONFIG.research
+
+    },
+
+    voice: {
+
+        ...DEFAULT_CONFIG.voice
 
     }
 
@@ -390,7 +418,13 @@ function getProviderHealth(
                         Boolean(
                             rawStatus
                                 .supportsResultNormalization
-                        )
+                        ),
+
+                    supportsTranscription:
+                        Boolean(rawStatus.supportsTranscription),
+
+                    supportsSpeechSynthesis:
+                        Boolean(rawStatus.supportsSpeechSynthesis)
 
                 },
 
@@ -503,7 +537,8 @@ function getAvailableProviders() {
             provider =>
                 provider.exists &&
                 provider.enabled &&
-                provider.connected
+                provider.connected &&
+                typeof getProvider(provider.provider)?.search === "function"
         );
 
 }
@@ -722,6 +757,25 @@ async function searchWeb({
             );
 
 
+        const selected =
+            getProvider(
+                requestedProvider
+            );
+
+        if (!selected || typeof selected.search !== "function") {
+            return {
+                success: false,
+                providerConnected: false,
+                providerRequired: true,
+                provider: requestedProvider,
+                results: [],
+                attemptedProviders: [requestedProvider],
+                fallbackUsed: false,
+                error: `Requested provider "${requestedProvider}" does not support web search.`,
+                providerManagerVersion: PROVIDER_MANAGER_VERSION
+            };
+        }
+
         if (
             !isProviderAvailable(
                 requestedProvider
@@ -756,13 +810,6 @@ async function searchWeb({
             };
 
         }
-
-
-        const selected =
-            getProvider(
-                requestedProvider
-            );
-
 
         try {
 
@@ -1466,8 +1513,8 @@ function reset() {
     ) {
 
         if (
-            type !==
-            "research"
+            type !== "research" &&
+            type !== "voice"
         ) {
 
             delete providers[
@@ -1486,6 +1533,12 @@ function reset() {
     providerConfig.research = {
 
         ...DEFAULT_CONFIG.research
+
+    };
+
+    providerConfig.voice = {
+
+        ...DEFAULT_CONFIG.voice
 
     };
 

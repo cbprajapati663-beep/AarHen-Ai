@@ -6,6 +6,7 @@ const learningApi = require("./core/learningApi");
 const memory = require("./core/memory");
 const memoryHistory = require("./core/memoryHistory");
 const memoryApi = require("./core/memoryApi");
+const voiceApi = require("./core/voiceApi");
 
 const PORT = process.env.PORT || 3000;
 
@@ -218,6 +219,103 @@ const server = http.createServer(
                     success: true,
                     result
                 });
+            }
+
+
+            /* =================================================
+               VOICE ENGINE API
+               ================================================= */
+
+            if (
+                pathname === "/voice/status" &&
+                req.method === "GET"
+            ) {
+                return sendJson(res, 200, {
+                    success: true,
+                    ...voiceApi.getVoiceStatus()
+                });
+            }
+
+            if (
+                pathname === "/voice/transcribe" &&
+                req.method === "POST"
+            ) {
+                const body = await readBody(req);
+                const raw = body.base64 || body.data;
+
+                if (typeof raw !== "string" || !raw.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "base64 audio data is required"
+                    });
+                }
+
+                let encoded = raw.trim();
+                let mimeType = body.mimeType || "audio/mpeg";
+                const dataUrl = encoded.match(/^data:(audio\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/);
+                if (dataUrl) {
+                    mimeType = dataUrl[1].toLowerCase();
+                    encoded = dataUrl[2];
+                }
+
+                if (!/^audio\/[a-zA-Z0-9.+-]+$/i.test(mimeType)) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "A valid audio MIME type is required"
+                    });
+                }
+
+                if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "Invalid base64 audio data"
+                    });
+                }
+
+                const audio = Buffer.from(encoded, "base64");
+                const maxBytes = 10 * 1024 * 1024;
+                if (!audio.length || audio.length > maxBytes) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Audio must be between 1 byte and 10 MiB"
+                    });
+                }
+
+                const result = await voiceApi.transcribeAudio(audio, {
+                    language: body.language,
+                    mimeType
+                });
+                const statusCode = result.success ? 200 :
+                    result.code === "STT_UNAVAILABLE" ? 503 : 422;
+                return sendJson(res, statusCode, result);
+            }
+
+            if (
+                pathname === "/voice/synthesize" &&
+                req.method === "POST"
+            ) {
+                const body = await readBody(req);
+                if (typeof body.text !== "string" || !body.text.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "text is required"
+                    });
+                }
+                if (body.text.length > 10000) {
+                    return sendJson(res, 413, {
+                        success: false,
+                        error: "Text must not exceed 10000 characters"
+                    });
+                }
+
+                const result = await voiceApi.synthesizeSpeech(body.text, {
+                    language: body.language,
+                    voice: body.voice,
+                    format: body.format
+                });
+                const statusCode = result.success ? 200 :
+                    result.code === "TTS_UNAVAILABLE" ? 503 : 422;
+                return sendJson(res, statusCode, result);
             }
 
 

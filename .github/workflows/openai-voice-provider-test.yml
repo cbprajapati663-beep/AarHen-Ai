@@ -1,0 +1,22 @@
+name: OpenAI Voice Provider Tests
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  voice-provider-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate voice provider syntax
+        run: node --check core/openaiVoiceProvider.js
+      - name: Run voice engine and provider tests without live API calls
+        run: node --test core/openaiVoiceProvider.test.js core/voice.test.js core/voiceApi.test.js
