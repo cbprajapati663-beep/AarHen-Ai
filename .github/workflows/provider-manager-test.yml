@@ -2,6 +2,10 @@ name: AarHen Provider Manager Test
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "providers/providerManager.js"
+      - ".github/workflows/provider-manager-test.yml"
   push:
     paths:
       - "providers/providerManager.js"
@@ -415,6 +419,42 @@ jobs:
 
             };
 
+
+            // ------------------------------------------------
+            // Built-in Provider Protection
+            // ------------------------------------------------
+            const originalResearchProvider =
+              manager.getProvider("research");
+
+            const builtInReplacement =
+              manager.registerProvider(
+                "research",
+                mockProvider,
+                {
+                  priority: 0,
+                  enabled: true,
+                  providerType: "web-search"
+                }
+              );
+
+            if (builtInReplacement.success !== false) {
+              throw new Error(
+                "Built-in research provider was unexpectedly replaceable."
+              );
+            }
+
+            if (
+              manager.getProvider("research") !==
+              originalResearchProvider
+            ) {
+              throw new Error(
+                "Built-in research provider changed after rejected replacement."
+              );
+            }
+
+            console.log(
+              "Built-in provider protection: PASSED"
+            );
 
             // ------------------------------------------------
             // Registration
