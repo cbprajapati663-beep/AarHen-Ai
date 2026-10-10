@@ -187,6 +187,30 @@ function configureOwner(
     }
 
 
+    // Owner identity is immutable after initial configuration.
+    // This prevents a later caller from silently replacing the owner
+    // and then using the replacement identity to clear emergency STOP.
+    if (
+        state.configured &&
+        state.ownerId !== normalizedOwnerId
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            ownerConfigured:
+                true,
+
+            error:
+                "Owner identity is already configured and cannot be replaced through this method."
+
+        };
+
+    }
+
+
     state.ownerId =
         normalizedOwnerId;
 
