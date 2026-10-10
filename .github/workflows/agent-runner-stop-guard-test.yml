@@ -1,0 +1,30 @@
+name: AarHen Agent Runner STOP Guard Regression Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/agentRunner.js"
+      - "core/agentRunnerStopGuard.test.js"
+      - "core/autonomousGuard.js"
+      - ".github/workflows/agent-runner-stop-guard-test.yml"
+
+jobs:
+  stop-guard-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check safety module syntax
+        run: |
+          node --check core/agentRunner.js
+          node --check core/autonomousGuard.js
+
+      - name: Run STOP guard regression tests
+        run: node --test core/agentRunnerStopGuard.test.js
