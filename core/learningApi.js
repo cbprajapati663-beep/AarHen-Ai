@@ -70,13 +70,27 @@ async function searchLearnedKnowledge(query, limit = 10) {
             )
         );
 
+        const results =
+            result && Array.isArray(result.results)
+                ? result.results
+                : Array.isArray(result)
+                    ? result
+                    : [];
+
         return {
-            success: true,
-            query: query || "",
-            count: Array.isArray(result)
-                ? result.length
-                : 0,
-            results: result
+            ...(result && typeof result === "object" && !Array.isArray(result)
+                ? result
+                : {}),
+            success: Boolean(result && result.success !== false),
+            query:
+                result && typeof result.query === "string"
+                    ? result.query
+                    : query || "",
+            count:
+                result && Number.isFinite(result.count)
+                    ? result.count
+                    : results.length,
+            results
         };
     } catch (error) {
         return {
@@ -98,11 +112,24 @@ async function getLearnedKnowledge(limit = 50) {
             )
         );
 
+        const results =
+            result && Array.isArray(result.results)
+                ? result.results
+                : Array.isArray(result)
+                    ? result
+                    : [];
+
         return {
-            success: true,
-            count: Array.isArray(result)
-                ? result.length
-                : 0,
+            ...(result && typeof result === "object" && !Array.isArray(result)
+                ? result
+                : {}),
+            success: Boolean(result && result.success !== false),
+            count:
+                result && Number.isFinite(result.count)
+                    ? result.count
+                    : results.length,
+            results,
+            // Preserve the legacy field while exposing a predictable array.
             knowledge: result
         };
     } catch (error) {
