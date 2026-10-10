@@ -256,6 +256,10 @@ const PROTECTED_EXTERNAL_ACTIONS =
 const customActions =
     new Map();
 
+// Track active task execution and preserve the runner for pause/resume.
+const activeRuns = new Map();
+const taskRunners = new Map();
+
 
 // ============================================================
 // REGISTER CUSTOM ACTION
@@ -1688,64 +1692,131 @@ async function runTask(
     taskId,
     options = {}
 ) {
+    const key = safeString(taskId);
+    if (!key) {
+        return {
+            success: false,
+            runnerVersion: AGENT_RUNNER_VERSION,
+            error: "Task ID is required."
+        };
+    }
 
-    const config =
-        safeObject(
-            options
-        );
+    if (activeRuns.has(key)) {
+        return {
+            success: false,
+            runnerVersion: AGENT_RUNNER_VERSION,
+            error: "Task is already executing.",
+            task: agentManager.getTask(key)?.task || null
+        };
+    }
 
+    const config = safeObject(options);
+    const context = safeObject(config.context);
+    const runner = typeof config.runner === "function"
+        ? config.runner
+        : taskRunners.get(key) || createRunner(context);
 
-    const context =
-        safeObject(
-            config.context
-        );
+    taskRunners.set(key, runner);
 
+    const executionPromise = agentManager.runTask(
+        key,
+        runner,
+        { maxIterations: config.maxIterations || 100 }
+    );
+    activeRuns.set(key, executionPromise);
 
-    const runner =
-        typeof config.runner ===
-        "function"
+    let result;
+    try {
+        result = await executionPromise;
+    } finally {
+        if (activeRuns.get(key) === executionPromise) {
+            activeRuns.delete(key);
+        }
+    }
 
-            ? config.runner
-
-            : createRunner(
-                context
-            );
-
-
-    const result =
-        await agentManager.runTask(
-
-            taskId,
-
-            runner,
-
-            {
-
-                maxIterations:
-                    config.maxIterations ||
-                    100
-
-            }
-
-        );
-
+    const terminalStates = [
+        agentManager.TASK_STATES.COMPLETED,
+        agentManager.TASK_STATES.FAILED,
+        agentManager.TASK_STATES.STOPPED,
+        agentManager.TASK_STATES.CANCELLED
+    ];
+    if (result.task && terminalStates.includes(result.task.status)) {
+        taskRunners.delete(key);
+    }
 
     return {
-
-        success:
-            result.success === true,
-
-        runnerVersion:
-            AGENT_RUNNER_VERSION,
-
+        success: result.success === true,
+        runnerVersion: AGENT_RUNNER_VERSION,
         result,
-
-        task:
-            result.task ||
-            null
-
+        task: result.task || null
     };
+}
 
+
+// ============================================================
+// RESUME TASK EXECUTION
+// ============================================================
+// Agent Manager updates task state, but the execution loop that
+// returned on PAUSED must also be restarted. Preserve the runner
+// used by runTask so resumed work continues with the same context.
+// ============================================================
+
+async function resumeTask(
+    taskId,
+    options = {}
+) {
+    const key = safeString(taskId);
+    if (!key) {
+        return {
+            success: false,
+            runnerVersion: AGENT_RUNNER_VERSION,
+            error: "Task ID is required."
+        };
+    }
+
+    const resumed = agentManager.resumeTask(key);
+    if (!resumed.success) {
+        return {
+            ...resumed,
+            runnerVersion: AGENT_RUNNER_VERSION
+        };
+    }
+
+    // If a run is still in flight, unpausing the task lets that loop
+    // continue. Wait for it rather than starting a duplicate loop.
+    const active = activeRuns.get(key);
+    if (active) {
+        let activeResult;
+        try {
+            activeResult = await active;
+        } catch (error) {
+            return {
+                success: false,
+                resumed: true,
+                runnerVersion: AGENT_RUNNER_VERSION,
+                error: error.message || "Active task execution failed."
+            };
+        }
+
+        const latest = agentManager.getTask(key);
+        if (latest.success && latest.task.status !== agentManager.TASK_STATES.RUNNING) {
+            return {
+                success: activeResult.success === true,
+                resumed: true,
+                runnerVersion: AGENT_RUNNER_VERSION,
+                result: activeResult,
+                task: latest.task
+            };
+        }
+    }
+
+    // No loop is active (or the prior loop ended at an execution
+    // boundary), so start a new loop at the next pending step.
+    const execution = await runTask(key, options);
+    return {
+        ...execution,
+        resumed: true
+    };
 }
 
 
@@ -2140,6 +2211,7 @@ function getStatus() {
 function reset() {
 
     customActions.clear();
+    taskRunners.clear();
 
 
     return {
@@ -2189,6 +2261,8 @@ module.exports = {
     createRunner,
 
     runTask,
+
+    resumeTask,
 
     createAndRunTask,
 
