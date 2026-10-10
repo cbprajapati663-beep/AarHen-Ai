@@ -122,3 +122,30 @@ test("fails closed when the API key is missing without making a request", async 
   );
   assert.equal(called, false);
 });
+
+const providerManager = require("../providers/providerManager");
+
+test("Provider Manager registers voice capability without routing it to web search", async () => {
+  const provider = providerManager.getProvider("voice");
+  assert.ok(provider, "voice provider should be centrally registered");
+  assert.equal(typeof provider.getProviderStatus, "function");
+  assert.equal(typeof provider.transcribe, "function");
+  assert.equal(typeof provider.synthesize, "function");
+
+  const status = providerManager.getProviderHealth("voice");
+  assert.equal(status.providerType, "speech");
+  assert.equal(status.connected, Boolean(process.env.OPENAI_API_KEY));
+
+  const availableProviders = providerManager.getAvailableProviders();
+  assert.ok(
+    availableProviders.every((entry) => typeof providerManager.getProvider(entry.provider)?.search === "function"),
+    "search routing should only expose providers implementing search()"
+  );
+
+  const searchResult = await providerManager.searchWeb({
+    query: "voice provider capability routing test",
+    provider: "voice",
+  });
+  assert.equal(searchResult.success, false);
+  assert.match(searchResult.error, /does not support web search/);
+});
