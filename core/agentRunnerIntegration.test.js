@@ -25,6 +25,8 @@ test("approved external actions complete as safe handoffs without claiming execu
 
   const step = manager.addStep(created.task.id, {
     id: "runner-handoff-step",
+    name: "Prepare outbound message",
+    description: "Prepare a safe handoff for a message",
     action: "send_message",
     input: { request: "Send a test message" }
   });
@@ -69,11 +71,15 @@ test("emergency STOP blocks the real runner before a registered action handler r
 
   const first = manager.addStep(created.task.id, {
     id: "runner-stop-step-1",
+    name: "Guarded action",
+    description: "Must not run after emergency STOP",
     action: "integration_test_action",
     input: { request: "run guarded action" }
   });
   const second = manager.addStep(created.task.id, {
     id: "runner-stop-step-2",
+    name: "Following calculation",
+    description: "Must remain pending after STOP",
     action: "calculate",
     input: { request: "calculate 1 + 1" }
   });
