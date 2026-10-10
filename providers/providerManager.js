@@ -252,23 +252,6 @@ function getProviderHealth(
         );
 
 
-    // Built-in providers are managed by DEFAULT_CONFIG and must not be
-    // replaced through the dynamic registration API. This prevents an
-    // accidental or untrusted registration from hijacking core routing.
-    if (
-        Object.prototype.hasOwnProperty.call(
-            DEFAULT_CONFIG,
-            normalizedType
-        )
-    ) {
-        return {
-            success: false,
-            provider: normalizedType,
-            error: `Built-in provider "${normalizedType}" cannot be replaced through registerProvider().`
-        };
-    }
-
-
     if (!provider) {
 
         return {
@@ -1161,6 +1144,22 @@ function registerProvider(
 
     }
 
+
+    // Built-in providers are managed by DEFAULT_CONFIG and must not be
+    // replaced through the dynamic registration API. This prevents an
+    // accidental or untrusted registration from hijacking core routing.
+    if (
+        Object.prototype.hasOwnProperty.call(
+            DEFAULT_CONFIG,
+            normalizedType
+        )
+    ) {
+        return {
+            success: false,
+            provider: normalizedType,
+            error: `Built-in provider "${normalizedType}" cannot be replaced through registerProvider().`
+        };
+    }
 
     if (!provider) {
 
