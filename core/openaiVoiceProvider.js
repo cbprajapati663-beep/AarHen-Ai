@@ -27,6 +27,18 @@ function createOpenAIVoiceProvider({
   }
 
   return {
+    getProviderStatus() {
+      const connected = Boolean(apiKey);
+      return {
+        provider: "OpenAI Voice",
+        providerType: "speech",
+        connected,
+        status: connected ? "connected" : "disconnected",
+        supportsTranscription: true,
+        supportsSpeechSynthesis: true,
+      };
+    },
+
     async transcribe(audio, options = {}) {
       requireConfig();
       const bytes = Buffer.isBuffer(audio) ? audio : Buffer.from(audio);
