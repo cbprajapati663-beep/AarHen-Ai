@@ -757,6 +757,25 @@ async function searchWeb({
             );
 
 
+        const selected =
+            getProvider(
+                requestedProvider
+            );
+
+        if (!selected || typeof selected.search !== "function") {
+            return {
+                success: false,
+                providerConnected: false,
+                providerRequired: true,
+                provider: requestedProvider,
+                results: [],
+                attemptedProviders: [requestedProvider],
+                fallbackUsed: false,
+                error: `Requested provider "${requestedProvider}" does not support web search.`,
+                providerManagerVersion: PROVIDER_MANAGER_VERSION
+            };
+        }
+
         if (
             !isProviderAvailable(
                 requestedProvider
@@ -790,26 +809,6 @@ async function searchWeb({
 
             };
 
-        }
-
-
-        const selected =
-            getProvider(
-                requestedProvider
-            );
-
-        if (!selected || typeof selected.search !== "function") {
-            return {
-                success: false,
-                providerConnected: true,
-                providerRequired: true,
-                provider: requestedProvider,
-                results: [],
-                attemptedProviders: [requestedProvider],
-                fallbackUsed: false,
-                error: `Requested provider "${requestedProvider}" does not support web search.`,
-                providerManagerVersion: PROVIDER_MANAGER_VERSION
-            };
         }
 
         try {
