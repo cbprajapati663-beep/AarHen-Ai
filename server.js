@@ -175,13 +175,15 @@ const server = http.createServer(
                 pathname === "/auth/status" &&
                 req.method === "GET"
             ) {
+                const token = getAuthToken(req);
+                const authentication = auth.verifyApiKey(token);
+                const statusCode =
+                    auth.isConfigured() && !authentication.authenticated
+                        ? 401
+                        : 200;
 
-                const token =
-                    getAuthToken(req);
-
-                return sendJson(res, 200, {
-                    success: true,
-                    authenticated: !!token,
+                return sendJson(res, statusCode, {
+                    ...authentication,
                     hasToken: !!token
                 });
             }
