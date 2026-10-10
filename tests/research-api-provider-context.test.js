@@ -44,6 +44,7 @@ async function main() {
   assert.equal(result.providerType, "web-search");
   assert.deepEqual(result.attemptedProviders, ["research-context-test"]);
   assert.equal(result.fallbackUsed, false);
+  assert.equal(result.providerManagerVersion, manager.PROVIDER_MANAGER_VERSION);
 
   assert.equal(result.context.provider, "Research Context Mock");
   assert.equal(result.context.providerType, "web-search");
