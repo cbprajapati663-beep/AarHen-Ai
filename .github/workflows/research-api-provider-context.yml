@@ -1,0 +1,29 @@
+name: Research API Provider Context Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "core/researchApi.js"
+      - "providers/providerManager.js"
+      - "tests/research-api-provider-context.test.js"
+      - ".github/workflows/research-api-provider-context.yml"
+  push:
+    paths:
+      - "core/researchApi.js"
+      - "providers/providerManager.js"
+      - "tests/research-api-provider-context.test.js"
+      - ".github/workflows/research-api-provider-context.yml"
+
+jobs:
+  research-api-provider-context:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run provider context regression test
+        run: node tests/research-api-provider-context.test.js
