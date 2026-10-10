@@ -124,6 +124,21 @@ const server = http.createServer(
 
             const pathname = url.pathname;
 
+            // In protected mode, every API route except the health/status
+            // probes requires a verified API key. Keep development mode
+            // backward-compatible when AARHEN_API_KEY is not configured.
+            const publicPaths = new Set(["/", "/health", "/auth/status"]);
+            if (auth.isConfigured() && !publicPaths.has(pathname)) {
+                const authentication = auth.authenticate(req);
+                if (!authentication.authenticated) {
+                    return sendJson(res, 401, {
+                        success: false,
+                        authenticated: false,
+                        error: "Valid API key required."
+                    });
+                }
+            }
+
 
             /* =================================================
                ROOT
