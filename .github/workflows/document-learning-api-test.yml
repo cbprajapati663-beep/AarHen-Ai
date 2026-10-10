@@ -1,0 +1,34 @@
+name: AarHen Document Learning API Tests
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "core/documentLearning.js"
+      - "core/documentLearning.test.js"
+      - "core/documentLearningApi.js"
+      - "core/documentLearningApi.test.js"
+      - "server.js"
+      - ".github/workflows/document-learning-api-test.yml"
+  pull_request:
+
+jobs:
+  document-learning-api-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install document parser dependencies
+        run: npm install --prefer-offline
+      - name: Validate Document Learning syntax
+        run: |
+          node --check core/documentLearning.js
+          node --check core/documentLearningApi.js
+          node --check server.js
+      - name: Run document learning tests without external API calls
+        run: node --test core/documentLearning.test.js core/documentLearningApi.test.js
