@@ -1,0 +1,33 @@
+name: AarHen Agent Manager In-Flight Cancellation Regression
+
+on:
+  pull_request:
+    paths:
+      - "core/agentManager.js"
+      - "core/agentManagerCancellation.test.js"
+      - ".github/workflows/agent-manager-cancellation-test.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "core/agentManager.js"
+      - "core/agentManagerCancellation.test.js"
+      - ".github/workflows/agent-manager-cancellation-test.yml"
+  workflow_dispatch:
+
+jobs:
+  agent-manager-cancellation-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Check JavaScript syntax
+        run: node --check core/agentManager.js
+      - name: Run in-flight cancellation regression
+        run: node --test core/agentManagerCancellation.test.js
