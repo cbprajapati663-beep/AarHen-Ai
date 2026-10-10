@@ -25,8 +25,14 @@ const researchProvider =
 const { createOpenAIVoiceProvider } =
     require("../core/openaiVoiceProvider");
 
+const { createOpenAIVisionProvider } =
+    require("../core/openaiVisionProvider");
+
 const voiceProvider =
     createOpenAIVoiceProvider();
+
+const visionProvider =
+    createOpenAIVisionProvider();
 
 
 // ============================================================
@@ -67,6 +73,19 @@ const DEFAULT_CONFIG = Object.freeze({
         providerType:
             "speech"
 
+    },
+
+    vision: {
+
+        priority:
+            30,
+
+        enabled:
+            true,
+
+        providerType:
+            "vision"
+
     }
 
 });
@@ -82,7 +101,10 @@ const providers = {
         researchProvider,
 
     voice:
-        voiceProvider
+        voiceProvider,
+
+    vision:
+        visionProvider
 
 };
 
@@ -102,6 +124,12 @@ const providerConfig = {
     voice: {
 
         ...DEFAULT_CONFIG.voice
+
+    },
+
+    vision: {
+
+        ...DEFAULT_CONFIG.vision
 
     }
 
@@ -424,7 +452,10 @@ function getProviderHealth(
                         Boolean(rawStatus.supportsTranscription),
 
                     supportsSpeechSynthesis:
-                        Boolean(rawStatus.supportsSpeechSynthesis)
+                        Boolean(rawStatus.supportsSpeechSynthesis),
+
+                    supportsVisionAnalysis:
+                        Boolean(rawStatus.supportsVisionAnalysis)
 
                 },
 
@@ -1514,7 +1545,8 @@ function reset() {
 
         if (
             type !== "research" &&
-            type !== "voice"
+            type !== "voice" &&
+            type !== "vision"
         ) {
 
             delete providers[
@@ -1539,6 +1571,12 @@ function reset() {
     providerConfig.voice = {
 
         ...DEFAULT_CONFIG.voice
+
+    };
+
+    providerConfig.vision = {
+
+        ...DEFAULT_CONFIG.vision
 
     };
 
