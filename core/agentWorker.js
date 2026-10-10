@@ -1578,7 +1578,7 @@ function pauseWorker(
 // RESUME WORKER
 // ============================================================
 
-function resumeWorker(
+async function resumeWorker(
     workerId
 ) {
 
@@ -1587,125 +1587,129 @@ function resumeWorker(
             workerId
         );
 
-
-    if (
-        !resolved.success
-    ) {
-
+    if (!resolved.success) {
         return resolved;
-
     }
-
 
     const worker =
         resolved.worker;
-
 
     if (
         worker.status ===
         WORKER_STATES.STOPPED
     ) {
-
         return {
-
-            success:
-                false,
-
-            stopped:
-                true,
-
-            error:
-                "Stopped worker cannot be resumed."
-
+            success: false,
+            stopped: true,
+            error: "Stopped worker cannot be resumed."
         };
-
     }
 
-
-    if (
-        worker.activeTaskId
-    ) {
-
+    if (worker.activeTaskId) {
+        // Resume through Agent Runner so its execution loop is
+        // restarted (or its in-flight loop is reused) as well as
+        // the Agent Manager task state.
         const result =
-            agentManager.resumeTask(
+            await agentRunner.resumeTask(
                 worker.activeTaskId
             );
 
+        const latestResult =
+            agentManager.getTask(
+                worker.activeTaskId
+            );
+
+        const latestTask =
+            latestResult.success
+                ? latestResult.task
+                : result.task || null;
+
+        worker.lastResult =
+            clone(result);
+        worker.lastError =
+            result.success
+                ? null
+                : (latestTask?.error || result.error || "Task resume failed.");
 
         if (
-            result.success
+            latestTask?.status ===
+            agentManager.TASK_STATES.COMPLETED
         ) {
-
-            worker.status =
-                WORKER_STATES.IDLE;
-
-            worker.updatedAt =
-                now();
-
+            removeTaskFromQueue(worker, worker.activeTaskId);
+            worker.status = WORKER_STATES.IDLE;
+            worker.activeTaskId = null;
+            worker.successfulRuns += 1;
+            worker.completedTasks += 1;
+        } else if (
+            latestTask?.status ===
+            agentManager.TASK_STATES.PAUSED
+        ) {
+            worker.status = WORKER_STATES.PAUSED;
+            worker.pausedTasks += 1;
+        } else if (
+            latestTask?.status ===
+            agentManager.TASK_STATES.WAITING_APPROVAL
+        ) {
+            worker.status = WORKER_STATES.WAITING_APPROVAL;
+            worker.waitingApprovalTasks += 1;
+        } else if (
+            latestTask?.status ===
+            agentManager.TASK_STATES.STOPPED
+        ) {
+            removeTaskFromQueue(worker, worker.activeTaskId);
+            worker.status = WORKER_STATES.STOPPED;
+            worker.activeTaskId = null;
+            worker.stoppedTasks += 1;
+        } else if (
+            latestTask?.status ===
+            agentManager.TASK_STATES.CANCELLED
+        ) {
+            removeTaskFromQueue(worker, worker.activeTaskId);
+            worker.status = WORKER_STATES.IDLE;
+            worker.activeTaskId = null;
+        } else if (
+            latestTask?.status ===
+            agentManager.TASK_STATES.FAILED
+        ) {
+            removeTaskFromQueue(worker, worker.activeTaskId);
+            worker.status = WORKER_STATES.ERROR;
+            worker.activeTaskId = null;
+            worker.failedRuns += 1;
+            worker.lastError =
+                latestTask.error ||
+                result.error ||
+                "Task execution failed.";
+        } else {
+            worker.status = WORKER_STATES.RUNNING;
         }
 
+        worker.updatedAt = now();
 
         return {
-
             ...result,
-
-            worker:
-                clone(
-                    worker
-                )
-
+            resumed: true,
+            worker: clone(worker),
+            task: latestTask
         };
-
     }
 
-
-    if (
-        worker.status !==
-        WORKER_STATES.PAUSED
-    ) {
-
+    if (worker.status !== WORKER_STATES.PAUSED) {
         return {
-
-            success:
-                true,
-
-            worker:
-                clone(
-                    worker
-                ),
-
-            status:
-                worker.status
-
+            success: true,
+            worker: clone(worker),
+            status: worker.status
         };
-
     }
 
-
-    worker.status =
-        WORKER_STATES.IDLE;
-
-    worker.updatedAt =
-        now();
-
+    worker.status = WORKER_STATES.IDLE;
+    worker.updatedAt = now();
 
     return {
-
-        success:
-            true,
-
-        resumed:
-            true,
-
-        worker:
-            clone(
-                worker
-            )
-
+        success: true,
+        resumed: true,
+        worker: clone(worker)
     };
-
 }
-
 
 // ============================================================
 // STOP WORKER
