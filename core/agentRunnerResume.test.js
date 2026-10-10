@@ -113,3 +113,41 @@ test("resumeTask does not start a duplicate loop while an action is in flight", 
   assert.equal(firstExecutions, 1);
   assert.equal(secondExecutions, 1);
 });
+
+
+test("reset refuses to discard runner state while a task is in flight", async () => {
+  const { taskId, firstId, secondId } = createTwoStepTask();
+  let notifyStarted;
+  let releaseStep;
+  const started = new Promise(resolve => { notifyStarted = resolve; });
+  const gate = new Promise(resolve => { releaseStep = resolve; });
+  let secondExecutions = 0;
+
+  const controlledRunner = async ({ step }) => {
+    if (step.id === firstId) {
+      notifyStarted();
+      await gate;
+      return { success: true, output: "first step complete" };
+    }
+    if (step.id === secondId) {
+      secondExecutions += 1;
+      return { success: true, output: "second step complete" };
+    }
+    throw new Error("Unexpected step: " + step.id);
+  };
+
+  const initialPromise = runner.runTask(taskId, { runner: controlledRunner });
+  await started;
+
+  const reset = runner.reset();
+  assert.equal(reset.success, false);
+  assert.equal(reset.status, "agent-runner-reset-blocked");
+  assert.equal(reset.activeRunCount, 1);
+  assert.match(reset.error, /while tasks are executing/i);
+
+  releaseStep();
+  const initial = await initialPromise;
+  assert.equal(initial.success, true);
+  assert.equal(initial.task.status, manager.TASK_STATES.COMPLETED);
+  assert.equal(secondExecutions, 1);
+});
