@@ -923,6 +923,8 @@ jobs:
 
           node - <<'NODE'
 
+          (async () => {
+
           const worker =
             require("./core/agentWorker");
 
@@ -1077,7 +1079,7 @@ jobs:
           }
 
           const resume =
-            worker.resumeWorker(
+            await worker.resumeWorker(
               createdWorker.worker.id
             );
 
@@ -1102,6 +1104,11 @@ jobs:
           console.log(
             "Worker pause/resume test passed."
           );
+
+          })().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
 
           NODE
 
