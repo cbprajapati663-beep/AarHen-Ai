@@ -49,7 +49,7 @@ jobs:
             throw new Error("Paused worker did not reject execution.");
           }
 
-          const resumed = workerApi.resumeWorker(workerId);
+          const resumed = await workerApi.resumeWorker(workerId);
           if (resumed.success !== true || resumed.worker?.status !== workerApi.WORKER_STATES.IDLE) {
             throw new Error("Resume control failed: " + (resumed.error || "unexpected status"));
           }
@@ -64,7 +64,7 @@ jobs:
             throw new Error("Stopped worker did not reject execution.");
           }
 
-          const resumeStopped = workerApi.resumeWorker(workerId);
+          const resumeStopped = await workerApi.resumeWorker(workerId);
           if (resumeStopped.success !== false || resumeStopped.stopped !== true) {
             throw new Error("Stopped worker was unexpectedly resumed.");
           }
