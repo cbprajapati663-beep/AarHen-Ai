@@ -6,6 +6,7 @@ on:
     paths:
       - "package.json"
       - "test.js"
+      - "server.js"
       - "core/**"
       - "engines/**"
       - "providers/**"
@@ -28,7 +29,7 @@ permissions:
 
 jobs:
   local-test-suite:
-    name: Core and cancellation regression tests
+    name: Core, cancellation, learning API, and server smoke tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,5 +44,5 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Run core tests and cancellation regression
+      - name: Run complete automated test suite
         run: npm run test:all
