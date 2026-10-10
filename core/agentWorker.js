@@ -1624,22 +1624,12 @@ async function resumeWorker(
                 ? latestResult.task
                 : result.task || null;
 
-        if (!result.success) {
-            worker.status =
-                latestTask?.status === agentManager.TASK_STATES.PAUSED
-                    ? WORKER_STATES.PAUSED
-                    : worker.status;
-            worker.updatedAt = now();
-            return {
-                ...result,
-                worker: clone(worker),
-                task: latestTask
-            };
-        }
-
         worker.lastResult =
             clone(result);
-        worker.lastError = null;
+        worker.lastError =
+            result.success
+                ? null
+                : (latestTask?.error || result.error || "Task resume failed.");
 
         if (
             latestTask?.status ===
