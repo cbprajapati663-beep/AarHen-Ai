@@ -2,6 +2,7 @@
 
 const { VoiceEngine, VoiceEngineError } = require("./voice");
 const providerManager = require("../providers/providerManager");
+const { transcribeMultilingual, synthesizeMultilingual } = require("./multilingualMedia");
 
 function createManagedEngine() {
   const provider = providerManager.isProviderAvailable("voice")
@@ -25,7 +26,14 @@ function getVoiceStatus() {
 
 async function transcribeAudio(audio, options = {}) {
   try {
-    return { success: true, result: await (engine || createManagedEngine()).transcribe(audio, options) };
+    return await transcribeMultilingual(
+      async (input, providerOptions) => ({
+        success: true,
+        result: await (engine || createManagedEngine()).transcribe(input, providerOptions),
+      }),
+      audio,
+      options,
+    );
   } catch (error) {
     return normalizeError(error);
   }
@@ -33,7 +41,14 @@ async function transcribeAudio(audio, options = {}) {
 
 async function synthesizeSpeech(text, options = {}) {
   try {
-    return { success: true, result: await (engine || createManagedEngine()).synthesize(text, options) };
+    return await synthesizeMultilingual(
+      async (input, providerOptions) => ({
+        success: true,
+        result: await (engine || createManagedEngine()).synthesize(input, providerOptions),
+      }),
+      text,
+      options,
+    );
   } catch (error) {
     return normalizeError(error);
   }
