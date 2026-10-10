@@ -46,6 +46,7 @@ class VisionEngine {
       prompt: typeof options.prompt === "string" ? options.prompt : null,
       language: options.language || this.defaultLanguage,
       detail: options.detail || "auto",
+      mimeType: options.mimeType || null,
     });
     if (typeof result === "string" && result.trim()) {
       return { description: result.trim(), language: options.language || this.defaultLanguage };
