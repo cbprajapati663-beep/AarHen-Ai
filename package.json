@@ -7,8 +7,9 @@
     "start": "node server.js",
     "test": "node test.js",
     "test:cancellation": "node --test core/agentManagerCancellation.test.js",
-    "test:all": "npm test && npm run test:cancellation && npm run test:learning-api",
-    "test:learning-api": "node --test core/learningApi.test.js"
+    "test:all": "npm test && npm run test:cancellation && npm run test:learning-api && npm run test:server",
+    "test:learning-api": "node --test core/learningApi.test.js",
+    "test:server": "node --test core/serverSmoke.test.js"
   },
   "keywords": [
     "aarhen",
