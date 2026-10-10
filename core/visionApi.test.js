@@ -37,6 +37,8 @@ test("uses the configured analyzer and returns its result", async () => {
     prompt: "Describe it",
   }), {
     success: true,
+    language: "english",
+    languageInfo: { name: "English", code: "en" },
     result: { description: "A vehicle" },
   });
 });

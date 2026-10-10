@@ -36,7 +36,7 @@ test("transcription delegates to the configured provider", async () => {
   });
   assert.deepEqual(await transcribeAudio(Buffer.from("audio"), { language: "hi" }), {
     success: true,
-    result: { text: "Namaste", language: "hi" },
+    result: { text: "Namaste", language: "hindi", languageInfo: { name: "Hindi", code: "hi" } },
   });
 });
 
@@ -48,7 +48,9 @@ test("speech synthesis delegates to the configured provider", async () => {
   });
   assert.deepEqual(await synthesizeSpeech("Hello", { language: "en" }), {
     success: true,
-    result: { text: "Hello", language: "en", audio: "mock-audio" },
+    language: "english",
+    languageInfo: { name: "English", code: "en" },
+    result: { text: "Hello", language: "english", audio: "mock-audio" },
   });
 });
 

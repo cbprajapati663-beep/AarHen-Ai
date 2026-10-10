@@ -2,6 +2,7 @@
 
 const { VisionEngine, VisionEngineError } = require("./vision");
 const providerManager = require("../providers/providerManager");
+const { analyzeMultilingual } = require("./multilingualMedia");
 
 function createManagedEngine() {
   const provider = providerManager.isProviderAvailable("vision")
@@ -23,8 +24,14 @@ function getVisionStatus() {
 
 async function analyzeImage(image, options = {}) {
   try {
-    const result = await (engine || createManagedEngine()).analyze(image, options);
-    return { success: true, result };
+    return await analyzeMultilingual(
+      async (input, providerOptions) => ({
+        success: true,
+        result: await (engine || createManagedEngine()).analyze(input, providerOptions),
+      }),
+      image,
+      options,
+    );
   } catch (error) {
     if (error instanceof VisionEngineError) {
       return {

@@ -1,0 +1,34 @@
+name: AarHen Multilingual Media Tests
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "core/language.js"
+      - "core/multilingualMedia.js"
+      - "core/multilingualMedia.test.js"
+      - "core/voiceApi.js"
+      - "core/voiceApi.test.js"
+      - "core/visionApi.js"
+      - "core/visionApi.test.js"
+      - ".github/workflows/multilingual-media-test.yml"
+  pull_request:
+
+jobs:
+  multilingual-media-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check multilingual media syntax
+        run: |
+          node --check core/multilingualMedia.js
+          node --check core/voiceApi.js
+          node --check core/visionApi.js
+      - name: Run multilingual, Voice and Vision tests
+        run: node --test core/multilingualMedia.test.js core/voiceApi.test.js core/visionApi.test.js
