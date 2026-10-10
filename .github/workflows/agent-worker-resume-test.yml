@@ -1,0 +1,38 @@
+name: AarHen Agent Worker Resume Tests
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "core/agentWorker.js"
+      - "core/agentWorkerResume.test.js"
+      - "core/agentRunner.js"
+      - "core/agentManager.js"
+      - ".github/workflows/agent-worker-resume-test.yml"
+  pull_request:
+    paths:
+      - "core/agentWorker.js"
+      - "core/agentWorkerResume.test.js"
+      - "core/agentRunner.js"
+      - "core/agentManager.js"
+      - ".github/workflows/agent-worker-resume-test.yml"
+  workflow_dispatch:
+
+jobs:
+  agent-worker-resume:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Syntax checks
+        run: |
+          node --check core/agentWorker.js
+          node --check core/agentWorkerResume.test.js
+      - name: Worker pause and resume regression test
+        run: node --test core/agentWorkerResume.test.js
