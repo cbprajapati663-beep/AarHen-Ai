@@ -1957,6 +1957,35 @@ function cancelTask(
     }
 
 
+    const cancellationReason =
+        safeString(
+            reason
+        ) ||
+        "Task cancelled.";
+
+
+    // Mark an in-flight step as stopped so it cannot later be
+    // reported as completed after cancellation has been requested.
+    const activeStep =
+        task.steps.find(
+            step =>
+                step.id === task.currentStepId &&
+                step.status === STEP_STATES.RUNNING
+        );
+
+
+    if (activeStep) {
+        activeStep.status =
+            STEP_STATES.STOPPED;
+
+        activeStep.error =
+            cancellationReason;
+
+        activeStep.completedAt =
+            now();
+    }
+
+
     task.status =
         TASK_STATES.CANCELLED;
 
@@ -1970,10 +1999,7 @@ function cancelTask(
 
 
     task.error =
-        safeString(
-            reason
-        ) ||
-        "Task cancelled.";
+        cancellationReason;
 
 
     task.updatedAt =
@@ -2785,6 +2811,36 @@ async function executeNextStep(
             });
 
 
+        // A runner may finish after cancellation was requested.
+        // Never let its late result overwrite the terminal task state
+        // or allow the next queued step to start.
+        const latestTaskAfterRunner =
+            tasks.get(
+                safeString(
+                    task.id
+                )
+            );
+
+
+        if (
+            latestTaskAfterRunner &&
+            (
+                latestTaskAfterRunner.status === TASK_STATES.CANCELLED ||
+                latestTaskAfterRunner.status === TASK_STATES.STOPPED
+            )
+        ) {
+            return {
+                success: false,
+                cancelled:
+                    latestTaskAfterRunner.status === TASK_STATES.CANCELLED,
+                stopped:
+                    latestTaskAfterRunner.status === TASK_STATES.STOPPED,
+                executed: true,
+                task: clone(latestTaskAfterRunner)
+            };
+        }
+
+
         if (
             !result ||
             result.success !== true
@@ -2848,6 +2904,34 @@ async function executeNextStep(
         };
 
     } catch (error) {
+
+        const latestTaskAfterError =
+            tasks.get(
+                safeString(
+                    task.id
+                )
+            );
+
+
+        if (
+            latestTaskAfterError &&
+            (
+                latestTaskAfterError.status === TASK_STATES.CANCELLED ||
+                latestTaskAfterError.status === TASK_STATES.STOPPED
+            )
+        ) {
+            return {
+                success: false,
+                cancelled:
+                    latestTaskAfterError.status === TASK_STATES.CANCELLED,
+                stopped:
+                    latestTaskAfterError.status === TASK_STATES.STOPPED,
+                executed: true,
+                error: error?.message || null,
+                task: clone(latestTaskAfterError)
+            };
+        }
+
 
         const failure =
             failStep(
@@ -2981,6 +3065,26 @@ async function runTask(
 
         if (
             task.status ===
+            TASK_STATES.CANCELLED
+        ) {
+
+            return {
+
+                success: false,
+
+                cancelled:
+                    true,
+
+                task:
+                    clone(
+                        task
+                    )
+            };
+        }
+
+
+        if (
+            task.status ===
             TASK_STATES.WAITING_APPROVAL
         ) {
 
@@ -3044,6 +3148,32 @@ async function runTask(
                 task.id,
                 runner
             );
+
+
+        if (
+            result.task?.status ===
+            TASK_STATES.CANCELLED
+        ) {
+            return {
+                success: false,
+                cancelled: true,
+                iterations,
+                task: result.task
+            };
+        }
+
+
+        if (
+            result.task?.status ===
+            TASK_STATES.STOPPED
+        ) {
+            return {
+                success: true,
+                stopped: true,
+                iterations,
+                task: result.task
+            };
+        }
 
 
         if (
