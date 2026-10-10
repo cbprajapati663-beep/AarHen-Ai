@@ -62,11 +62,9 @@ function readBody(req) {
             try {
                 resolve(JSON.parse(body));
             } catch (error) {
-                reject(
-                    new Error(
-                        "Invalid JSON request body"
-                    )
-                );
+                const parseError = new Error("Invalid JSON request body");
+                parseError.statusCode = 400;
+                reject(parseError);
             }
         });
 
@@ -1228,7 +1226,7 @@ const server = http.createServer(
                 error
             );
 
-            return sendJson(res, 500, {
+            return sendJson(res, error.statusCode || 500, {
                 success: false,
                 error:
                     error.message ||
