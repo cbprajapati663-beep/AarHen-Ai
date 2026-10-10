@@ -7,9 +7,10 @@
     "start": "node server.js",
     "test": "node test.js",
     "test:cancellation": "node --test core/agentManagerCancellation.test.js",
-    "test:all": "npm test && npm run test:cancellation && npm run test:learning-api && npm run test:server",
+    "test:all": "npm test && npm run test:cancellation && npm run test:learning-api && npm run test:server && npm run test:worker-resume",
     "test:learning-api": "node --test core/learningApi.test.js",
-    "test:server": "node --test core/serverSmoke.test.js"
+    "test:server": "node --test core/serverSmoke.test.js",
+    "test:worker-resume": "node --test core/agentWorkerResume.test.js"
   },
   "keywords": [
     "aarhen",
