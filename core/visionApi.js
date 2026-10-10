@@ -1,9 +1,16 @@
 "use strict";
 
 const { VisionEngine, VisionEngineError } = require("./vision");
-const { createOpenAIVisionProvider } = require("./openaiVisionProvider");
+const providerManager = require("../providers/providerManager");
 
-let engine = new VisionEngine(process.env.OPENAI_API_KEY ? { analyzer: createOpenAIVisionProvider() } : {});
+function createManagedEngine() {
+  const provider = providerManager.isProviderAvailable("vision")
+    ? providerManager.getProvider("vision")
+    : null;
+  return new VisionEngine(provider ? { analyzer: provider } : {});
+}
+
+let engine = null;
 
 function configureVisionEngine(options = {}) {
   engine = new VisionEngine(options);
@@ -11,12 +18,12 @@ function configureVisionEngine(options = {}) {
 }
 
 function getVisionStatus() {
-  return engine.getStatus();
+  return (engine || createManagedEngine()).getStatus();
 }
 
 async function analyzeImage(image, options = {}) {
   try {
-    const result = await engine.analyze(image, options);
+    const result = await (engine || createManagedEngine()).analyze(image, options);
     return { success: true, result };
   } catch (error) {
     if (error instanceof VisionEngineError) {
