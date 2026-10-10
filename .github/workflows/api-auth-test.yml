@@ -65,4 +65,8 @@ jobs:
           protected_valid=$(curl --silent --output /tmp/protected-valid.json --write-out "%{http_code}" http://127.0.0.1:3137/learning-status -H "Authorization: Bearer test-only-secret")
           test "$protected_valid" = "200"
 
-          echo "Auth status and protected routes correctly validate API keys."
+          preflight_status=$(curl --silent --output /dev/null --dump-header /tmp/preflight.headers --write-out "%{http_code}" -X OPTIONS http://127.0.0.1:3137/learning-status -H "Origin: https://example.test" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: x-aarhen-api-key")
+          test "$preflight_status" = "204"
+          grep -qi '^Access-Control-Allow-Headers:.*X-Aarhen-API-Key' /tmp/preflight.headers
+
+          echo "Auth status, protected routes, and API-key CORS preflight passed."
