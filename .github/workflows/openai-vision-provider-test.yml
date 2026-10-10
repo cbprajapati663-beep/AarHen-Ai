@@ -1,0 +1,33 @@
+name: OpenAI Vision Provider Tests
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "core/openaiVisionProvider.js"
+      - "core/openaiVisionProvider.test.js"
+      - "core/vision.js"
+      - "core/vision.test.js"
+      - "core/visionApi.js"
+      - "core/visionApi.test.js"
+      - "providers/providerManager.js"
+      - ".github/workflows/openai-vision-provider-test.yml"
+  pull_request:
+
+jobs:
+  vision-provider-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate vision provider syntax
+        run: |
+          node --check core/openaiVisionProvider.js
+          node --check core/visionApi.js
+      - name: Run vision engine and provider tests without live API calls
+        run: node --test core/openaiVisionProvider.test.js core/vision.test.js core/visionApi.test.js
