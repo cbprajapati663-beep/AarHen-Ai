@@ -138,3 +138,15 @@ test("configured owner can clear STOP", () => {
   assert.equal(autonomousGuard.isStopped(), false);
 });
 
+test("owner identity cannot be silently overwritten after initial configuration", () => {
+  const initial = autonomousGuard.configureOwner("owner-1");
+  assert.equal(initial.success, true);
+
+  const replacement = autonomousGuard.configureOwner("owner-2");
+
+  assert.equal(replacement.success, false);
+  assert.match(replacement.error, /already configured/i);
+  assert.equal(autonomousGuard.getOwner().ownerId, "owner-1");
+  assert.equal(autonomousGuard.authorizeOwner("owner-1").authorized, true);
+  assert.equal(autonomousGuard.authorizeOwner("owner-2").authorized, false);
+});
