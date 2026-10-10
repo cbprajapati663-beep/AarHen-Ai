@@ -431,40 +431,61 @@ function clearStop(
         );
 
 
+    // Clearing an emergency STOP is a privileged control action.
+    // Fail closed if no owner identity has been configured; otherwise
+    // an arbitrary caller could clear STOP in the default state.
     if (
-        state.configured
+        !state.configured ||
+        !state.ownerId
     ) {
 
-        const authorization =
-            authorizeOwner(
-                normalizedOwnerId
-            );
+        return {
+
+            success:
+                false,
+
+            stopped:
+                state.stopActive,
+
+            authorized:
+                false,
+
+            error:
+                "Owner identity must be configured before clearing STOP."
+
+        };
+
+    }
 
 
-        if (
-            authorization.authorized !==
-            true
-        ) {
+    const authorization =
+        authorizeOwner(
+            normalizedOwnerId
+        );
 
-            return {
 
-                success:
-                    false,
+    if (
+        authorization.authorized !==
+        true
+    ) {
 
-                stopped:
-                    state.stopActive,
+        return {
 
-                authorized:
-                    false,
+            success:
+                false,
 
-                error:
-                    "Owner authorization required to clear STOP.",
+            stopped:
+                state.stopActive,
 
-                authorization
+            authorized:
+                false,
 
-            };
+            error:
+                "Owner authorization required to clear STOP.",
 
-        }
+            authorization
+
+        };
 
     }
 
