@@ -1,0 +1,48 @@
+name: AarHen Document Learning API Tests
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "core/documentLearning.js"
+      - "core/documentLearning.test.js"
+      - "core/documentLearningApi.js"
+      - "core/documentLearningApi.test.js"
+      - "server.js"
+      - ".github/workflows/document-learning-api-test.yml"
+  pull_request:
+
+jobs:
+  document-learning-api-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install document parser dependencies
+        run: npm install --prefer-offline
+      - name: Validate Document Learning syntax
+        run: |
+          node --check core/documentLearning.js
+          node --check core/documentLearningApi.js
+          node --check server.js
+      - name: Run document learning tests without external API calls
+        run: node --test core/documentLearning.test.js core/documentLearningApi.test.js
+      - name: Smoke test Document Learning HTTP endpoints
+        run: |
+          PORT=3137 node server.js > /tmp/aarhen-document-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:3137/health > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --silent --show-error --fail http://127.0.0.1:3137/learning/document/status | grep -q '"foundation-ready"'
+          HTTP_STATUS=$(curl --silent --output /tmp/document-invalid.json --write-out '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:3137/learn/document)
+          test "$HTTP_STATUS" = "400"
