@@ -80,14 +80,13 @@ function readBody(req) {
    ========================================================= */
 
 function getAuthToken(req) {
-    const header =
-        req.headers.authorization || "";
+    const header = req.headers.authorization || "";
 
     if (header.startsWith("Bearer ")) {
         return header.substring(7);
     }
 
-    return null;
+    return req.headers["x-aarhen-api-key"] || null;
 }
 
 
@@ -124,6 +123,21 @@ const server = http.createServer(
             );
 
             const pathname = url.pathname;
+
+            // In protected mode, every API route except the health/status
+            // probes requires a verified API key. Keep development mode
+            // backward-compatible when AARHEN_API_KEY is not configured.
+            const publicPaths = new Set(["/", "/health", "/auth/status"]);
+            if (auth.isConfigured() && !publicPaths.has(pathname)) {
+                const authentication = auth.authenticate(req);
+                if (!authentication.authenticated) {
+                    return sendJson(res, 401, {
+                        success: false,
+                        authenticated: false,
+                        error: "Valid API key required."
+                    });
+                }
+            }
 
 
             /* =================================================
@@ -175,13 +189,15 @@ const server = http.createServer(
                 pathname === "/auth/status" &&
                 req.method === "GET"
             ) {
+                const token = getAuthToken(req);
+                const authentication = auth.verifyApiKey(token);
+                const statusCode =
+                    auth.isConfigured() && !authentication.authenticated
+                        ? 401
+                        : 200;
 
-                const token =
-                    getAuthToken(req);
-
-                return sendJson(res, 200, {
-                    success: true,
-                    authenticated: !!token,
+                return sendJson(res, statusCode, {
+                    ...authentication,
                     hasToken: !!token
                 });
             }

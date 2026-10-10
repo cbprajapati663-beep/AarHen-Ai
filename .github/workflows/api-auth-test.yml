@@ -1,0 +1,68 @@
+name: API Authentication Tests
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "core/auth.js"
+      - "core/auth.test.js"
+      - "server.js"
+      - ".github/workflows/api-auth-test.yml"
+  pull_request:
+    paths:
+      - "core/auth.js"
+      - "core/auth.test.js"
+      - "server.js"
+      - ".github/workflows/api-auth-test.yml"
+  workflow_dispatch:
+
+jobs:
+  api-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Syntax checks
+        run: |
+          node --check core/auth.js
+          node --check server.js
+      - name: Authentication unit tests
+        run: node --test core/auth.test.js
+      - name: Verify auth status endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PORT=3137
+          export AARHEN_API_KEY="test-only-secret"
+          node server.js > /tmp/aarhen-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:3137/health >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          unauthorized_status=$(curl --silent --output /tmp/auth-invalid.json --write-out "%{http_code}" http://127.0.0.1:3137/auth/status -H "Authorization: Bearer wrong-token")
+          test "$unauthorized_status" = "401"
+          node -e 'const r=require("/tmp/auth-invalid.json"); if(r.authenticated!==false) process.exit(1)'
+
+          authorized_status=$(curl --silent --output /tmp/auth-valid.json --write-out "%{http_code}" http://127.0.0.1:3137/auth/status -H "Authorization: Bearer test-only-secret")
+          test "$authorized_status" = "200"
+          node -e 'const r=require("/tmp/auth-valid.json"); if(r.authenticated!==true) process.exit(1)'
+
+          protected_invalid=$(curl --silent --output /tmp/protected-invalid.json --write-out "%{http_code}" http://127.0.0.1:3137/learning-status -H "Authorization: Bearer wrong-token")
+          test "$protected_invalid" = "401"
+
+          protected_valid=$(curl --silent --output /tmp/protected-valid.json --write-out "%{http_code}" http://127.0.0.1:3137/learning-status -H "Authorization: Bearer test-only-secret")
+          test "$protected_valid" = "200"
+
+          echo "Auth status and protected routes correctly validate API keys."
