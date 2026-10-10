@@ -80,14 +80,13 @@ function readBody(req) {
    ========================================================= */
 
 function getAuthToken(req) {
-    const header =
-        req.headers.authorization || "";
+    const header = req.headers.authorization || "";
 
     if (header.startsWith("Bearer ")) {
         return header.substring(7);
     }
 
-    return null;
+    return req.headers["x-aarhen-api-key"] || null;
 }
 
 
