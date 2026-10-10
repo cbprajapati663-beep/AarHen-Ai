@@ -847,7 +847,10 @@ async function searchWeb({
                     ],
 
                 fallbackUsed:
-                    false
+                    false,
+
+                providerManagerVersion:
+                    PROVIDER_MANAGER_VERSION
 
             };
 
