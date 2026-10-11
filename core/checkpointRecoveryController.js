@@ -407,7 +407,11 @@ function saveAfterExecution(
             fallbackUsed,
             outcome: normalizedExecution.success
                 ? (fallbackUsed ? "fallback-succeeded" : "succeeded")
-                : "failed"
+                : "failed",
+            // A provider outage must never trigger an automatic retry.
+            // Failed work is surfaced for an explicit owner decision.
+            requiresOwnerDecision: normalizedExecution.success !== true,
+            automaticRetryAllowed: false
         };
     }
 

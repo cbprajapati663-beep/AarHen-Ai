@@ -111,6 +111,8 @@ test("provider failure falls back to the next available provider and checkpoint 
   );
   assert.equal(latest.checkpoint.metadata.providerRecovery.fallbackUsed, true);
   assert.equal(latest.checkpoint.metadata.providerRecovery.outcome, "fallback-succeeded");
+  assert.equal(latest.checkpoint.metadata.providerRecovery.requiresOwnerDecision, false);
+  assert.equal(latest.checkpoint.metadata.providerRecovery.automaticRetryAllowed, false);
 });
 
 test("when every provider fails, failure and attempted-provider history remain visible in checkpoint", async () => {
@@ -155,6 +157,8 @@ test("when every provider fails, failure and attempted-provider history remain v
   );
   assert.equal(latest.checkpoint.metadata.providerRecovery.fallbackUsed, true);
   assert.equal(latest.checkpoint.metadata.providerRecovery.outcome, "failed");
+  assert.equal(latest.checkpoint.metadata.providerRecovery.requiresOwnerDecision, true);
+  assert.equal(latest.checkpoint.metadata.providerRecovery.automaticRetryAllowed, false);
   assert.equal(latest.checkpoint.metadata.execution.success, false);
   assert.match(latest.checkpoint.metadata.execution.error, /simulated outage two/);
 });
