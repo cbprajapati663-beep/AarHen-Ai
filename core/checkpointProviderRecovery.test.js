@@ -52,6 +52,7 @@ function fakeProvider(name, search) {
 
 test.beforeEach(() => {
   providerManager.reset();
+  providerManager.setProviderEnabled("research", false);
   agentManager.reset();
   assert.equal(checkpointBridge.reset().success, true);
 });
