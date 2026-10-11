@@ -7,7 +7,7 @@
     "start": "node server.js",
     "test": "node test.js",
     "test:cancellation": "node --test core/agentManagerCancellation.test.js",
-    "test:all": "npm test && npm run test:cancellation && npm run test:learning-api && npm run test:server && npm run test:worker-resume && npm run test:runner-integration && npm run test:checkpoint-recovery && npm run test:checkpoint-restore && npm run test:checkpoint-process-restart && npm run test:checkpoint-resolution",
+    "test:all": "npm test && npm run test:cancellation && npm run test:learning-api && npm run test:server && npm run test:worker-resume && npm run test:runner-integration && npm run test:checkpoint-recovery && npm run test:checkpoint-restore && npm run test:checkpoint-process-restart && npm run test:checkpoint-resolution && npm run test:checkpoint-resume",
     "test:learning-api": "node --test core/learningApi.test.js",
     "test:server": "node --test core/serverSmoke.test.js",
     "test:worker-resume": "node --test core/agentWorkerResume.test.js",
@@ -15,7 +15,8 @@
     "test:checkpoint-recovery": "node --test core/checkpointRecoveryIntegration.test.js",
     "test:checkpoint-restore": "node --test core/checkpointRestore.test.js",
     "test:checkpoint-process-restart": "node --test core/checkpointProcessRestart.test.js",
-    "test:checkpoint-resolution": "node --test core/checkpointInterruptedStepResolution.test.js"
+    "test:checkpoint-resolution": "node --test core/checkpointInterruptedStepResolution.test.js",
+    "test:checkpoint-resume": "node --test core/checkpointResumeIntegration.test.js"
   },
   "keywords": [
     "aarhen",
