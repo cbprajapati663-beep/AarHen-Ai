@@ -1812,8 +1812,11 @@ function getStatus() {
             latestCheckpoint:
                 true,
 
-            // Recovery plans are inspection-only; task restoration is not implemented.
+            // Restore reconstructs state only; execution and resume remain controlled.
             recoveryPlanInspectionOnly:
+                true,
+
+            controlledCheckpointRestore:
                 true,
 
             automaticCheckpointRestore:
