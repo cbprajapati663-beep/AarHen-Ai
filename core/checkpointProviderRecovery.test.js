@@ -161,4 +161,14 @@ test("when every provider fails, failure and attempted-provider history remain v
   assert.equal(latest.checkpoint.metadata.providerRecovery.automaticRetryAllowed, false);
   assert.equal(latest.checkpoint.metadata.execution.success, false);
   assert.match(latest.checkpoint.metadata.execution.error, /simulated outage two/);
+
+  // Even a valid checkpoint cannot be restored into a runnable task while
+  // provider failure still requires an explicit owner decision.
+  agentManager.reset();
+  const blockedRestore = checkpointRecovery.restoreFromCheckpoint(taskId);
+  assert.equal(blockedRestore.success, false);
+  assert.equal(blockedRestore.restored, false);
+  assert.equal(blockedRestore.requiresOwnerDecision, true);
+  assert.equal(blockedRestore.automaticRetryAllowed, false);
+  assert.match(blockedRestore.error, /explicit owner decision/i);
 });

@@ -1953,6 +1953,25 @@ function restoreFromCheckpoint(taskId) {
     }
 
     const checkpoint = latest.checkpoint;
+    const checkpointMetadata = safeObject(checkpoint.metadata);
+    const providerRecovery = safeObject(checkpointMetadata.providerRecovery);
+
+    // A provider outage that requires an owner decision must not be
+    // restored into an executable task through the generic restore path.
+    // A dedicated, explicit resolution flow is required first.
+    if (providerRecovery.requiresOwnerDecision === true) {
+        return {
+            success: false,
+            restored: false,
+            recoverable: true,
+            requiresOwnerDecision: true,
+            automaticRetryAllowed: false,
+            error: "Provider failure requires an explicit owner decision before checkpoint restore.",
+            checkpointId: checkpoint.id,
+            task: null
+        };
+    }
+
     const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint);
     if (!validation.valid) {
         return {
