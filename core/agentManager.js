@@ -711,6 +711,167 @@ function createTask(
 
 
 // ============================================================
+// RESTORE TASK FROM A VALIDATED CHECKPOINT
+// ============================================================
+// Restoration reconstructs state only. It never starts execution.
+// A step that was RUNNING at crash time is moved to WAITING_APPROVAL
+// because its external side-effect outcome may be unknown.
+// ============================================================
+
+function restoreTaskFromCheckpoint(checkpoint) {
+    const record = safeObject(checkpoint);
+    const snapshot = safeObject(record.task);
+    const taskId = safeString(record.taskId);
+    const agentId = safeString(snapshot.agentId);
+    const request = safeString(snapshot.request);
+    const steps = safeArray(snapshot.steps);
+
+    if (!taskId || !snapshot.id || snapshot.id !== taskId ||
+        !agentId || !request || record.recoveryEligible !== true ||
+        !Number.isInteger(snapshot.totalSteps) ||
+        snapshot.totalSteps !== steps.length) {
+        return { success: false, error: "Checkpoint identity or recovery metadata is invalid.", task: null };
+    }
+
+    if (snapshot.stopRequested === true ||
+        [TASK_STATES.STOPPED, TASK_STATES.CANCELLED, TASK_STATES.COMPLETED,
+         TASK_STATES.WAITING_APPROVAL].includes(snapshot.status) ||
+        (snapshot.approvalRequired === true && snapshot.approved !== true)) {
+        return { success: false, error: "Checkpoint task state is blocked from recovery.", task: null };
+    }
+
+    if (tasks.has(taskId)) {
+        return { success: false, error: "Task already exists; restore will not overwrite live state.", task: null };
+    }
+
+    const seenStepIds = new Set();
+    for (let index = 0; index < steps.length; index += 1) {
+        const step = safeObject(steps[index]);
+        if (!safeString(step.id) || seenStepIds.has(step.id) ||
+            (step.index !== null && step.index !== undefined && step.index !== index) ||
+            !Object.values(STEP_STATES).includes(step.status)) {
+            return { success: false, error: "Checkpoint contains invalid or duplicate step data.", task: null };
+        }
+        seenStepIds.add(step.id);
+        if (step.status === STEP_STATES.WAITING_APPROVAL &&
+            step.requiresApproval === true && step.approved !== true) {
+            return { success: false, error: "Checkpoint contains an unresolved approval gate.", task: null };
+        }
+    }
+
+    let agentResult;
+    if (agents.has(agentId)) {
+        agentResult = { success: true, agent: clone(agents.get(agentId)) };
+    } else {
+        agentResult = createAgent({
+            id: agentId,
+            name: "Restored AarHen Agent",
+            metadata: { restoredFromCheckpoint: record.id }
+        });
+    }
+    if (!agentResult.success) {
+        return { success: false, error: agentResult.error || "Unable to restore task agent.", task: null };
+    }
+
+    const created = createTask(agentId, request, {
+        id: taskId,
+        description: snapshot.description,
+        priority: snapshot.priority,
+        autonomy: snapshot.autonomy,
+        approvalRequired: false,
+        approved: true,
+        maxRetries: snapshot.maxRetries,
+        metadata: { restoredFromCheckpoint: record.id, recoveryRequiresReview: true }
+    });
+    if (!created.success) {
+        return { success: false, error: created.error || "Unable to reconstruct task.", task: null };
+    }
+
+    let interruptedStep = false;
+    for (const sourceStep of steps) {
+        const step = safeObject(sourceStep);
+        const wasRunning = step.status === STEP_STATES.RUNNING;
+        if (wasRunning) interruptedStep = true;
+
+        const requiresApproval = wasRunning ? true : step.requiresApproval === true;
+        const approved = wasRunning ? false : step.approved === true;
+        const added = addStep(taskId, {
+            id: step.id,
+            name: step.name,
+            description: step.description,
+            action: step.action,
+            input: step.input,
+            metadata: step.metadata,
+            maxRetries: step.maxRetries,
+            requiresApproval,
+            approved
+        });
+
+        if (!added.success) {
+            deleteTask(taskId);
+            return { success: false, error: added.error || "Unable to restore checkpoint step.", task: null };
+        }
+
+        const restoredTask = tasks.get(taskId);
+        const restoredStep = restoredTask.steps.find(item => item.id === step.id);
+        restoredStep.policy = clone(step.policy) || restoredStep.policy;
+        restoredStep.retries = Number(step.retries) || 0;
+        restoredStep.startedAt = step.startedAt || null;
+        restoredStep.completedAt = step.completedAt || null;
+        restoredStep.error = step.error || null;
+        restoredStep.result = clone(step.result) ?? null;
+        restoredStep.approved = approved;
+        restoredStep.requiresApproval = requiresApproval;
+
+        if (wasRunning) {
+            restoredStep.status = STEP_STATES.WAITING_APPROVAL;
+        } else if (step.status === STEP_STATES.COMPLETED ||
+                   step.status === STEP_STATES.FAILED ||
+                   step.status === STEP_STATES.SKIPPED ||
+                   step.status === STEP_STATES.STOPPED) {
+            restoredStep.status = step.status;
+        } else if (step.requiresApproval === true && step.approved !== true) {
+            restoredStep.status = STEP_STATES.WAITING_APPROVAL;
+        } else {
+            restoredStep.status = STEP_STATES.PENDING;
+        }
+    }
+
+    const restored = tasks.get(taskId);
+    restored.currentStepIndex = Number.isInteger(snapshot.currentStepIndex)
+        ? snapshot.currentStepIndex : -1;
+    restored.currentStepId = null;
+    restored.retries = Number(snapshot.retries) || 0;
+    restored.startedAt = snapshot.startedAt || null;
+    restored.completedAt = null;
+    restored.stoppedAt = null;
+    restored.stopRequested = false;
+    restored.pauseRequested = !interruptedStep;
+    restored.error = null;
+    restored.warnings = safeArray(snapshot.warnings).slice();
+    restored.approvalRequired = interruptedStep ||
+        restored.steps.some(step => step.requiresApproval && !step.approved);
+    restored.approved = !restored.approvalRequired;
+    restored.status = restored.approvalRequired
+        ? TASK_STATES.WAITING_APPROVAL
+        : TASK_STATES.PAUSED;
+    restored.updatedAt = now();
+    updateAgentStateFromTask(restored);
+
+    return {
+        success: true,
+        restored: true,
+        executionStarted: false,
+        requiresApproval: restored.approvalRequired,
+        interruptedStepId: interruptedStep
+            ? restored.steps.find(step => step.status === STEP_STATES.WAITING_APPROVAL)?.id || null
+            : null,
+        task: clone(restored)
+    };
+}
+
+
+// ============================================================
 // GET TASK
 // ============================================================
 
@@ -3687,6 +3848,8 @@ module.exports = {
     listAgents,
 
     createTask,
+
+    restoreTaskFromCheckpoint,
 
     getTask,
 

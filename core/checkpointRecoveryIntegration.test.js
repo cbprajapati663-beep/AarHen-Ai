@@ -61,6 +61,7 @@ test("recovery controller reports inspection-only recovery and no automatic rest
 
   assert.equal(status.success, true);
   assert.equal(status.capabilities.recoveryPlanInspectionOnly, true);
+  assert.equal(status.capabilities.controlledCheckpointRestore, true);
   assert.equal(status.capabilities.automaticCheckpointRestore, false);
   assert.equal(status.capabilities.automaticTaskResume, false);
   assert.equal(status.capabilities.controlledExecutionRequired, true);

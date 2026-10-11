@@ -395,6 +395,15 @@ function saveAfterExecution(
 
 
 // ============================================================
+// VALIDATE CHECKPOINT FOR CONTROLLED RESTORE
+// ============================================================
+
+function validateCheckpointForRecovery(checkpoint) {
+    return checkpointEngine.validateCheckpointForRecovery(checkpoint);
+}
+
+
+// ============================================================
 // GET LATEST CHECKPOINT
 // ============================================================
 
@@ -1062,6 +1071,8 @@ module.exports = {
     saveAfterExecution,
 
     getLatestCheckpoint,
+
+    validateCheckpointForRecovery,
 
     getRecoveryCandidate,
 
