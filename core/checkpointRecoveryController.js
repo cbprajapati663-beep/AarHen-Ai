@@ -328,10 +328,88 @@ function saveAfterExecution(
         );
 
 
-    const normalizedExecution =
-        buildCheckpointExecutionResult(
+    const execution =
+        safeObject(
             executionResult
         );
+
+
+    const normalizedExecution =
+        buildCheckpointExecutionResult(
+            execution
+        );
+
+
+    // Preserve provider fallback diagnostics in the checkpoint.
+    // The audit data is metadata only; it never starts execution.
+    const nestedResult =
+        safeObject(
+            execution.result
+        );
+
+
+    const nestedExecution =
+        safeObject(
+            execution.execution
+        );
+
+
+    const provider =
+        safeString(
+            execution.provider ||
+            nestedResult.provider ||
+            nestedExecution.provider
+        );
+
+
+    const attemptedProviders =
+        Array.isArray(
+            execution.attemptedProviders
+        )
+            ? execution.attemptedProviders
+            : Array.isArray(
+                nestedResult.attemptedProviders
+            )
+                ? nestedResult.attemptedProviders
+                : Array.isArray(
+                    nestedExecution.attemptedProviders
+                )
+                    ? nestedExecution.attemptedProviders
+                    : [];
+
+
+    const fallbackUsed =
+        execution.fallbackUsed === true ||
+        nestedResult.fallbackUsed === true ||
+        nestedExecution.fallbackUsed === true;
+
+
+    const providerRequired =
+        execution.providerRequired === true ||
+        nestedResult.providerRequired === true ||
+        nestedExecution.providerRequired === true;
+
+
+    const metadata = {
+        ...safeObject(config.metadata)
+    };
+
+
+    if (
+        provider ||
+        attemptedProviders.length > 0 ||
+        fallbackUsed ||
+        providerRequired
+    ) {
+        metadata.providerRecovery = {
+            provider: provider || null,
+            attemptedProviders: clone(attemptedProviders),
+            fallbackUsed,
+            outcome: normalizedExecution.success
+                ? (fallbackUsed ? "fallback-succeeded" : "succeeded")
+                : "failed"
+        };
+    }
 
 
     return checkpointBridge
@@ -345,6 +423,8 @@ function saveAfterExecution(
 
                 ...config,
 
+                metadata,
+
                 source:
                     config.source ||
                     "checkpoint-recovery-controller"
@@ -354,7 +434,6 @@ function saveAfterExecution(
         );
 
 }
-
 
 // ============================================================
 // EXECUTE ASSIGNED TASK
