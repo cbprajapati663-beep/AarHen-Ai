@@ -7,11 +7,12 @@
     "start": "node server.js",
     "test": "node test.js",
     "test:cancellation": "node --test core/agentManagerCancellation.test.js",
-    "test:all": "npm test && npm run test:cancellation && npm run test:learning-api && npm run test:server && npm run test:worker-resume && npm run test:runner-integration",
+    "test:all": "npm test && npm run test:cancellation && npm run test:learning-api && npm run test:server && npm run test:worker-resume && npm run test:runner-integration && npm run test:checkpoint-recovery",
     "test:learning-api": "node --test core/learningApi.test.js",
     "test:server": "node --test core/serverSmoke.test.js",
     "test:worker-resume": "node --test core/agentWorkerResume.test.js",
-    "test:runner-integration": "node --test core/agentRunnerIntegration.test.js"
+    "test:runner-integration": "node --test core/agentRunnerIntegration.test.js",
+    "test:checkpoint-recovery": "node --test core/checkpointRecoveryIntegration.test.js"
   },
   "keywords": [
     "aarhen",
