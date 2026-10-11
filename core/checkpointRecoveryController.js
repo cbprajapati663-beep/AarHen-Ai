@@ -2019,6 +2019,168 @@ function resolveInterruptedStep(taskId, stepId, resolution, options = {}) {
 
 
 // ============================================================
+// EXPLICITLY RESOLVE A PROVIDER FAILURE
+// ============================================================
+// This method records an explicit owner decision but never executes
+// the task. The caller must set ownerAuthorized only after verifying
+// the authenticated owner in a trusted server-side layer.
+// ============================================================
+
+function resolveProviderFailure(taskId, decision, options = {}) {
+    const id = safeString(taskId);
+    const action = safeString(decision).toLowerCase();
+    const config = safeObject(options);
+
+    if (!id) {
+        return { success: false, resolved: false, error: "Task ID is required.", executionStarted: false };
+    }
+
+    if (config.ownerAuthorized !== true) {
+        return {
+            success: false,
+            resolved: false,
+            requiresOwnerAuthorization: true,
+            error: "A verified owner authorization is required.",
+            executionStarted: false
+        };
+    }
+
+    if (!["retry", "abort"].includes(action)) {
+        return {
+            success: false,
+            resolved: false,
+            error: "Decision must be 'retry' or 'abort'.",
+            executionStarted: false
+        };
+    }
+
+    if (action === "retry" && config.confirmProviderRetry !== true) {
+        return {
+            success: false,
+            resolved: false,
+            requiresConfirmation: true,
+            error: "Retry may repeat external side effects; explicit provider-retry confirmation is required.",
+            executionStarted: false,
+            automaticRetryAllowed: false
+        };
+    }
+
+    const latest = checkpointBridge.getLatestCheckpoint(id);
+    if (!latest.success || !latest.checkpoint) {
+        return {
+            success: false,
+            resolved: false,
+            error: latest.error || "Provider-failure checkpoint not found.",
+            executionStarted: false
+        };
+    }
+
+    const checkpoint = latest.checkpoint;
+    const metadata = safeObject(checkpoint.metadata);
+    const providerRecovery = safeObject(metadata.providerRecovery);
+
+    if (providerRecovery.requiresOwnerDecision !== true ||
+        providerRecovery.automaticRetryAllowed !== false) {
+        return {
+            success: false,
+            resolved: false,
+            error: "Latest checkpoint does not contain an unresolved, fail-closed provider failure.",
+            executionStarted: false,
+            automaticRetryAllowed: false
+        };
+    }
+
+    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint);
+    if (!validation.valid) {
+        return {
+            success: false,
+            resolved: false,
+            error: validation.reason || "Checkpoint failed recovery validation.",
+            executionStarted: false
+        };
+    }
+
+    if (agentManager.getTask(id).success) {
+        return {
+            success: false,
+            resolved: false,
+            error: "Task already exists; provider-failure resolution will not overwrite live state.",
+            executionStarted: false
+        };
+    }
+
+    const decidedAt = new Date().toISOString();
+    const resolvedMetadata = clone(metadata) || {};
+    resolvedMetadata.providerRecovery = {
+        ...clone(providerRecovery),
+        requiresOwnerDecision: false,
+        automaticRetryAllowed: false,
+        ownerDecision: {
+            decision: action,
+            decidedAt,
+            authorizedByOwner: true,
+            retryConfirmed: action === "retry" && config.confirmProviderRetry === true
+        }
+    };
+
+    // The original checkpoint remains unchanged. The modified copy is
+    // only passed to the validated restore path after the owner decision.
+    const resolvedCheckpoint = {
+        ...clone(checkpoint),
+        metadata: resolvedMetadata
+    };
+
+    const restored = agentManager.restoreTaskFromCheckpoint(resolvedCheckpoint);
+    if (!restored.success) {
+        return {
+            success: false,
+            resolved: false,
+            error: restored.error || "Unable to restore task after provider-failure decision.",
+            checkpointId: checkpoint.id,
+            executionStarted: false
+        };
+    }
+
+    let task = restored.task;
+    if (action === "abort") {
+        const stopped = agentManager.stopTask(id, "Owner aborted provider-failure recovery.");
+        if (!stopped.success) {
+            return {
+                success: false,
+                resolved: false,
+                error: stopped.error || "Owner decision was recorded but task could not be stopped.",
+                task: agentManager.getTask(id).task || task,
+                checkpointId: checkpoint.id,
+                executionStarted: false
+            };
+        }
+        task = stopped.task;
+    }
+
+    const audit = checkpointBridge.saveTaskCheckpoint(id, {
+        reason: "Checkpoint after explicit owner resolution of provider failure.",
+        source: "checkpoint-recovery-controller",
+        metadata: resolvedMetadata
+    });
+
+    return {
+        success: true,
+        resolved: true,
+        decision: action,
+        taskRestored: true,
+        task,
+        checkpointId: checkpoint.id,
+        auditCheckpoint: audit.success ? audit.checkpoint : null,
+        auditCheckpointSaved: audit.success === true,
+        auditWarning: audit.success ? null : (audit.error || "Owner decision was applied but audit checkpoint could not be saved."),
+        executionStarted: false,
+        automaticRetryAllowed: false,
+        checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+    };
+}
+
+
+// ============================================================
 // RESET
 // ============================================================
 
@@ -2076,6 +2238,8 @@ module.exports = {
     restoreFromCheckpoint,
 
     resolveInterruptedStep,
+
+    resolveProviderFailure,
 
     getStatus,
 
