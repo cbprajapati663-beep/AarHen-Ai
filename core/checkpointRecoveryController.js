@@ -1852,6 +1852,54 @@ function getStatus() {
 
 
 // ============================================================
+// RESTORE FROM CHECKPOINT (STATE ONLY; NO EXECUTION)
+// ============================================================
+
+function restoreFromCheckpoint(taskId) {
+    const id = safeString(taskId);
+    if (!id) {
+        return { success: false, restored: false, error: "Task ID is required.", task: null };
+    }
+
+    const latest = checkpointBridge.getLatestCheckpoint(id);
+    if (!latest.success || !latest.checkpoint) {
+        return { success: false, restored: false, error: latest.error || "Checkpoint not found.", task: null };
+    }
+
+    const checkpoint = latest.checkpoint;
+    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint);
+    if (!validation.valid) {
+        return {
+            success: false,
+            restored: false,
+            recoverable: false,
+            error: validation.reason || "Checkpoint failed recovery validation.",
+            checkpointId: checkpoint.id,
+            task: null
+        };
+    }
+
+    if (agentManager.getTask(id).success) {
+        return {
+            success: false,
+            restored: false,
+            error: "Task already exists; restore will not overwrite live state.",
+            checkpointId: checkpoint.id,
+            task: null
+        };
+    }
+
+    const restored = agentManager.restoreTaskFromCheckpoint(checkpoint);
+    return {
+        ...restored,
+        checkpointId: checkpoint.id,
+        checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION,
+        executionStarted: false
+    };
+}
+
+
+// ============================================================
 // RESET
 // ============================================================
 
@@ -1905,6 +1953,8 @@ module.exports = {
     buildRecoveryPlan,
 
     getLatestCheckpoint,
+
+    restoreFromCheckpoint,
 
     getStatus,
 
