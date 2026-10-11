@@ -822,6 +822,7 @@ function restoreTaskFromCheckpoint(checkpoint) {
         restoredStep.result = clone(step.result) ?? null;
         restoredStep.approved = approved;
         restoredStep.requiresApproval = requiresApproval;
+        restoredStep.recoveryInterrupted = wasRunning;
 
         if (wasRunning) {
             restoredStep.status = STEP_STATES.WAITING_APPROVAL;
@@ -1438,6 +1439,15 @@ function approveTask(taskId) {
     }
 
 
+    if (task.steps.some(step => step.recoveryInterrupted === true)) {
+        return {
+            success: false,
+            requiresRecoveryResolution: true,
+            error: "Interrupted checkpoint step must be explicitly resolved before task approval."
+        };
+    }
+
+
     task.approved =
         true;
 
@@ -1544,6 +1554,15 @@ function approveStep(
     }
 
 
+    if (step.recoveryInterrupted === true) {
+        return {
+            success: false,
+            requiresRecoveryResolution: true,
+            error: "Interrupted checkpoint step must be explicitly resolved before approval."
+        };
+    }
+
+
     step.approved =
         true;
 
@@ -1598,6 +1617,98 @@ function approveStep(
             clone(
                 task
             )
+    };
+}
+
+
+// ============================================================
+// RESOLVE INTERRUPTED CHECKPOINT STEP
+// ============================================================
+// The caller must explicitly choose whether the interrupted step
+// completed before the crash or should be retried. Retrying can
+// duplicate external side effects, so it requires an explicit flag.
+// This function changes state only; it never starts execution.
+// ============================================================
+
+function resolveInterruptedStep(taskId, stepId, resolution, options = {}) {
+    const task = tasks.get(safeString(taskId));
+    if (!task) {
+        return { success: false, error: "Task not found.", task: null };
+    }
+
+    if (task.status !== TASK_STATES.WAITING_APPROVAL || isTerminalTask(task.status)) {
+        return { success: false, error: "Task is not awaiting interrupted-step resolution.", task: clone(task) };
+    }
+
+    const step = task.steps.find(item => item.id === safeString(stepId));
+    if (!step) {
+        return { success: false, error: "Step not found.", task: clone(task) };
+    }
+    if (step.recoveryInterrupted !== true || step.status !== STEP_STATES.WAITING_APPROVAL) {
+        return { success: false, error: "Step is not an unresolved interrupted checkpoint step.", task: clone(task) };
+    }
+
+    const choice = safeString(resolution);
+    const config = safeObject(options);
+    if (choice !== "mark-completed" && choice !== "retry") {
+        return { success: false, error: "Resolution must be 'mark-completed' or 'retry'.", task: clone(task) };
+    }
+    if (choice === "retry" && config.confirmSideEffectRetry !== true) {
+        return {
+            success: false,
+            requiresConfirmation: true,
+            error: "Retry may duplicate external side effects; explicit confirmation is required.",
+            task: clone(task)
+        };
+    }
+
+    step.recoveryInterrupted = false;
+    step.requiresApproval = false;
+    step.approved = true;
+    step.error = null;
+
+    if (choice === "mark-completed") {
+        step.status = STEP_STATES.COMPLETED;
+        step.result = clone(config.result ?? { recoveryResolution: "owner-confirmed-completed" });
+        step.completedAt = now();
+    } else {
+        step.status = STEP_STATES.PENDING;
+        step.result = null;
+        step.completedAt = null;
+        task.warnings = Array.isArray(task.warnings) ? task.warnings : [];
+        task.warnings.push("Interrupted step explicitly approved for retry; external side effects may be duplicated.");
+    }
+
+    const stillWaiting = task.steps.some(item =>
+        item.recoveryInterrupted === true || (item.requiresApproval && !item.approved)
+    );
+    task.approvalRequired = stillWaiting;
+    task.approved = !stillWaiting;
+
+    if (stillWaiting) {
+        task.status = TASK_STATES.WAITING_APPROVAL;
+    } else if (task.steps.every(item =>
+        item.status === STEP_STATES.COMPLETED || item.status === STEP_STATES.SKIPPED
+    )) {
+        task.status = TASK_STATES.COMPLETED;
+        task.completedAt = now();
+        task.result = buildTaskResult(task);
+    } else {
+        task.status = TASK_STATES.READY;
+        task.completedAt = null;
+    }
+
+    task.currentStepId = null;
+    task.updatedAt = now();
+    updateAgentStateFromTask(task);
+
+    return {
+        success: true,
+        resolved: true,
+        resolution: choice,
+        executionStarted: false,
+        requiresFurtherApproval: stillWaiting,
+        task: clone(task)
     };
 }
 
@@ -3864,6 +3975,8 @@ module.exports = {
     approveTask,
 
     approveStep,
+
+    resolveInterruptedStep,
 
     startTask,
 

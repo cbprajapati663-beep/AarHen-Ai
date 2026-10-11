@@ -1903,6 +1903,20 @@ function restoreFromCheckpoint(taskId) {
 
 
 // ============================================================
+// EXPLICITLY RESOLVE AN INTERRUPTED CHECKPOINT STEP
+// ============================================================
+
+function resolveInterruptedStep(taskId, stepId, resolution, options = {}) {
+    const result = agentManager.resolveInterruptedStep(taskId, stepId, resolution, options);
+    return {
+        ...result,
+        checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION,
+        executionStarted: false
+    };
+}
+
+
+// ============================================================
 // RESET
 // ============================================================
 
@@ -1958,6 +1972,8 @@ module.exports = {
     getLatestCheckpoint,
 
     restoreFromCheckpoint,
+
+    resolveInterruptedStep,
 
     getStatus,
 
