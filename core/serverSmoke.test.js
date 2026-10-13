@@ -152,6 +152,18 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(body.executionStarted, false);
     });
 
+    await t.test("provider recovery resume requires explicit execution confirmation", async () => {
+        const response = await fetch(baseUrl + "/checkpoint/provider-failure/resume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            body: JSON.stringify({ taskId: "unknown-task", confirmExecution: false })
+        });
+        const body = await response.json();
+        assert.equal(response.status, 400);
+        assert.equal(body.requiresConfirmation, true);
+        assert.equal(body.executionStarted, undefined);
+    });
+
     await t.test("unknown protected route cannot bypass authentication", async () => {
         const response = await fetch(baseUrl + "/does-not-exist");
         assert.equal(response.status, 401);
