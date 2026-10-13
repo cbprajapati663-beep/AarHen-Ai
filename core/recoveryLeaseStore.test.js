@@ -44,7 +44,7 @@ test("a separate Node.js process cannot claim a task already locked on the share
     'const result = store.claim("task-cross-process");',
     'process.stdout.write(JSON.stringify(result));',
     'process.exit(result.success ? 2 : 0);'
-  ].join("\\n");
+  ].join("\n");
   const child = spawnSync(process.execPath, ["-e", script, directory], { encoding: "utf8" });
   assert.equal(child.status, 0, child.stderr);
   const result = JSON.parse(child.stdout);
