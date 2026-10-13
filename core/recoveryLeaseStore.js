@@ -2,8 +2,8 @@
 
 // File-backed recovery claims. Exclusive file creation is atomic on a single
 // local/shared filesystem. This is not a distributed lock for hosts that do
-// not share the same filesystem. Stale claims fail closed and require operator
-// cleanup after confirming that no executor is still running.
+// not share the same filesystem. Stale claims fail closed and require explicit
+// operator confirmation after verifying no executor remains active.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -32,15 +32,60 @@ function createRecoveryLeaseStore(options = {}) {
     return path.join(directory, validateTaskId(taskId) + ".json");
   }
 
+  function mutationPath(taskId) {
+    return leasePath(taskId) + ".mutation";
+  }
+
+  function fingerprint(raw) {
+    return crypto.createHash("sha256").update(raw, "utf8").digest("hex");
+  }
+
+  // Serialize claim/release/operator-clear operations across processes that
+  // share this filesystem. A crashed mutation leaves a guard behind; that
+  // intentionally fails closed and requires separate operator investigation.
+  function withMutationGuard(taskId, operation) {
+    const id = validateTaskId(taskId);
+    fs.mkdirSync(directory, { recursive: true });
+    let guardFd;
+    try {
+      guardFd = fs.openSync(mutationPath(id), "wx", 0o600);
+    } catch (error) {
+      if (error && error.code === "EEXIST") {
+        return {
+          success: false,
+          taskId: id,
+          mutationInProgress: true,
+          error: "Recovery lease mutation is already in progress or its guard requires operator investigation."
+        };
+      }
+      throw error;
+    }
+
+    try {
+      return operation(id, leasePath(id));
+    } finally {
+      try { fs.closeSync(guardFd); } catch {}
+      try { fs.unlinkSync(mutationPath(id)); } catch {}
+    }
+  }
+
   function inspect(taskId) {
     const id = validateTaskId(taskId);
     const file = leasePath(id);
-    if (!fs.existsSync(file)) return { success: true, locked: false, taskId: id };
+    let raw;
     try {
-      const lease = JSON.parse(fs.readFileSync(file, "utf8"));
+      raw = fs.readFileSync(file, "utf8");
+    } catch (error) {
+      if (error && error.code === "ENOENT") return { success: true, locked: false, taskId: id };
+      return { success: false, locked: true, taskId: id, error: "Recovery lease cannot be read; execution remains blocked." };
+    }
+
+    try {
+      const lease = JSON.parse(raw);
       if (!lease || lease.taskId !== id || typeof lease.token !== "string") {
         return { success: false, locked: true, corrupt: true, taskId: id, error: "Recovery lease is corrupt; execution remains blocked." };
       }
+      const expired = Number.isFinite(Date.parse(lease.expiresAt)) && Date.parse(lease.expiresAt) <= Date.now();
       return {
         success: true,
         locked: true,
@@ -51,7 +96,10 @@ function createRecoveryLeaseStore(options = {}) {
           createdAt: lease.createdAt,
           expiresAt: lease.expiresAt
         },
-        expired: Number.isFinite(Date.parse(lease.expiresAt)) && Date.parse(lease.expiresAt) <= Date.now()
+        expired,
+        // This digest identifies the exact observed lease snapshot. It is not
+        // an authorization credential and does not reveal the ownership token.
+        leaseFingerprint: fingerprint(raw)
       };
     } catch {
       return { success: false, locked: true, corrupt: true, taskId: id, error: "Recovery lease cannot be read; execution remains blocked." };
@@ -60,44 +108,47 @@ function createRecoveryLeaseStore(options = {}) {
 
   function claim(taskId, metadata = {}) {
     const id = validateTaskId(taskId);
-    fs.mkdirSync(directory, { recursive: true });
-    const file = leasePath(id);
-    const now = Date.now();
-    const lease = {
-      taskId: id,
-      token: crypto.randomUUID(),
-      pid: process.pid,
-      createdAt: new Date(now).toISOString(),
-      expiresAt: new Date(now + leaseDurationMs).toISOString(),
-      metadata: metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {}
-    };
-    let fd;
-    try {
-      fd = fs.openSync(file, "wx", 0o600);
-      fs.writeFileSync(fd, JSON.stringify(lease, null, 2), "utf8");
-      fs.fsyncSync(fd);
-      fs.closeSync(fd);
-      return { success: true, acquired: true, taskId: id, token: lease.token, expiresAt: lease.expiresAt };
-    } catch (error) {
-      if (fd !== undefined) {
-        try { fs.closeSync(fd); } catch {}
-        try { fs.unlinkSync(file); } catch {}
+    return withMutationGuard(id, (cleanId, file) => {
+      const now = Date.now();
+      const lease = {
+        taskId: cleanId,
+        token: crypto.randomUUID(),
+        pid: process.pid,
+        createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + leaseDurationMs).toISOString(),
+        metadata: metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {}
+      };
+      let fd;
+      try {
+        fd = fs.openSync(file, "wx", 0o600);
+        fs.writeFileSync(fd, JSON.stringify(lease, null, 2), "utf8");
+        fs.fsyncSync(fd);
+        fs.closeSync(fd);
+        fd = undefined;
+        return { success: true, acquired: true, taskId: cleanId, token: lease.token, expiresAt: lease.expiresAt };
+      } catch (error) {
+        if (fd !== undefined) {
+          try { fs.closeSync(fd); } catch {}
+          // Only remove a partial file created by this call while holding the
+          // mutation guard. Never unlink a pre-existing lease.
+          try { fs.unlinkSync(file); } catch {}
+        }
+        if (error && error.code === "EEXIST") {
+          const existing = inspect(cleanId);
+          return {
+            success: false,
+            acquired: false,
+            recoveryAlreadyInProgress: true,
+            staleLease: existing.expired === true,
+            taskId: cleanId,
+            error: existing.expired
+              ? "An expired recovery lease remains; execution is blocked until an operator verifies no executor is active and clears the stale lease."
+              : "Recovery execution is already claimed for this task."
+          };
+        }
+        throw error;
       }
-      if (error && error.code === "EEXIST") {
-        const existing = inspect(id);
-        return {
-          success: false,
-          acquired: false,
-          recoveryAlreadyInProgress: true,
-          staleLease: existing.expired === true,
-          taskId: id,
-          error: existing.expired
-            ? "An expired recovery lease remains; execution is blocked until an operator verifies no executor is active and clears the stale lease."
-            : "Recovery execution is already claimed for this task."
-        };
-      }
-      throw error;
-    }
+    });
   }
 
   function release(taskId, token) {
@@ -105,25 +156,76 @@ function createRecoveryLeaseStore(options = {}) {
     if (typeof token !== "string" || !token) {
       return { success: false, released: false, error: "The recovery lease token is required." };
     }
-    const file = leasePath(id);
-    let current;
-    try {
-      current = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch {
-      return { success: false, released: false, error: "Recovery lease is missing or unreadable." };
-    }
-    if (current.taskId !== id || current.token !== token) {
-      return { success: false, released: false, error: "Recovery lease token does not match." };
-    }
-    try {
-      fs.unlinkSync(file);
-      return { success: true, released: true, taskId: id };
-    } catch (error) {
-      return { success: false, released: false, error: error.message };
-    }
+    return withMutationGuard(id, (cleanId, file) => {
+      let current;
+      try {
+        current = JSON.parse(fs.readFileSync(file, "utf8"));
+      } catch {
+        return { success: false, released: false, error: "Recovery lease is missing or unreadable." };
+      }
+      if (current.taskId !== cleanId || current.token !== token) {
+        return { success: false, released: false, error: "Recovery lease token does not match." };
+      }
+      try {
+        fs.unlinkSync(file);
+        return { success: true, released: true, taskId: cleanId };
+      } catch (error) {
+        return { success: false, released: false, error: error.message };
+      }
+    });
   }
 
-  return Object.freeze({ claim, inspect, release, directory });
+  function clearStale(taskId, options = {}) {
+    const id = validateTaskId(taskId);
+    const config = options && typeof options === "object" ? options : {};
+    if (config.confirmNoActiveExecutor !== true) {
+      return { success: false, cleared: false, taskId: id, error: "Explicit confirmation that no executor is active is required." };
+    }
+    if (typeof config.expectedFingerprint !== "string" || !/^[a-f0-9]{64}$/i.test(config.expectedFingerprint)) {
+      return { success: false, cleared: false, taskId: id, error: "The inspected lease fingerprint is required." };
+    }
+
+    return withMutationGuard(id, (cleanId, file) => {
+      let raw;
+      let lease;
+      try {
+        raw = fs.readFileSync(file, "utf8");
+        lease = JSON.parse(raw);
+      } catch {
+        return { success: false, cleared: false, taskId: cleanId, error: "Recovery lease is missing, unreadable, or corrupt; it remains blocked." };
+      }
+
+      if (!lease || lease.taskId !== cleanId || typeof lease.token !== "string") {
+        return { success: false, cleared: false, taskId: cleanId, error: "Recovery lease is corrupt; it remains blocked." };
+      }
+
+      const actualFingerprint = fingerprint(raw);
+      if (actualFingerprint !== config.expectedFingerprint) {
+        return { success: false, cleared: false, taskId: cleanId, error: "Recovery lease changed since inspection; inspect it again before retrying cleanup." };
+      }
+
+      const expiresAt = Date.parse(lease.expiresAt);
+      if (!Number.isFinite(expiresAt) || expiresAt > Date.now()) {
+        return { success: false, cleared: false, taskId: cleanId, error: "Only an expired recovery lease can be cleared by this operation." };
+      }
+
+      try {
+        fs.unlinkSync(file);
+        return {
+          success: true,
+          cleared: true,
+          taskId: cleanId,
+          clearedLeaseFingerprint: actualFingerprint,
+          requiresNewOwnerDecision: true,
+          executionStarted: false
+        };
+      } catch (error) {
+        return { success: false, cleared: false, taskId: cleanId, error: error.message };
+      }
+    });
+  }
+
+  return Object.freeze({ claim, inspect, release, clearStale, directory });
 }
 
 module.exports = { createRecoveryLeaseStore, validateTaskId };
