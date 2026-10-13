@@ -398,8 +398,8 @@ function saveAfterExecution(
 // VALIDATE CHECKPOINT FOR CONTROLLED RESTORE
 // ============================================================
 
-function validateCheckpointForRecovery(checkpoint) {
-    return checkpointEngine.validateCheckpointForRecovery(checkpoint);
+function validateCheckpointForRecovery(checkpoint, options = {}) {
+    return checkpointEngine.validateCheckpointForRecovery(checkpoint, options);
 }
 
 
