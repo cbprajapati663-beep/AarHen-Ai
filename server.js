@@ -310,6 +310,43 @@ const server = http.createServer(
 
 
             /* =================================================
+               OWNER-ONLY RECOVERY LEASE INSPECTION
+               ================================================= */
+
+            if (
+                pathname === "/checkpoint/recovery-lease/inspect" &&
+                req.method === "GET"
+            ) {
+                if (!auth.isConfigured()) {
+                    return sendJson(res, 503, {
+                        success: false,
+                        error: "Owner authentication must be configured before recovery lease inspection."
+                    });
+                }
+
+                const authentication = auth.authenticate(req);
+                if (!authentication.authenticated) {
+                    return sendJson(res, 401, {
+                        success: false,
+                        authenticated: false,
+                        error: "Valid owner API key required."
+                    });
+                }
+
+                const taskId = url.searchParams.get("taskId");
+                if (!taskId || !taskId.trim()) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "taskId query parameter is required."
+                    });
+                }
+
+                const result = checkpointRecovery.inspectRecoveryLease(taskId.trim());
+                return sendJson(res, result.success ? 200 : 409, result);
+            }
+
+
+            /* =================================================
                OWNER-CONFIRMED STALE RECOVERY LEASE CLEANUP
                ================================================= */
 

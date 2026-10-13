@@ -1,8 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
 const net = require("node:net");
 const path = require("node:path");
+const { createRecoveryLeaseStore } = require("./recoveryLeaseStore");
 
 const API_KEY = "aarhen-test-key-for-http-smoke";
 
@@ -39,9 +42,15 @@ async function waitForServer(baseUrl, child) {
 test("HTTP server smoke tests: health, validation, routing, and API-key protection", async t => {
     const port = await getFreePort();
     const baseUrl = `http://127.0.0.1:${port}`;
+    const leaseDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-server-lease-api-"));
     const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
         cwd: path.join(__dirname, ".."),
-        env: { ...process.env, PORT: String(port), AARHEN_API_KEY: API_KEY },
+        env: {
+            ...process.env,
+            PORT: String(port),
+            AARHEN_API_KEY: API_KEY,
+            AARHEN_RECOVERY_LEASE_DIR: leaseDirectory
+        },
         stdio: ["ignore", "ignore", "pipe"]
     });
     let stderr = "";
@@ -54,6 +63,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
             const timer = setTimeout(resolve, 1500);
             child.once("exit", () => { clearTimeout(timer); resolve(); });
         });
+        fs.rmSync(leaseDirectory, { recursive: true, force: true });
     });
 
     await waitForServer(baseUrl, child);
@@ -205,6 +215,52 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         const body = await response.json();
         assert.equal(response.status, 400);
         assert.match(body.error, /fingerprint/i);
+    });
+
+    await t.test("recovery lease inspection endpoint requires the configured owner key", async () => {
+        const response = await fetch(baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-private");
+        const body = await response.json();
+        assert.equal(response.status, 401);
+        assert.equal(body.authenticated, false);
+    });
+
+    await t.test("owner can inspect and clear the exact expired lease snapshot", async () => {
+        const store = createRecoveryLeaseStore({ directory: leaseDirectory });
+        const claim = store.claim("task-api-stale");
+        assert.equal(claim.success, true);
+
+        const leaseFile = path.join(leaseDirectory, "task-api-stale.json");
+        const lease = JSON.parse(fs.readFileSync(leaseFile, "utf8"));
+        lease.expiresAt = new Date(Date.now() - 1000).toISOString();
+        fs.writeFileSync(leaseFile, JSON.stringify(lease, null, 2), "utf8");
+
+        const inspectResponse = await fetch(
+            baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-api-stale",
+            { headers: { Authorization: `Bearer ${API_KEY}` } }
+        );
+        const inspected = await inspectResponse.json();
+        assert.equal(inspectResponse.status, 200);
+        assert.equal(inspected.success, true);
+        assert.equal(inspected.locked, true);
+        assert.equal(inspected.staleLease, true);
+        assert.match(inspected.leaseFingerprint, /^[a-f0-9]{64}$/);
+        assert.equal(JSON.stringify(inspected).includes(claim.token), false);
+
+        const clearResponse = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            body: JSON.stringify({
+                taskId: "task-api-stale",
+                confirmNoActiveExecutor: true,
+                leaseFingerprint: inspected.leaseFingerprint
+            })
+        });
+        const cleared = await clearResponse.json();
+        assert.equal(clearResponse.status, 200);
+        assert.equal(cleared.success, true);
+        assert.equal(cleared.cleared, true);
+        assert.equal(cleared.executionStarted, false);
+        assert.equal(store.inspect("task-api-stale").locked, false);
     });
 
     await t.test("unknown protected route cannot bypass authentication", async () => {
