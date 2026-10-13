@@ -1763,6 +1763,50 @@ function getLatestCheckpoint(
 // GET STATUS
 // ============================================================
 
+function inspectRecoveryLease(taskId) {
+    const id = safeString(taskId);
+    if (!id) {
+        return { success: false, taskId: null, locked: false, error: "Task ID is required." };
+    }
+
+    try {
+        const result = recoveryLeaseStore.inspect(id);
+        if (!result.success) {
+            return {
+                success: false,
+                taskId: id,
+                locked: result.locked === true,
+                corrupt: result.corrupt === true,
+                error: result.error || "Recovery lease inspection failed."
+            };
+        }
+
+        const lease = safeObject(result.lease);
+        return {
+            success: true,
+            taskId: id,
+            locked: result.locked === true,
+            expired: result.expired === true,
+            staleLease: result.locked === true && result.expired === true,
+            // Never expose the ownership token through status/inspection APIs.
+            lease: result.locked === true ? {
+                pid: Number.isInteger(lease.pid) ? lease.pid : null,
+                createdAt: lease.createdAt || null,
+                expiresAt: lease.expiresAt || null
+            } : null,
+            ownershipTokenRedacted: true
+        };
+    } catch {
+        return {
+            success: false,
+            taskId: id,
+            locked: true,
+            error: "Recovery lease inspection rejected the task ID or could not access the lease."
+        };
+    }
+}
+
+
 function getStatus() {
 
     const autonomousStatus =
@@ -1877,6 +1921,13 @@ function getStatus() {
                 managerStatus?.version ||
                 null
 
+        },
+
+        recoveryLease: {
+            storage: "file-system",
+            sharedFilesystemOnly: true,
+            staleLeaseAutoReclaim: false,
+            inspectionAvailable: true
         },
 
         capabilities: {
@@ -2459,6 +2510,8 @@ module.exports = {
     resolveProviderFailure,
 
     resumeResolvedProviderFailure,
+
+    inspectRecoveryLease,
 
     getStatus,
 
