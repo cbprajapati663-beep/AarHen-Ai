@@ -1977,12 +1977,7 @@ function restoreFromCheckpoint(taskId) {
         };
     }
 
-    // This exception is only reached after a trusted owner decision has
-    // been validated above. Generic checkpoint restore keeps the default
-    // fail-closed policy and cannot recover a failed-only checkpoint.
-    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint, {
-        allowFailedStepRecovery: true
-    });
+    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint);
     if (!validation.valid) {
         return {
             success: false,
@@ -2100,7 +2095,11 @@ function resolveProviderFailure(taskId, decision, options = {}) {
         };
     }
 
-    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint);
+    // This exception is only reachable after trusted owner authorization
+    // and a valid retry/abort decision. Generic restore remains fail-closed.
+    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint, {
+        allowFailedStepRecovery: true
+    });
     if (!validation.valid) {
         return {
             success: false,
