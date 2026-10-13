@@ -2221,6 +2221,132 @@ function resolveProviderFailure(taskId, decision, options = {}) {
 
 
 // ============================================================
+// RESUME OWNER-APPROVED PROVIDER RETRY
+// ============================================================
+// Resolution and execution are separate operations. This method requires
+// a recorded owner retry decision plus a second explicit execution
+// confirmation, then uses the existing Worker/Runner path.
+// ============================================================
+
+async function resumeResolvedProviderFailure(taskId, options = {}) {
+    const id = safeString(taskId);
+    const config = safeObject(options);
+
+    if (!id) {
+        return { success: false, executionStarted: false, error: "Task ID is required." };
+    }
+    if (config.ownerAuthorized !== true) {
+        return {
+            success: false,
+            executionStarted: false,
+            requiresOwnerAuthorization: true,
+            error: "A verified owner authorization is required."
+        };
+    }
+    if (config.confirmExecution !== true) {
+        return {
+            success: false,
+            executionStarted: false,
+            requiresConfirmation: true,
+            error: "Explicit execution confirmation is required to resume provider recovery."
+        };
+    }
+
+    const latest = getLatestCheckpoint(id);
+    if (!latest.success || !latest.checkpoint) {
+        return { success: false, executionStarted: false, error: latest.error || "Recovery checkpoint not found." };
+    }
+
+    const providerRecovery = safeObject(safeObject(latest.checkpoint.metadata).providerRecovery);
+    const ownerDecision = safeObject(providerRecovery.ownerDecision);
+    if (providerRecovery.requiresOwnerDecision === true ||
+        providerRecovery.automaticRetryAllowed !== false ||
+        ownerDecision.decision !== "retry" ||
+        ownerDecision.retryConfirmed !== true) {
+        return {
+            success: false,
+            executionStarted: false,
+            error: "A confirmed owner retry decision is required before execution."
+        };
+    }
+
+    const current = getTask(id);
+    if (!current.success || !current.task) {
+        return { success: false, executionStarted: false, error: current.error || "Restored task not found." };
+    }
+    const task = current.task;
+
+    if (task.stopRequested === true ||
+        [agentManager.TASK_STATES.STOPPED, agentManager.TASK_STATES.CANCELLED,
+         agentManager.TASK_STATES.COMPLETED, agentManager.TASK_STATES.FAILED].includes(task.status)) {
+        return { success: false, executionStarted: false, error: "Task state blocks provider recovery execution." };
+    }
+    if (task.status === agentManager.TASK_STATES.WAITING_APPROVAL ||
+        task.approvalRequired === true ||
+        task.steps.some(step => step.status === agentManager.STEP_STATES.WAITING_APPROVAL &&
+            step.approved !== true)) {
+        return {
+            success: false,
+            executionStarted: false,
+            requiresApproval: true,
+            error: "Task has an unresolved approval gate."
+        };
+    }
+    if (task.status !== agentManager.TASK_STATES.PAUSED) {
+        return { success: false, executionStarted: false, error: "Task must be paused before controlled recovery execution." };
+    }
+    if (!task.steps.some(step => step.status === agentManager.STEP_STATES.PENDING)) {
+        return { success: false, executionStarted: false, error: "Task has no pending step to execute." };
+    }
+
+    const workerResult = autonomousWorker.getWorkerForTask(task);
+    if (!workerResult.success || !workerResult.worker) {
+        return {
+            success: false,
+            executionStarted: false,
+            error: workerResult.error || "Unable to prepare a worker for provider recovery."
+        };
+    }
+
+    const assigned = autonomousWorker.assignTask(workerResult.worker.id, id);
+    if (!assigned.success) {
+        return {
+            success: false,
+            executionStarted: false,
+            error: assigned.error || "Unable to assign the recovered task to its worker."
+        };
+    }
+
+    const resumed = agentManager.resumeTask(id);
+    if (!resumed.success) {
+        return { success: false, executionStarted: false, error: resumed.error || "Unable to prepare task for execution." };
+    }
+
+    const execution = await executeAssignedTask(
+        workerResult.worker.id,
+        id,
+        safeObject(config.executionOptions)
+    );
+
+    if (!execution.success && execution.stage === "checkpoint-before") {
+        // The runner has not started; return the task to a safe paused state.
+        const latestTask = agentManager.getTask(id);
+        if (latestTask.success && latestTask.task.status === agentManager.TASK_STATES.RUNNING) {
+            agentManager.pauseTask(id);
+        }
+        return { ...execution, executionStarted: false };
+    }
+
+    return {
+        ...execution,
+        resumedFromProviderFailure: true,
+        executionStarted: true,
+        workerId: workerResult.worker.id
+    };
+}
+
+
+// ============================================================
 // RESET
 // ============================================================
 
@@ -2280,6 +2406,8 @@ module.exports = {
     resolveInterruptedStep,
 
     resolveProviderFailure,
+
+    resumeResolvedProviderFailure,
 
     getStatus,
 
