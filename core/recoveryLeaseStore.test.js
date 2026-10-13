@@ -83,3 +83,70 @@ test("invalid task IDs are rejected before filesystem access", () => {
   const store = createRecoveryLeaseStore({ directory: path.join(os.tmpdir(), "aarhen-unused-lease-test") });
   assert.throws(() => store.claim("../escape"), /valid task ID/i);
 });
+
+
+test("stale lease cleanup requires explicit confirmation and an inspected fingerprint", t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-clear-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const store = createRecoveryLeaseStore({ directory });
+  const claim = store.claim("task-stale-clear");
+  assert.equal(claim.success, true);
+
+  const file = path.join(directory, "task-stale-clear.json");
+  const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+  saved.expiresAt = new Date(Date.now() - 1000).toISOString();
+  fs.writeFileSync(file, JSON.stringify(saved), "utf8");
+
+  const inspection = store.inspect("task-stale-clear");
+  assert.equal(inspection.success, true);
+  assert.equal(inspection.expired, true);
+  assert.match(inspection.leaseFingerprint, /^[a-f0-9]{64}$/);
+
+  const unconfirmed = store.clearStale("task-stale-clear", {
+    expectedFingerprint: inspection.leaseFingerprint
+  });
+  assert.equal(unconfirmed.cleared, false);
+  assert.equal(fs.existsSync(file), true);
+
+  const wrongSnapshot = store.clearStale("task-stale-clear", {
+    confirmNoActiveExecutor: true,
+    expectedFingerprint: "0".repeat(64)
+  });
+  assert.equal(wrongSnapshot.cleared, false);
+  assert.equal(fs.existsSync(file), true);
+
+  const cleared = store.clearStale("task-stale-clear", {
+    confirmNoActiveExecutor: true,
+    expectedFingerprint: inspection.leaseFingerprint
+  });
+  assert.equal(cleared.success, true);
+  assert.equal(cleared.cleared, true);
+  assert.equal(cleared.executionStarted, false);
+  assert.equal(cleared.requiresNewOwnerDecision, true);
+  assert.equal(fs.existsSync(file), false);
+});
+
+test("stale lease cleanup refuses active leases and fails closed on a busy mutation guard", t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-clear-guard-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const store = createRecoveryLeaseStore({ directory });
+  const claim = store.claim("task-active-clear");
+  assert.equal(claim.success, true);
+
+  const inspection = store.inspect("task-active-clear");
+  const active = store.clearStale("task-active-clear", {
+    confirmNoActiveExecutor: true,
+    expectedFingerprint: inspection.leaseFingerprint
+  });
+  assert.equal(active.cleared, false);
+  assert.match(active.error, /expired/i);
+
+  fs.writeFileSync(path.join(directory, "task-active-clear.json.mutation"), "operator guard", { flag: "wx" });
+  const guarded = store.clearStale("task-active-clear", {
+    confirmNoActiveExecutor: true,
+    expectedFingerprint: inspection.leaseFingerprint
+  });
+  assert.equal(guarded.cleared, undefined);
+  assert.equal(guarded.mutationInProgress, true);
+  assert.equal(store.inspect("task-active-clear").locked, true);
+});

@@ -310,6 +310,61 @@ const server = http.createServer(
 
 
             /* =================================================
+               OWNER-CONFIRMED STALE RECOVERY LEASE CLEANUP
+               ================================================= */
+
+            if (
+                pathname === "/checkpoint/recovery-lease/clear-stale" &&
+                req.method === "POST"
+            ) {
+                if (!auth.isConfigured()) {
+                    return sendJson(res, 503, {
+                        success: false,
+                        error: "Owner authentication must be configured before stale recovery leases can be cleared."
+                    });
+                }
+
+                const authentication = auth.authenticate(req);
+                if (!authentication.authenticated) {
+                    return sendJson(res, 401, {
+                        success: false,
+                        authenticated: false,
+                        error: "Valid owner API key required."
+                    });
+                }
+
+                const body = await readBody(req);
+                const taskId = typeof body.taskId === "string" ? body.taskId.trim() : "";
+                if (!taskId) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "taskId is required"
+                    });
+                }
+                if (body.confirmNoActiveExecutor !== true) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        requiresConfirmation: true,
+                        error: "confirmNoActiveExecutor: true is required after verifying no executor is active."
+                    });
+                }
+                if (typeof body.leaseFingerprint !== "string") {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "leaseFingerprint from a fresh lease inspection is required."
+                    });
+                }
+
+                const result = checkpointRecovery.clearStaleRecoveryLease(taskId, {
+                    ownerAuthorized: true,
+                    confirmNoActiveExecutor: true,
+                    expectedFingerprint: body.leaseFingerprint
+                });
+                return sendJson(res, result.success ? 200 : 409, result);
+            }
+
+
+            /* =================================================
                ASK
                ================================================= */
 

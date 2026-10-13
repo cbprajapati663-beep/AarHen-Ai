@@ -35,6 +35,7 @@ test("recovery lease inspection redacts ownership token and exposes safe metadat
   assert.equal(result.staleLease, false);
   assert.equal(result.lease.pid, process.pid);
   assert.equal(result.ownershipTokenRedacted, true);
+  assert.match(result.leaseFingerprint, /^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(result).includes(claim.token), false);
 
   const status = recovery.getStatus();
