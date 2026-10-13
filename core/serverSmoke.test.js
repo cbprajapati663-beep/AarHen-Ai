@@ -164,6 +164,49 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(body.executionStarted, undefined);
     });
 
+    await t.test("stale recovery lease cleanup requires the configured owner key", async () => {
+        const response = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                taskId: "task-stale",
+                confirmNoActiveExecutor: true,
+                leaseFingerprint: "0".repeat(64)
+            })
+        });
+        const body = await response.json();
+        assert.equal(response.status, 401);
+        assert.equal(body.authenticated, false);
+    });
+
+    await t.test("stale recovery lease cleanup requires explicit no-executor confirmation", async () => {
+        const response = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            body: JSON.stringify({
+                taskId: "task-stale",
+                leaseFingerprint: "0".repeat(64)
+            })
+        });
+        const body = await response.json();
+        assert.equal(response.status, 400);
+        assert.equal(body.requiresConfirmation, true);
+    });
+
+    await t.test("stale recovery lease cleanup requires a fresh inspected fingerprint", async () => {
+        const response = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            body: JSON.stringify({
+                taskId: "task-stale",
+                confirmNoActiveExecutor: true
+            })
+        });
+        const body = await response.json();
+        assert.equal(response.status, 400);
+        assert.match(body.error, /fingerprint/i);
+    });
+
     await t.test("unknown protected route cannot bypass authentication", async () => {
         const response = await fetch(baseUrl + "/does-not-exist");
         assert.equal(response.status, 401);
