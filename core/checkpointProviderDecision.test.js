@@ -99,6 +99,40 @@ test("retry requires explicit side-effect confirmation and records the owner dec
   assert.equal(latest.checkpoint.metadata.providerRecovery.ownerDecision.retryConfirmed, true);
 });
 
+test("confirmed provider retry resumes through Worker/Runner and executes the failed step once", async () => {
+  const taskId = createProviderFailureCheckpoint("provider-decision-worker-resume");
+  const resolved = checkpointRecovery.resolveProviderFailure(taskId, "retry", {
+    ownerAuthorized: true,
+    confirmProviderRetry: true
+  });
+  assert.equal(resolved.success, true);
+  assert.equal(resolved.task.steps[0].status, agentManager.STEP_STATES.PENDING);
+
+  const workerApi = require("./agentWorker");
+  const runner = require("./agentRunner");
+  workerApi.reset();
+  runner.reset();
+
+  const worker = workerApi.createWorker({
+    id: taskId + "-worker",
+    agentId: resolved.task.agentId
+  });
+  assert.equal(worker.success, true);
+  assert.equal(workerApi.assignTask(worker.worker.id, taskId).success, true);
+
+  const executed = [];
+  const result = await workerApi.runAssignedTask(worker.worker.id, {
+    runner: async ({ step }) => {
+      executed.push(step.id);
+      return { success: true, output: "owner-approved retry completed" };
+    }
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.task.status, agentManager.TASK_STATES.COMPLETED);
+  assert.deepEqual(executed, [taskId + "-step"]);
+});
+
 test("abort records owner decision and leaves task stopped without execution", () => {
   const taskId = createProviderFailureCheckpoint("provider-decision-abort");
   const resolved = checkpointRecovery.resolveProviderFailure(taskId, "abort", {
