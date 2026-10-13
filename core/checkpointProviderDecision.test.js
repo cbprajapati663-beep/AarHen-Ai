@@ -7,7 +7,7 @@ const agentManager = require("./agentManager");
 const checkpointBridge = require("./checkpointBridge");
 const checkpointRecovery = require("./checkpointRecoveryController");
 
-function createProviderFailureCheckpoint(taskId) {
+function createProviderFailureCheckpoint(taskId, stepAction = "read_public_information") {
   const agent = agentManager.createAgent({ id: taskId + "-agent" });
   assert.equal(agent.success, true);
 
@@ -21,7 +21,7 @@ function createProviderFailureCheckpoint(taskId) {
   const step = agentManager.addStep(taskId, {
     id: taskId + "-step",
     name: "Provider-backed step",
-    action: "read_public_information",
+    action: stepAction,
     input: { query: "owner decision regression test" }
   });
   assert.equal(step.success, true);
@@ -100,7 +100,7 @@ test("retry requires explicit side-effect confirmation and records the owner dec
 });
 
 test("confirmed provider retry resumes through Worker/Runner and executes the failed step once", async () => {
-  const taskId = createProviderFailureCheckpoint("provider-decision-worker-resume");
+  const taskId = createProviderFailureCheckpoint("provider-decision-worker-resume", "calculate");
   const resolved = checkpointRecovery.resolveProviderFailure(taskId, "retry", {
     ownerAuthorized: true,
     confirmProviderRetry: true
@@ -110,25 +110,25 @@ test("confirmed provider retry resumes through Worker/Runner and executes the fa
 
   const workerApi = require("./agentWorker");
   const runner = require("./agentRunner");
+  const autonomousWorker = require("./autonomousWorker");
   workerApi.reset();
   runner.reset();
-
-  const worker = workerApi.createWorker({
-    id: taskId + "-worker",
-    agentId: resolved.task.agentId
-  });
-  assert.equal(worker.success, true);
-  assert.equal(workerApi.assignTask(worker.worker.id, taskId).success, true);
+  autonomousWorker.reset();
 
   const executed = [];
-  const result = await workerApi.runAssignedTask(worker.worker.id, {
-    runner: async ({ step }) => {
-      executed.push(step.id);
-      return { success: true, output: "owner-approved retry completed" };
+  const result = await checkpointRecovery.resumeResolvedProviderFailure(taskId, {
+    ownerAuthorized: true,
+    confirmExecution: true,
+    executionOptions: {
+      runner: async ({ step }) => {
+        executed.push(step.id);
+        return { success: true, output: "owner-approved retry completed" };
+      }
     }
   });
 
-  assert.equal(result.success, true);
+  assert.equal(result.success, true, result.error);
+  assert.equal(result.executionStarted, true);
   assert.equal(result.task.status, agentManager.TASK_STATES.COMPLETED);
   assert.deepEqual(executed, [taskId + "-step"]);
 });
