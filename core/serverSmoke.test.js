@@ -263,6 +263,27 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(store.inspect("task-api-stale").locked, false);
     });
 
+    await t.test("owner inspection surfaces a stuck mutation guard and keeps execution blocked", async () => {
+        const guardPath = path.join(leaseDirectory, "task-guard-inspect.json.mutation");
+        fs.writeFileSync(guardPath, "do-not-expose-this-content", { flag: "wx" });
+        try {
+            const response = await fetch(
+                baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-guard-inspect",
+                { headers: { Authorization: `Bearer ${API_KEY}` } }
+            );
+            const body = await response.json();
+            assert.equal(response.status, 200);
+            assert.equal(body.success, true);
+            assert.equal(body.locked, false);
+            assert.equal(body.executionBlocked, true);
+            assert.equal(body.mutationGuard.present, true);
+            assert.equal(body.mutationGuard.requiresOperatorReview, true);
+            assert.equal(JSON.stringify(body).includes("do-not-expose-this-content"), false);
+        } finally {
+            fs.rmSync(guardPath, { force: true });
+        }
+    });
+
     await t.test("unknown protected route cannot bypass authentication", async () => {
         const response = await fetch(baseUrl + "/does-not-exist");
         assert.equal(response.status, 401);
