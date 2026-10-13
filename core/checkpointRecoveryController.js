@@ -49,6 +49,11 @@ const agentManager =
 const CHECKPOINT_RECOVERY_CONTROLLER_VERSION =
     "5.14.0";
 
+// Prevent duplicate provider-recovery executions racing in the same process.
+// This is a local single-flight guard; durable/distributed deployments still
+// need a shared lease or atomic claim in their persistence layer.
+const activeProviderRecoveryResumes = new Set();
+
 
 // ============================================================
 // HELPERS
@@ -2252,6 +2257,17 @@ async function resumeResolvedProviderFailure(taskId, options = {}) {
         };
     }
 
+    if (activeProviderRecoveryResumes.has(id)) {
+        return {
+            success: false,
+            executionStarted: false,
+            recoveryAlreadyInProgress: true,
+            error: "Provider recovery execution is already in progress for this task."
+        };
+    }
+
+    activeProviderRecoveryResumes.add(id);
+    try {
     const latest = getLatestCheckpoint(id);
     if (!latest.success || !latest.checkpoint) {
         return { success: false, executionStarted: false, error: latest.error || "Recovery checkpoint not found." };
@@ -2343,6 +2359,9 @@ async function resumeResolvedProviderFailure(taskId, options = {}) {
         executionStarted: true,
         workerId: workerResult.worker.id
     };
+    } finally {
+        activeProviderRecoveryResumes.delete(id);
+    }
 }
 
 
