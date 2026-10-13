@@ -41,6 +41,12 @@ const checkpointBridge =
 const agentManager =
     require("./agentManager");
 
+const { createRecoveryLeaseStore } =
+    require("./recoveryLeaseStore");
+
+const recoveryLeaseStore =
+    createRecoveryLeaseStore();
+
 
 // ============================================================
 // VERSION
@@ -2267,6 +2273,30 @@ async function resumeResolvedProviderFailure(taskId, options = {}) {
     }
 
     activeProviderRecoveryResumes.add(id);
+
+    let leaseClaim;
+    try {
+        leaseClaim = recoveryLeaseStore.claim(id, {
+            source: "checkpointRecoveryController.resumeResolvedProviderFailure"
+        });
+    } catch (error) {
+        activeProviderRecoveryResumes.delete(id);
+        return {
+            success: false,
+            executionStarted: false,
+            error: "Unable to acquire persistent recovery lease: " + String(error.message || error)
+        };
+    }
+
+    if (!leaseClaim.success) {
+        activeProviderRecoveryResumes.delete(id);
+        return {
+            ...leaseClaim,
+            success: false,
+            executionStarted: false
+        };
+    }
+
     try {
     const latest = getLatestCheckpoint(id);
     if (!latest.success || !latest.checkpoint) {
@@ -2361,6 +2391,8 @@ async function resumeResolvedProviderFailure(taskId, options = {}) {
     };
     } finally {
         activeProviderRecoveryResumes.delete(id);
+        // A release failure leaves the persistent claim in place (fail-closed).
+        recoveryLeaseStore.release(id, leaseClaim.token);
     }
 }
 
