@@ -660,7 +660,8 @@ function buildCheckpoint(
 
         recoveryEligible:
             isRecoveryEligible(
-                snapshot
+                snapshot,
+                config
             ),
 
         task:
@@ -687,8 +688,10 @@ function buildCheckpoint(
 // ============================================================
 
 function isRecoveryEligible(
-    task
+    task,
+    options = {}
 ) {
+    const config = safeObject(options);
 
     const input =
         safeObject(
@@ -734,16 +737,12 @@ function isRecoveryEligible(
         input.pendingSteps ===
         0
     ) {
-
-        return false;
-
+        // Only the owner-approved provider-recovery path may mark a
+        // failed-only checkpoint as eligible. Generic recovery remains closed.
+        return config.allowFailedStepRecovery === true;
     }
 
-
-    return (
-        input.pendingSteps >
-        0
-    );
+    return input.pendingSteps > 0;
 
 }
 
@@ -1172,7 +1171,8 @@ function listCheckpoints(
 // VALIDATE CHECKPOINT RECOVERY INTEGRITY
 // ============================================================
 
-function validateCheckpointForRecovery(checkpoint) {
+function validateCheckpointForRecovery(checkpoint, options = {}) {
+    const config = safeObject(options);
     if (!checkpoint || typeof checkpoint !== "object") {
         return { valid: false, reason: "Checkpoint is missing or invalid." };
     }
@@ -1225,7 +1225,8 @@ function validateCheckpointForRecovery(checkpoint) {
     if (checkpoint.recoveryEligible !== true) {
         return { valid: false, reason: "Checkpoint is not marked as recovery eligible." };
     }
-    if (task.pendingSteps <= 0) {
+    if (task.pendingSteps <= 0 &&
+        !(config.allowFailedStepRecovery === true && task.failedSteps > 0)) {
         return { valid: false, reason: "Checkpoint has no pending steps to recover." };
     }
     return { valid: true, reason: "Checkpoint integrity and recovery gates passed." };
