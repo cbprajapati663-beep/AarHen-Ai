@@ -9,6 +9,7 @@ const memoryApi = require("./core/memoryApi");
 const voiceApi = require("./core/voiceApi");
 const visionApi = require("./core/visionApi");
 const documentLearningApi = require("./core/documentLearningApi");
+const checkpointRecovery = require("./core/checkpointRecoveryController");
 
 const PORT = process.env.PORT || 3000;
 
@@ -198,6 +199,65 @@ const server = http.createServer(
                     ...authentication,
                     hasToken: !!token
                 });
+            }
+
+
+            /* =================================================
+               OWNER-APPROVED PROVIDER FAILURE RECOVERY
+               ================================================= */
+
+            if (
+                pathname === "/checkpoint/provider-failure/resolve" &&
+                req.method === "POST"
+            ) {
+                // Provider recovery decisions are owner-only. In development
+                // mode there is no authenticated owner identity, so fail closed.
+                if (!auth.isConfigured()) {
+                    return sendJson(res, 503, {
+                        success: false,
+                        error: "Owner authentication must be configured before provider recovery can be resolved."
+                    });
+                }
+
+                const authentication = auth.authenticate(req);
+                if (!authentication.authenticated) {
+                    return sendJson(res, 401, {
+                        success: false,
+                        authenticated: false,
+                        error: "Valid owner API key required."
+                    });
+                }
+
+                const body = await readBody(req);
+                const taskId = typeof body.taskId === "string" ? body.taskId.trim() : "";
+                const decision = typeof body.decision === "string" ? body.decision.trim().toLowerCase() : "";
+
+                if (!taskId) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "taskId is required"
+                    });
+                }
+
+                if (!["retry", "abort"].includes(decision)) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "decision must be 'retry' or 'abort'"
+                    });
+                }
+
+                const result = checkpointRecovery.resolveProviderFailure(
+                    taskId,
+                    decision,
+                    {
+                        // Never accept ownerAuthorized from request data.
+                        // Only this server-side authentication check can set it.
+                        ownerAuthorized: true,
+                        confirmProviderRetry: body.confirmProviderRetry === true
+                    }
+                );
+
+                return sendJson(res, result.success ? 200 : 409, result);
             }
 
 

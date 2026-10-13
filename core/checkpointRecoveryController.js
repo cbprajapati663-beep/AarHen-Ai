@@ -429,6 +429,11 @@ function saveAfterExecution(
 
                 metadata,
 
+                // Mark failed-only checkpoints recoverable only when a
+                // provider outage is recorded for an explicit owner decision.
+                allowFailedStepRecovery:
+                    metadata.providerRecovery?.requiresOwnerDecision === true,
+
                 source:
                     config.source ||
                     "checkpoint-recovery-controller"
@@ -2090,7 +2095,11 @@ function resolveProviderFailure(taskId, decision, options = {}) {
         };
     }
 
-    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint);
+    // This exception is only reachable after trusted owner authorization
+    // and a valid retry/abort decision. Generic restore remains fail-closed.
+    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint, {
+        allowFailedStepRecovery: true
+    });
     if (!validation.valid) {
         return {
             success: false,
@@ -2129,6 +2138,37 @@ function resolveProviderFailure(taskId, decision, options = {}) {
         ...clone(checkpoint),
         metadata: resolvedMetadata
     };
+
+    // An explicitly confirmed owner retry must make the failed step runnable
+    // again. Keep completed/skipped steps untouched, and fail closed if the
+    // checkpoint cannot identify a single failed step to retry safely.
+    if (action === "retry" && Array.isArray(resolvedCheckpoint.task?.steps)) {
+        const failedSteps = resolvedCheckpoint.task.steps.filter(
+            step => step && step.status === agentManager.STEP_STATES.FAILED
+        );
+
+        if (failedSteps.length > 0) {
+            const currentStepId = safeString(resolvedCheckpoint.task.currentStepId);
+            const targetStep = currentStepId
+                ? failedSteps.find(step => safeString(step.id) === currentStepId)
+                : (failedSteps.length === 1 ? failedSteps[0] : null);
+
+            if (!targetStep) {
+                return {
+                    success: false,
+                    resolved: false,
+                    error: "Cannot safely identify the failed step for owner-approved retry.",
+                    executionStarted: false,
+                    automaticRetryAllowed: false
+                };
+            }
+
+            targetStep.status = agentManager.STEP_STATES.PENDING;
+            targetStep.error = null;
+            targetStep.result = null;
+            targetStep.completedAt = null;
+        }
+    }
 
     const restored = agentManager.restoreTaskFromCheckpoint(resolvedCheckpoint);
     if (!restored.success) {
