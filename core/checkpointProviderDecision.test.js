@@ -7,7 +7,7 @@ const agentManager = require("./agentManager");
 const checkpointBridge = require("./checkpointBridge");
 const checkpointRecovery = require("./checkpointRecoveryController");
 
-function createProviderFailureCheckpoint(taskId) {
+function createProviderFailureCheckpoint(taskId, stepAction = "read_public_information") {
   const agent = agentManager.createAgent({ id: taskId + "-agent" });
   assert.equal(agent.success, true);
 
@@ -21,7 +21,7 @@ function createProviderFailureCheckpoint(taskId) {
   const step = agentManager.addStep(taskId, {
     id: taskId + "-step",
     name: "Provider-backed step",
-    action: "read_public_information",
+    action: stepAction,
     input: { query: "owner decision regression test" }
   });
   assert.equal(step.success, true);
@@ -97,6 +97,40 @@ test("retry requires explicit side-effect confirmation and records the owner dec
   assert.equal(latest.checkpoint.metadata.providerRecovery.automaticRetryAllowed, false);
   assert.equal(latest.checkpoint.metadata.providerRecovery.ownerDecision.decision, "retry");
   assert.equal(latest.checkpoint.metadata.providerRecovery.ownerDecision.retryConfirmed, true);
+});
+
+test("confirmed provider retry resumes through Worker/Runner and executes the failed step once", async () => {
+  const taskId = createProviderFailureCheckpoint("provider-decision-worker-resume", "calculate");
+  const resolved = checkpointRecovery.resolveProviderFailure(taskId, "retry", {
+    ownerAuthorized: true,
+    confirmProviderRetry: true
+  });
+  assert.equal(resolved.success, true);
+  assert.equal(resolved.task.steps[0].status, agentManager.STEP_STATES.PENDING);
+
+  const workerApi = require("./agentWorker");
+  const runner = require("./agentRunner");
+  const autonomousWorker = require("./autonomousWorker");
+  workerApi.reset();
+  runner.reset();
+  autonomousWorker.reset();
+
+  const executed = [];
+  const result = await checkpointRecovery.resumeResolvedProviderFailure(taskId, {
+    ownerAuthorized: true,
+    confirmExecution: true,
+    executionOptions: {
+      runner: async ({ step }) => {
+        executed.push(step.id);
+        return { success: true, output: "owner-approved retry completed" };
+      }
+    }
+  });
+
+  assert.equal(result.success, true, result.error);
+  assert.equal(result.executionStarted, true);
+  assert.equal(result.task.status, agentManager.TASK_STATES.COMPLETED);
+  assert.deepEqual(executed, [taskId + "-step"]);
 });
 
 test("abort records owner decision and leaves task stopped without execution", () => {
