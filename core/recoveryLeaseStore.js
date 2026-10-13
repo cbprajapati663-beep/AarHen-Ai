@@ -26,7 +26,7 @@ function createRecoveryLeaseStore(options = {}) {
   );
   const leaseDurationMs = Number.isFinite(Number(options.leaseDurationMs))
     ? Math.max(1000, Number(options.leaseDurationMs))
-    : 5 * 60 * 1000;
+    : 24 * 60 * 60 * 1000;
 
   function leasePath(taskId) {
     return path.join(directory, validateTaskId(taskId) + ".json");
