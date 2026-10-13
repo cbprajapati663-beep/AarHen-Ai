@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const { createRecoveryLeaseStore } = require("./recoveryLeaseStore");
 
 test("recovery lease is exclusive across independent store instances", t => {
@@ -28,6 +29,28 @@ test("recovery lease is exclusive across independent store instances", t => {
   const afterRelease = secondStore.claim("task-shared");
   assert.equal(afterRelease.success, true);
   assert.equal(secondStore.release("task-shared", afterRelease.token).released, true);
+});
+
+test("a separate Node.js process cannot claim a task already locked on the shared filesystem", t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-process-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const store = createRecoveryLeaseStore({ directory });
+  const claim = store.claim("task-cross-process");
+  assert.equal(claim.success, true);
+
+  const script = [
+    'const { createRecoveryLeaseStore } = require(' + JSON.stringify(path.resolve(__dirname, "recoveryLeaseStore")) + ');',
+    'const store = createRecoveryLeaseStore({ directory: process.argv[1] });',
+    'const result = store.claim("task-cross-process");',
+    'process.stdout.write(JSON.stringify(result));',
+    'process.exit(result.success ? 2 : 0);'
+  ].join("\\n");
+  const child = spawnSync(process.execPath, ["-e", script, directory], { encoding: "utf8" });
+  assert.equal(child.status, 0, child.stderr);
+  const result = JSON.parse(child.stdout);
+  assert.equal(result.success, false);
+  assert.equal(result.recoveryAlreadyInProgress, true);
+  assert.equal(store.release("task-cross-process", claim.token).released, true);
 });
 
 test("a lease survives store reconstruction and an expired lease fails closed", t => {
