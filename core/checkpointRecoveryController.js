@@ -1794,7 +1794,8 @@ function inspectRecoveryLease(taskId) {
                 createdAt: lease.createdAt || null,
                 expiresAt: lease.expiresAt || null
             } : null,
-            ownershipTokenRedacted: true
+            ownershipTokenRedacted: true,
+            leaseFingerprint: result.locked === true ? result.leaseFingerprint || null : null
         };
     } catch {
         return {
@@ -1803,6 +1804,36 @@ function inspectRecoveryLease(taskId) {
             locked: true,
             error: "Recovery lease inspection rejected the task ID or could not access the lease."
         };
+    }
+}
+
+
+// Clears only the exact expired lease snapshot inspected by an operator.
+// Authentication must be established by the server before ownerAuthorized is set.
+function clearStaleRecoveryLease(taskId, options = {}) {
+    const id = safeString(taskId);
+    const config = safeObject(options);
+
+    if (!id) {
+        return { success: false, cleared: false, taskId: null, error: "Task ID is required." };
+    }
+    if (config.ownerAuthorized !== true) {
+        return { success: false, cleared: false, taskId: id, error: "Owner authorization is required." };
+    }
+    if (config.confirmNoActiveExecutor !== true) {
+        return { success: false, cleared: false, taskId: id, error: "Explicit confirmation that no executor is active is required." };
+    }
+    if (typeof config.expectedFingerprint !== "string") {
+        return { success: false, cleared: false, taskId: id, error: "The inspected lease fingerprint is required." };
+    }
+
+    try {
+        return recoveryLeaseStore.clearStale(id, {
+            confirmNoActiveExecutor: true,
+            expectedFingerprint: config.expectedFingerprint
+        });
+    } catch {
+        return { success: false, cleared: false, taskId: id, error: "Recovery lease cleanup rejected the task ID or failed safely." };
     }
 }
 
@@ -2512,6 +2543,8 @@ module.exports = {
     resumeResolvedProviderFailure,
 
     inspectRecoveryLease,
+
+    clearStaleRecoveryLease,
 
     getStatus,
 
