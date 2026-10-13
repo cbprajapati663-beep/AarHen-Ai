@@ -1782,12 +1782,15 @@ function inspectRecoveryLease(taskId) {
         }
 
         const lease = safeObject(result.lease);
+        const mutationGuard = recoveryLeaseStore.inspectMutationGuard(id);
         return {
             success: true,
             taskId: id,
             locked: result.locked === true,
             expired: result.expired === true,
             staleLease: result.locked === true && result.expired === true,
+            mutationGuard,
+            executionBlocked: mutationGuard.present === true || mutationGuard.success === false,
             // Never expose the ownership token through status/inspection APIs.
             lease: result.locked === true ? {
                 pid: Number.isInteger(lease.pid) ? lease.pid : null,
