@@ -429,6 +429,11 @@ function saveAfterExecution(
 
                 metadata,
 
+                // Mark failed-only checkpoints recoverable only when a
+                // provider outage is recorded for an explicit owner decision.
+                allowFailedStepRecovery:
+                    metadata.providerRecovery?.requiresOwnerDecision === true,
+
                 source:
                     config.source ||
                     "checkpoint-recovery-controller"
@@ -1972,7 +1977,12 @@ function restoreFromCheckpoint(taskId) {
         };
     }
 
-    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint);
+    // This exception is only reached after a trusted owner decision has
+    // been validated above. Generic checkpoint restore keeps the default
+    // fail-closed policy and cannot recover a failed-only checkpoint.
+    const validation = checkpointBridge.validateCheckpointForRecovery(checkpoint, {
+        allowFailedStepRecovery: true
+    });
     if (!validation.valid) {
         return {
             success: false,
