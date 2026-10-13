@@ -166,3 +166,55 @@ test("provider failure cannot be resolved twice by restoring over a live task", 
   assert.equal(second.success, false);
   assert.match(second.error, /does not contain an unresolved|already exists/i);
 });
+
+
+test("concurrent provider recovery execution is single-flight per task", async () => {
+  const taskId = createProviderFailureCheckpoint("provider-decision-single-flight", "calculate");
+  const resolved = checkpointRecovery.resolveProviderFailure(taskId, "retry", {
+    ownerAuthorized: true,
+    confirmProviderRetry: true
+  });
+  assert.equal(resolved.success, true);
+
+  const executed = [];
+  let markRunnerStarted;
+  const runnerStarted = new Promise(resolve => { markRunnerStarted = resolve; });
+  let releaseRunner;
+  const runnerGate = new Promise(resolve => { releaseRunner = resolve; });
+
+  const firstRun = checkpointRecovery.resumeResolvedProviderFailure(taskId, {
+    ownerAuthorized: true,
+    confirmExecution: true,
+    executionOptions: {
+      runner: async ({ step }) => {
+        executed.push(step.id);
+        markRunnerStarted();
+        await runnerGate;
+        return { success: true, output: "single-flight test completed" };
+      }
+    }
+  });
+
+  await runnerStarted;
+  const duplicate = await checkpointRecovery.resumeResolvedProviderFailure(taskId, {
+    ownerAuthorized: true,
+    confirmExecution: true,
+    executionOptions: {
+      runner: async () => {
+        executed.push("duplicate-execution");
+        return { success: true };
+      }
+    }
+  });
+
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.executionStarted, false);
+  assert.equal(duplicate.recoveryAlreadyInProgress, true);
+  assert.match(duplicate.error, /already in progress/i);
+
+  releaseRunner();
+  const completed = await firstRun;
+  assert.equal(completed.success, true, completed.error);
+  assert.equal(completed.executionStarted, true);
+  assert.deepEqual(executed, [taskId + "-step"]);
+});
