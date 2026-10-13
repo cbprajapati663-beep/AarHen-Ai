@@ -25,6 +25,10 @@ function createProviderFailureCheckpoint(taskId) {
     input: { query: "owner decision regression test" }
   });
   assert.equal(step.success, true);
+  assert.equal(agentManager.startStep(taskId, step.step.id).success, true);
+  const failed = agentManager.failStep(taskId, step.step.id, "simulated provider failure");
+  assert.equal(failed.success, true);
+  assert.equal(failed.step.status, agentManager.STEP_STATES.FAILED);
 
   const saved = checkpointRecovery.saveAfterExecution(taskId, {
     success: false,
@@ -84,6 +88,8 @@ test("retry requires explicit side-effect confirmation and records the owner dec
   assert.equal(resolved.automaticRetryAllowed, false);
   assert.equal(resolved.auditCheckpointSaved, true);
   assert.equal(resolved.task.status, agentManager.TASK_STATES.PAUSED);
+  assert.equal(resolved.task.steps[0].status, agentManager.STEP_STATES.PENDING);
+  assert.equal(resolved.task.steps[0].error, null);
 
   const latest = checkpointRecovery.getLatestCheckpoint(taskId);
   assert.equal(latest.success, true);
