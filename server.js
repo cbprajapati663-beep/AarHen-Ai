@@ -262,6 +262,54 @@ const server = http.createServer(
 
 
             /* =================================================
+               RESUME OWNER-APPROVED PROVIDER RECOVERY
+               ================================================= */
+
+            if (
+                pathname === "/checkpoint/provider-failure/resume" &&
+                req.method === "POST"
+            ) {
+                if (!auth.isConfigured()) {
+                    return sendJson(res, 503, {
+                        success: false,
+                        error: "Owner authentication must be configured before provider recovery can execute."
+                    });
+                }
+
+                const authentication = auth.authenticate(req);
+                if (!authentication.authenticated) {
+                    return sendJson(res, 401, {
+                        success: false,
+                        authenticated: false,
+                        error: "Valid owner API key required."
+                    });
+                }
+
+                const body = await readBody(req);
+                const taskId = typeof body.taskId === "string" ? body.taskId.trim() : "";
+                if (!taskId) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "taskId is required"
+                    });
+                }
+                if (body.confirmExecution !== true) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        requiresConfirmation: true,
+                        error: "confirmExecution: true is required to start the recovered task."
+                    });
+                }
+
+                const result = await checkpointRecovery.resumeResolvedProviderFailure(taskId, {
+                    ownerAuthorized: true,
+                    confirmExecution: true
+                });
+                return sendJson(res, result.success ? 200 : 409, result);
+            }
+
+
+            /* =================================================
                ASK
                ================================================= */
 
