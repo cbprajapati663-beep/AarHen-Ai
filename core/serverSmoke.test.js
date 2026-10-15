@@ -243,6 +243,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(inspected.success, true);
         assert.equal(inspected.locked, true);
         assert.equal(inspected.staleLease, true);
+        assert.equal(inspected.executionBlocked, true);
         assert.match(inspected.leaseFingerprint, /^[a-f0-9]{64}$/);
         assert.equal(JSON.stringify(inspected).includes(claim.token), false);
 
@@ -261,6 +262,50 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(cleared.cleared, true);
         assert.equal(cleared.executionStarted, false);
         assert.equal(store.inspect("task-api-stale").locked, false);
+    });
+
+    await t.test("owner inspection surfaces a stuck mutation guard and keeps execution blocked", async () => {
+        const guardPath = path.join(leaseDirectory, "task-guard-inspect.json.mutation");
+        fs.writeFileSync(guardPath, "do-not-expose-this-content", { flag: "wx" });
+        try {
+            const response = await fetch(
+                baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-guard-inspect",
+                { headers: { Authorization: `Bearer ${API_KEY}` } }
+            );
+            const body = await response.json();
+            assert.equal(response.status, 200);
+            assert.equal(body.success, true);
+            assert.equal(body.locked, false);
+            assert.equal(body.executionBlocked, true);
+            assert.equal(body.mutationGuard.present, true);
+            assert.equal(body.mutationGuard.requiresOperatorReview, true);
+            assert.equal(JSON.stringify(body).includes("do-not-expose-this-content"), false);
+        } finally {
+            fs.rmSync(guardPath, { force: true });
+        }
+    });
+
+    await t.test("corrupt lease inspection still surfaces a mutation guard and fails closed", async () => {
+        const leasePath = path.join(leaseDirectory, "task-corrupt-inspect.json");
+        const guardPath = leasePath + ".mutation";
+        fs.writeFileSync(leasePath, "{ malformed lease", "utf8");
+        fs.writeFileSync(guardPath, "private guard payload", { flag: "wx" });
+        try {
+            const response = await fetch(
+                baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-corrupt-inspect",
+                { headers: { Authorization: `Bearer ${API_KEY}` } }
+            );
+            const body = await response.json();
+            assert.equal(response.status, 409);
+            assert.equal(body.success, false);
+            assert.equal(body.executionBlocked, true);
+            assert.equal(body.mutationGuard.present, true);
+            assert.equal(body.mutationGuard.requiresOperatorReview, true);
+            assert.equal(JSON.stringify(body).includes("private guard payload"), false);
+        } finally {
+            fs.rmSync(leasePath, { force: true });
+            fs.rmSync(guardPath, { force: true });
+        }
     });
 
     await t.test("unknown protected route cannot bypass authentication", async () => {

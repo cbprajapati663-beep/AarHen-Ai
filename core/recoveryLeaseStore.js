@@ -69,6 +69,36 @@ function createRecoveryLeaseStore(options = {}) {
     }
   }
 
+  // Report a mutation guard without exposing file contents. A present guard
+  // may be active or orphaned after a crash; inspection cannot distinguish
+  // those cases, so callers must treat it as blocked and require operator review.
+  function inspectMutationGuard(taskId) {
+    const id = validateTaskId(taskId);
+    const file = mutationPath(id);
+    try {
+      const stat = fs.statSync(file);
+      return {
+        success: true,
+        taskId: id,
+        present: true,
+        requiresOperatorReview: true,
+        createdAt: stat.mtime.toISOString(),
+        error: "Mutation guard exists; it may be active or left by a crashed mutation. Do not remove it until the executor state is verified."
+      };
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        return { success: true, taskId: id, present: false, requiresOperatorReview: false };
+      }
+      return {
+        success: false,
+        taskId: id,
+        present: true,
+        requiresOperatorReview: true,
+        error: "Mutation guard cannot be inspected; recovery remains blocked."
+      };
+    }
+  }
+
   function inspect(taskId) {
     const id = validateTaskId(taskId);
     const file = leasePath(id);
@@ -225,7 +255,7 @@ function createRecoveryLeaseStore(options = {}) {
     });
   }
 
-  return Object.freeze({ claim, inspect, release, clearStale, directory });
+  return Object.freeze({ claim, inspect, inspectMutationGuard, release, clearStale, directory });
 }
 
 module.exports = { createRecoveryLeaseStore, validateTaskId };

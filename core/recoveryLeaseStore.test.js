@@ -150,3 +150,24 @@ test("stale lease cleanup refuses active leases and fails closed on a busy mutat
   assert.equal(guarded.mutationInProgress, true);
   assert.equal(store.inspect("task-active-clear").locked, true);
 });
+
+
+test("mutation guard inspection reports active-or-orphaned guards without exposing contents", t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-mutation-inspect-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const store = createRecoveryLeaseStore({ directory });
+
+  const clear = store.inspectMutationGuard("task-guard-inspect");
+  assert.equal(clear.success, true);
+  assert.equal(clear.present, false);
+  assert.equal(clear.requiresOperatorReview, false);
+
+  const guardPath = path.join(directory, "task-guard-inspect.json.mutation");
+  fs.writeFileSync(guardPath, "private guard contents", { flag: "wx" });
+  const present = store.inspectMutationGuard("task-guard-inspect");
+  assert.equal(present.success, true);
+  assert.equal(present.present, true);
+  assert.equal(present.requiresOperatorReview, true);
+  assert.equal(JSON.stringify(present).includes("private guard contents"), false);
+  assert.match(present.error, /active or left by a crashed mutation/i);
+});
