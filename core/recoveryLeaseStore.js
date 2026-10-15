@@ -6,6 +6,7 @@
 // operator confirmation after verifying no executor remains active.
 
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
@@ -36,13 +37,17 @@ function createRecoveryLeaseStore(options = {}) {
     return leasePath(taskId) + ".mutation";
   }
 
+  function mutationRecoveryPath(taskId) {
+    return mutationPath(taskId) + ".recovery";
+  }
+
   function fingerprint(raw) {
     return crypto.createHash("sha256").update(raw, "utf8").digest("hex");
   }
 
   // Serialize claim/release/operator-clear operations across processes that
-  // share this filesystem. A crashed mutation leaves a guard behind; that
-  // intentionally fails closed and requires separate operator investigation.
+  // share this filesystem. Recovery inspection/cleanup uses a separate marker
+  // so a live mutation cannot be mistaken for an orphaned guard.
   function withMutationGuard(taskId, operation) {
     const id = validateTaskId(taskId);
     fs.mkdirSync(directory, { recursive: true });
@@ -62,6 +67,25 @@ function createRecoveryLeaseStore(options = {}) {
     }
 
     try {
+      const metadata = {
+        pid: process.pid,
+        hostname: os.hostname(),
+        startedAt: new Date().toISOString(),
+        token: crypto.randomUUID()
+      };
+      fs.writeFileSync(guardFd, JSON.stringify(metadata), "utf8");
+      fs.fsyncSync(guardFd);
+
+      // If operator recovery is inspecting/clearing a guard, back out before
+      // mutating lease state. The finally block removes only this call's guard.
+      if (recoveryMarkerPresent(id)) {
+        return {
+          success: false,
+          taskId: id,
+          mutationInProgress: true,
+          error: "Recovery-guard inspection or cleanup is in progress; retry after it finishes."
+        };
+      }
       return operation(id, leasePath(id));
     } finally {
       try { fs.closeSync(guardFd); } catch {}
@@ -69,33 +93,157 @@ function createRecoveryLeaseStore(options = {}) {
     }
   }
 
-  // Report a mutation guard without exposing file contents. A present guard
-  // may be active or orphaned after a crash; inspection cannot distinguish
-  // those cases, so callers must treat it as blocked and require operator review.
+  function recoveryMarkerPresent(taskId) {
+    try {
+      fs.statSync(mutationRecoveryPath(taskId));
+      return true;
+    } catch (error) {
+      if (error && error.code === "ENOENT") return false;
+      throw error;
+    }
+  }
+
+  // Treat permission errors and uncertain process state as alive. A PID from
+  // another host cannot be safely verified from this process.
+  function isProcessAlive(pid) {
+    if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      if (error && error.code === "ESRCH") return false;
+      return true;
+    }
+  }
+
+  // Report safe metadata only; never return the guard's private token/content.
+  // Legacy/unknown guards remain blocked and cannot be cleared automatically.
   function inspectMutationGuard(taskId) {
     const id = validateTaskId(taskId);
     const file = mutationPath(id);
     try {
+      const raw = fs.readFileSync(file, "utf8");
       const stat = fs.statSync(file);
+      let metadata = null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && Number.isSafeInteger(parsed.pid) && typeof parsed.hostname === "string" &&
+            typeof parsed.startedAt === "string" && typeof parsed.token === "string") {
+          metadata = parsed;
+        }
+      } catch {}
+
+      const sameHost = Boolean(metadata && metadata.hostname === os.hostname());
+      const processAlive = sameHost ? isProcessAlive(metadata.pid) : null;
+      const ownerStatus = !metadata ? "unknown" :
+        !sameHost ? "different-host" :
+        processAlive === false ? "not-running" :
+        processAlive === true ? "active-or-pid-reused" : "unknown";
+
       return {
         success: true,
         taskId: id,
         present: true,
         requiresOperatorReview: true,
         createdAt: stat.mtime.toISOString(),
-        error: "Mutation guard exists; it may be active or left by a crashed mutation. Do not remove it until the executor state is verified."
+        fingerprint: fingerprint(raw),
+        owner: metadata ? {
+          pid: metadata.pid,
+          hostname: metadata.hostname,
+          startedAt: metadata.startedAt
+        } : null,
+        ownerStatus,
+        safeToClear: ownerStatus === "not-running",
+        error: "Mutation guard exists; it may be active or left by a crashed mutation. Clear it only after verifying the recorded local process is no longer active."
       };
     } catch (error) {
       if (error && error.code === "ENOENT") {
-        return { success: true, taskId: id, present: false, requiresOperatorReview: false };
+        return { success: true, taskId: id, present: false, requiresOperatorReview: false, safeToClear: false };
       }
       return {
         success: false,
         taskId: id,
         present: true,
         requiresOperatorReview: true,
+        safeToClear: false,
         error: "Mutation guard cannot be inspected; recovery remains blocked."
       };
+    }
+  }
+
+  // Clear only a guard whose exact inspected fingerprint still matches and
+  // whose recorded process is verifiably gone on this same host. The explicit
+  // operator confirmation is necessary but never overrides a live/unknown PID.
+  function clearStaleMutationGuard(taskId, options = {}) {
+    const id = validateTaskId(taskId);
+    const config = options && typeof options === "object" ? options : {};
+    if (config.confirmNoActiveMutation !== true) {
+      return { success: false, cleared: false, taskId: id, error: "Explicit confirmation that no mutation is active is required." };
+    }
+    if (typeof config.expectedFingerprint !== "string" || !/^[a-f0-9]{64}$/i.test(config.expectedFingerprint)) {
+      return { success: false, cleared: false, taskId: id, error: "The inspected mutation-guard fingerprint is required." };
+    }
+
+    fs.mkdirSync(directory, { recursive: true });
+    let recoveryFd;
+    const recoveryFile = mutationRecoveryPath(id);
+    try {
+      recoveryFd = fs.openSync(recoveryFile, "wx", 0o600);
+    } catch (error) {
+      if (error && error.code === "EEXIST") {
+        return { success: false, cleared: false, taskId: id, mutationInProgress: true, error: "Another mutation-guard recovery is in progress." };
+      }
+      return { success: false, cleared: false, taskId: id, error: "Could not acquire the mutation-guard recovery marker; guard remains blocked." };
+    }
+
+    try {
+      let raw;
+      try {
+        raw = fs.readFileSync(mutationPath(id), "utf8");
+      } catch {
+        return { success: false, cleared: false, taskId: id, error: "Mutation guard is missing or unreadable." };
+      }
+      const actualFingerprint = fingerprint(raw);
+      if (actualFingerprint !== config.expectedFingerprint) {
+        return { success: false, cleared: false, taskId: id, error: "Mutation guard changed since inspection; inspect it again before cleanup." };
+      }
+
+      let metadata;
+      try { metadata = JSON.parse(raw); } catch {}
+      if (!metadata || !Number.isSafeInteger(metadata.pid) || typeof metadata.hostname !== "string" ||
+          typeof metadata.startedAt !== "string" || typeof metadata.token !== "string") {
+        return { success: false, cleared: false, taskId: id, error: "Mutation guard owner metadata is unknown; it remains blocked for manual investigation." };
+      }
+      if (metadata.hostname !== os.hostname()) {
+        return { success: false, cleared: false, taskId: id, error: "Mutation guard belongs to another host; local cleanup is unsafe." };
+      }
+      if (isProcessAlive(metadata.pid) !== false) {
+        return { success: false, cleared: false, taskId: id, error: "Recorded mutation process is active or cannot be verified; guard remains blocked." };
+      }
+
+      // Re-read immediately before unlinking to avoid deleting a changed guard.
+      let latestRaw;
+      try { latestRaw = fs.readFileSync(mutationPath(id), "utf8"); } catch {
+        return { success: false, cleared: false, taskId: id, error: "Mutation guard changed during cleanup; inspect again." };
+      }
+      if (fingerprint(latestRaw) !== actualFingerprint) {
+        return { success: false, cleared: false, taskId: id, error: "Mutation guard changed during cleanup; inspect again." };
+      }
+
+      fs.unlinkSync(mutationPath(id));
+      return {
+        success: true,
+        cleared: true,
+        taskId: id,
+        clearedGuardFingerprint: actualFingerprint,
+        requiresNewOwnerDecision: true,
+        executionStarted: false
+      };
+    } catch {
+      return { success: false, cleared: false, taskId: id, error: "Mutation-guard cleanup failed safely; execution remains blocked." };
+    } finally {
+      try { fs.closeSync(recoveryFd); } catch {}
+      try { fs.unlinkSync(recoveryFile); } catch {}
     }
   }
 
@@ -255,7 +403,7 @@ function createRecoveryLeaseStore(options = {}) {
     });
   }
 
-  return Object.freeze({ claim, inspect, inspectMutationGuard, release, clearStale, directory });
+  return Object.freeze({ claim, inspect, inspectMutationGuard, clearStaleMutationGuard, release, clearStale, directory });
 }
 
 module.exports = { createRecoveryLeaseStore, validateTaskId };

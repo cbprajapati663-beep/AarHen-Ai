@@ -2,10 +2,10 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawnSync } = require("node:child_process");
 const { createRecoveryLeaseStore } = require("./recoveryLeaseStore");
 
 test("recovery lease is exclusive across independent store instances", t => {
@@ -170,4 +170,87 @@ test("mutation guard inspection reports active-or-orphaned guards without exposi
   assert.equal(present.requiresOperatorReview, true);
   assert.equal(JSON.stringify(present).includes("private guard contents"), false);
   assert.match(present.error, /active or left by a crashed mutation/i);
+});
+
+
+test("stale mutation guard cleanup requires owner confirmation, exact fingerprint, and a dead local PID", t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-mutation-clear-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const store = createRecoveryLeaseStore({ directory });
+  const guardPath = path.join(directory, "task-guard-stale.json.mutation");
+  const exited = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+  assert.equal(exited.error, undefined);
+  assert.ok(Number.isSafeInteger(exited.pid));
+
+  fs.writeFileSync(guardPath, JSON.stringify({
+    pid: exited.pid,
+    hostname: os.hostname(),
+    startedAt: new Date(Date.now() - 5000).toISOString(),
+    token: "private-guard-token"
+  }), { flag: "wx" });
+
+  const inspection = store.inspectMutationGuard("task-guard-stale");
+  assert.equal(inspection.present, true);
+  assert.equal(inspection.ownerStatus, "not-running");
+  assert.equal(inspection.safeToClear, true);
+  assert.match(inspection.fingerprint, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(inspection).includes("private-guard-token"), false);
+
+  const unconfirmed = store.clearStaleMutationGuard("task-guard-stale", {
+    expectedFingerprint: inspection.fingerprint
+  });
+  assert.equal(unconfirmed.cleared, false);
+  assert.equal(fs.existsSync(guardPath), true);
+
+  const wrongSnapshot = store.clearStaleMutationGuard("task-guard-stale", {
+    confirmNoActiveMutation: true,
+    expectedFingerprint: "0".repeat(64)
+  });
+  assert.equal(wrongSnapshot.cleared, false);
+  assert.equal(fs.existsSync(guardPath), true);
+
+  const cleared = store.clearStaleMutationGuard("task-guard-stale", {
+    confirmNoActiveMutation: true,
+    expectedFingerprint: inspection.fingerprint
+  });
+  assert.equal(cleared.success, true);
+  assert.equal(cleared.cleared, true);
+  assert.equal(cleared.executionStarted, false);
+  assert.equal(cleared.requiresNewOwnerDecision, true);
+  assert.equal(fs.existsSync(guardPath), false);
+});
+
+test("stale mutation guard cleanup refuses a live PID and unknown legacy guards", t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-mutation-live-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const store = createRecoveryLeaseStore({ directory });
+  const guardPath = path.join(directory, "task-guard-live.json.mutation");
+
+  fs.writeFileSync(guardPath, JSON.stringify({
+    pid: process.pid,
+    hostname: os.hostname(),
+    startedAt: new Date().toISOString(),
+    token: "do-not-return"
+  }), { flag: "wx" });
+  const active = store.inspectMutationGuard("task-guard-live");
+  assert.equal(active.ownerStatus, "active-or-pid-reused");
+  assert.equal(active.safeToClear, false);
+  const refused = store.clearStaleMutationGuard("task-guard-live", {
+    confirmNoActiveMutation: true,
+    expectedFingerprint: active.fingerprint
+  });
+  assert.equal(refused.cleared, false);
+  assert.match(refused.error, /active or cannot be verified/i);
+  assert.equal(fs.existsSync(guardPath), true);
+
+  fs.rmSync(guardPath);
+  fs.writeFileSync(guardPath, "legacy-unknown-guard", { flag: "wx" });
+  const legacy = store.inspectMutationGuard("task-guard-live");
+  const unknown = store.clearStaleMutationGuard("task-guard-live", {
+    confirmNoActiveMutation: true,
+    expectedFingerprint: legacy.fingerprint
+  });
+  assert.equal(unknown.cleared, false);
+  assert.match(unknown.error, /owner metadata is unknown/i);
+  assert.equal(fs.existsSync(guardPath), true);
 });

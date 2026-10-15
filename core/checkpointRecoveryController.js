@@ -1858,6 +1858,34 @@ function clearStaleRecoveryLease(taskId, options = {}) {
 }
 
 
+function clearStaleMutationGuard(taskId, options = {}) {
+    const id = safeString(taskId);
+    const config = safeObject(options);
+
+    if (!id) {
+        return { success: false, cleared: false, taskId: null, error: "Task ID is required." };
+    }
+    if (config.ownerAuthorized !== true) {
+        return { success: false, cleared: false, taskId: id, error: "Owner authorization is required." };
+    }
+    if (config.confirmNoActiveMutation !== true) {
+        return { success: false, cleared: false, taskId: id, error: "Explicit confirmation that no mutation is active is required." };
+    }
+    if (typeof config.expectedFingerprint !== "string") {
+        return { success: false, cleared: false, taskId: id, error: "The inspected mutation-guard fingerprint is required." };
+    }
+
+    try {
+        return recoveryLeaseStore.clearStaleMutationGuard(id, {
+            confirmNoActiveMutation: true,
+            expectedFingerprint: config.expectedFingerprint
+        });
+    } catch {
+        return { success: false, cleared: false, taskId: id, error: "Mutation-guard cleanup rejected the task ID or failed safely." };
+    }
+}
+
+
 function getStatus() {
 
     const autonomousStatus =
@@ -2565,6 +2593,8 @@ module.exports = {
     inspectRecoveryLease,
 
     clearStaleRecoveryLease,
+
+    clearStaleMutationGuard,
 
     getStatus,
 

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const net = require("node:net");
@@ -306,6 +306,59 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
             fs.rmSync(leasePath, { force: true });
             fs.rmSync(guardPath, { force: true });
         }
+    });
+
+    await t.test("owner can clear only a fingerprint-matched mutation guard whose local PID is gone", async () => {
+        const guardPath = path.join(leaseDirectory, "task-api-stale-mutation.json.mutation");
+        const exited = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+        assert.equal(exited.error, undefined);
+        assert.ok(Number.isSafeInteger(exited.pid));
+        fs.writeFileSync(guardPath, JSON.stringify({
+            pid: exited.pid,
+            hostname: os.hostname(),
+            startedAt: new Date(Date.now() - 5000).toISOString(),
+            token: "never-return-this-token"
+        }), { flag: "wx" });
+
+        const inspectResponse = await fetch(
+            baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-api-stale-mutation",
+            { headers: { Authorization: `Bearer ${API_KEY}` } }
+        );
+        const inspected = await inspectResponse.json();
+        assert.equal(inspectResponse.status, 200);
+        assert.equal(inspected.mutationGuard.present, true);
+        assert.equal(inspected.mutationGuard.ownerStatus, "not-running");
+        assert.equal(inspected.mutationGuard.safeToClear, true);
+        assert.match(inspected.mutationGuard.fingerprint, /^[a-f0-9]{64}$/);
+        assert.equal(JSON.stringify(inspected).includes("never-return-this-token"), false);
+
+        const unauthenticated = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale-mutation-guard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                taskId: "task-api-stale-mutation",
+                confirmNoActiveMutation: true,
+                mutationGuardFingerprint: inspected.mutationGuard.fingerprint
+            })
+        });
+        assert.equal(unauthenticated.status, 401);
+        assert.equal(fs.existsSync(guardPath), true);
+
+        const cleanupResponse = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale-mutation-guard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            body: JSON.stringify({
+                taskId: "task-api-stale-mutation",
+                confirmNoActiveMutation: true,
+                mutationGuardFingerprint: inspected.mutationGuard.fingerprint
+            })
+        });
+        const cleaned = await cleanupResponse.json();
+        assert.equal(cleanupResponse.status, 200);
+        assert.equal(cleaned.success, true);
+        assert.equal(cleaned.cleared, true);
+        assert.equal(cleaned.executionStarted, false);
+        assert.equal(fs.existsSync(guardPath), false);
     });
 
     await t.test("unknown protected route cannot bypass authentication", async () => {
