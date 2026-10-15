@@ -243,6 +243,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(inspected.success, true);
         assert.equal(inspected.locked, true);
         assert.equal(inspected.staleLease, true);
+        assert.equal(inspected.executionBlocked, true);
         assert.match(inspected.leaseFingerprint, /^[a-f0-9]{64}$/);
         assert.equal(JSON.stringify(inspected).includes(claim.token), false);
 
