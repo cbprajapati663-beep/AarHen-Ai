@@ -154,7 +154,7 @@ function createRecoveryLeaseStore(options = {}) {
         } : null,
         ownerStatus,
         safeToClear: ownerStatus === "not-running",
-        error: "Mutation guard exists; clear it only after verifying the recorded local process is no longer active."
+        error: "Mutation guard exists; it may be active or left by a crashed mutation. Clear it only after verifying the recorded local process is no longer active."
       };
     } catch (error) {
       if (error && error.code === "ENOENT") {
