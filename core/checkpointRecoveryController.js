@@ -1766,23 +1766,40 @@ function getLatestCheckpoint(
 function inspectRecoveryLease(taskId) {
     const id = safeString(taskId);
     if (!id) {
-        return { success: false, taskId: null, locked: false, error: "Task ID is required." };
+        return {
+            success: false,
+            taskId: null,
+            locked: false,
+            executionBlocked: true,
+            error: "Task ID is required."
+        };
     }
 
     try {
         const result = recoveryLeaseStore.inspect(id);
+        // Inspect the mutation guard even if the lease itself is corrupt or
+        // unreadable. A failed lease read must never hide a stuck guard.
+        const mutationGuard = recoveryLeaseStore.inspectMutationGuard(id);
+
         if (!result.success) {
             return {
                 success: false,
                 taskId: id,
                 locked: result.locked === true,
                 corrupt: result.corrupt === true,
-                error: result.error || "Recovery lease inspection failed."
+                mutationGuard,
+                executionBlocked: true,
+                ownershipTokenRedacted: true,
+                error: result.error || "Recovery lease inspection failed; execution remains blocked."
             };
         }
 
         const lease = safeObject(result.lease);
-        const mutationGuard = recoveryLeaseStore.inspectMutationGuard(id);
+        const executionBlocked =
+            result.locked === true ||
+            mutationGuard.present === true ||
+            mutationGuard.success === false;
+
         return {
             success: true,
             taskId: id,
@@ -1790,7 +1807,7 @@ function inspectRecoveryLease(taskId) {
             expired: result.expired === true,
             staleLease: result.locked === true && result.expired === true,
             mutationGuard,
-            executionBlocked: mutationGuard.present === true || mutationGuard.success === false,
+            executionBlocked,
             // Never expose the ownership token through status/inspection APIs.
             lease: result.locked === true ? {
                 pid: Number.isInteger(lease.pid) ? lease.pid : null,
@@ -1805,11 +1822,11 @@ function inspectRecoveryLease(taskId) {
             success: false,
             taskId: id,
             locked: true,
+            executionBlocked: true,
             error: "Recovery lease inspection rejected the task ID or could not access the lease."
         };
     }
 }
-
 
 // Clears only the exact expired lease snapshot inspected by an operator.
 // Authentication must be established by the server before ownerAuthorized is set.
