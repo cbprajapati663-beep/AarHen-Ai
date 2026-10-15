@@ -6,7 +6,6 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawnSync } = require("node:child_process");
 const { createRecoveryLeaseStore } = require("./recoveryLeaseStore");
 
 test("recovery lease is exclusive across independent store instances", t => {
