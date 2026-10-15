@@ -402,6 +402,61 @@ const server = http.createServer(
 
 
             /* =================================================
+               OWNER-CONFIRMED STALE MUTATION-GUARD CLEANUP
+               ================================================= */
+
+            if (
+                pathname === "/checkpoint/recovery-lease/clear-stale-mutation-guard" &&
+                req.method === "POST"
+            ) {
+                if (!auth.isConfigured()) {
+                    return sendJson(res, 503, {
+                        success: false,
+                        error: "Owner authentication must be configured before mutation guards can be cleared."
+                    });
+                }
+
+                const authentication = auth.authenticate(req);
+                if (!authentication.authenticated) {
+                    return sendJson(res, 401, {
+                        success: false,
+                        authenticated: false,
+                        error: "Valid owner API key required."
+                    });
+                }
+
+                const body = await readBody(req);
+                const taskId = typeof body.taskId === "string" ? body.taskId.trim() : "";
+                if (!taskId) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "taskId is required."
+                    });
+                }
+                if (body.confirmNoActiveMutation !== true) {
+                    return sendJson(res, 400, {
+                        success: false,
+                        requiresConfirmation: true,
+                        error: "confirmNoActiveMutation: true is required after verifying the mutation is no longer active."
+                    });
+                }
+                if (typeof body.mutationGuardFingerprint !== "string") {
+                    return sendJson(res, 400, {
+                        success: false,
+                        error: "mutationGuardFingerprint from a fresh owner inspection is required."
+                    });
+                }
+
+                const result = checkpointRecovery.clearStaleMutationGuard(taskId, {
+                    ownerAuthorized: true,
+                    confirmNoActiveMutation: true,
+                    expectedFingerprint: body.mutationGuardFingerprint
+                });
+                return sendJson(res, result.success ? 200 : 409, result);
+            }
+
+
+            /* =================================================
                ASK
                ================================================= */
 
