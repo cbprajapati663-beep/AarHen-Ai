@@ -272,3 +272,76 @@ test("new recovery lease directories and persisted lease files use private permi
 
   assert.equal(store.release("task-private-storage", claim.token).released, true);
 });
+
+
+test("recovery lease store refuses symlinked lease files without reading target secrets", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-lease-symlink-"));
+  const directory = path.join(root, "leases");
+  const outside = path.join(root, "outside.json");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(directory, { mode: 0o700 });
+  fs.writeFileSync(outside, JSON.stringify({
+    taskId: "task-linked",
+    token: "outside-private-token",
+    expiresAt: new Date(Date.now() - 1000).toISOString()
+  }), { mode: 0o600 });
+  fs.symlinkSync(outside, path.join(directory, "task-linked.json"));
+
+  const store = createRecoveryLeaseStore({ directory });
+  const inspection = store.inspect("task-linked");
+  assert.equal(inspection.success, false);
+  assert.equal(inspection.locked, true);
+  assert.equal(JSON.stringify(inspection).includes("outside-private-token"), false);
+
+  const release = store.release("task-linked", "outside-private-token");
+  assert.equal(release.released, false);
+  assert.equal(fs.existsSync(outside), true);
+  assert.equal(fs.lstatSync(path.join(directory, "task-linked.json")).isSymbolicLink(), true);
+});
+
+test("recovery lease store refuses a symlinked storage directory", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-dir-symlink-"));
+  const actual = path.join(root, "actual");
+  const linked = path.join(root, "linked");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(actual, { mode: 0o700 });
+  fs.symlinkSync(actual, linked, "dir");
+
+  const store = createRecoveryLeaseStore({ directory: linked });
+  assert.throws(() => store.claim("task-blocked"), /symbolic link/i);
+  assert.equal(fs.readdirSync(actual).length, 0);
+});
+
+test("dangling recovery marker symlink blocks lease mutation", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-marker-symlink-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const store = createRecoveryLeaseStore({ directory: root });
+  fs.symlinkSync(path.join(root, "missing-target"), path.join(root, "task-marker.json.mutation.recovery"));
+
+  const result = store.claim("task-marker");
+  assert.equal(result.success, false);
+  assert.equal(result.mutationInProgress, true);
+  assert.equal(fs.existsSync(path.join(root, "task-marker.json")), false);
+});
+
+test("legacy recovery lease storage and files are hardened when inspected", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-legacy-mode-"));
+  const directory = path.join(root, "legacy-leases");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const leaseFile = path.join(directory, "legacy-task.json");
+  fs.writeFileSync(leaseFile, JSON.stringify({
+    taskId: "legacy-task",
+    token: "legacy-token",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60000).toISOString()
+  }), { mode: 0o644 });
+  fs.chmodSync(directory, 0o755);
+  fs.chmodSync(leaseFile, 0o644);
+
+  const store = createRecoveryLeaseStore({ directory });
+  const inspection = store.inspect("legacy-task");
+  assert.equal(inspection.success, true);
+  assert.equal(fs.statSync(directory).mode & 0o777, 0o700);
+  assert.equal(fs.statSync(leaseFile).mode & 0o777, 0o600);
+});

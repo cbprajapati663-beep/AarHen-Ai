@@ -45,12 +45,93 @@ function createRecoveryLeaseStore(options = {}) {
     return crypto.createHash("sha256").update(raw, "utf8").digest("hex");
   }
 
+  function secureDirectoryIfPresent(allowMissing = false) {
+    let linkStat;
+    try {
+      linkStat = fs.lstatSync(directory);
+    } catch (error) {
+      if (allowMissing && error && error.code === "ENOENT") return false;
+      throw error;
+    }
+    if (linkStat.isSymbolicLink() || !linkStat.isDirectory()) {
+      throw new Error("Recovery lease storage path must be a real directory, not a symbolic link.");
+    }
+
+    if (process.platform !== "win32") {
+      let fd;
+      try {
+        const flags = fs.constants.O_RDONLY |
+          (fs.constants.O_DIRECTORY || 0) |
+          (fs.constants.O_NOFOLLOW || 0);
+        fd = fs.openSync(directory, flags);
+        if (!fs.fstatSync(fd).isDirectory()) {
+          throw new Error("Recovery lease storage path must be a real directory.");
+        }
+        fs.fchmodSync(fd, 0o700);
+      } catch (error) {
+        if (error && error.code === "ELOOP") {
+          throw new Error("Recovery lease storage path must not be a symbolic link.");
+        }
+        throw error;
+      } finally {
+        if (fd !== undefined) {
+          try { fs.closeSync(fd); } catch {}
+        }
+      }
+    }
+    return true;
+  }
+
+  function ensureDirectory() {
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    secureDirectoryIfPresent();
+  }
+
+  // Read only regular files and never follow symlinks. Return the stat for the
+  // opened file descriptor so metadata and contents refer to the same object.
+  function readRegularFile(file, allowMissing = false) {
+    if (!secureDirectoryIfPresent(true)) return null;
+    try {
+      const linkStat = fs.lstatSync(file);
+      if (linkStat.isSymbolicLink()) {
+        throw new Error("Recovery lease storage entries must not be symbolic links.");
+      }
+      if (!linkStat.isFile()) {
+        throw new Error("Recovery lease storage entries must be regular files.");
+      }
+    } catch (error) {
+      if (allowMissing && error && error.code === "ENOENT") return null;
+      throw error;
+    }
+
+    let fd;
+    try {
+      const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0);
+      fd = fs.openSync(file, flags);
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile()) {
+        throw new Error("Recovery lease storage entries must be regular files.");
+      }
+      if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
+      return { raw: fs.readFileSync(fd, "utf8"), stat };
+    } catch (error) {
+      if (error && error.code === "ELOOP") {
+        throw new Error("Recovery lease storage entries must not be symbolic links.");
+      }
+      throw error;
+    } finally {
+      if (fd !== undefined) {
+        try { fs.closeSync(fd); } catch {}
+      }
+    }
+  }
+
   // Serialize claim/release/operator-clear operations across processes that
   // share this filesystem. Recovery inspection/cleanup uses a separate marker
   // so a live mutation cannot be mistaken for an orphaned guard.
   function withMutationGuard(taskId, operation) {
     const id = validateTaskId(taskId);
-    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    ensureDirectory();
     let guardFd;
     try {
       guardFd = fs.openSync(mutationPath(id), "wx", 0o600);
@@ -95,7 +176,9 @@ function createRecoveryLeaseStore(options = {}) {
 
   function recoveryMarkerPresent(taskId) {
     try {
-      fs.statSync(mutationRecoveryPath(taskId));
+      // lstat treats a dangling symlink as present, so it cannot bypass the
+      // fail-closed recovery marker check.
+      fs.lstatSync(mutationRecoveryPath(taskId));
       return true;
     } catch (error) {
       if (error && error.code === "ENOENT") return false;
@@ -122,8 +205,11 @@ function createRecoveryLeaseStore(options = {}) {
     const id = validateTaskId(taskId);
     const file = mutationPath(id);
     try {
-      const raw = fs.readFileSync(file, "utf8");
-      const stat = fs.statSync(file);
+      const stored = readRegularFile(file, true);
+      if (!stored) {
+        return { success: true, taskId: id, present: false, requiresOperatorReview: false, safeToClear: false };
+      }
+      const { raw, stat } = stored;
       let metadata = null;
       try {
         const parsed = JSON.parse(raw);
@@ -184,7 +270,7 @@ function createRecoveryLeaseStore(options = {}) {
       return { success: false, cleared: false, taskId: id, error: "The inspected mutation-guard fingerprint is required." };
     }
 
-    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    ensureDirectory();
     let recoveryFd;
     const recoveryFile = mutationRecoveryPath(id);
     try {
@@ -199,9 +285,13 @@ function createRecoveryLeaseStore(options = {}) {
     try {
       let raw;
       try {
-        raw = fs.readFileSync(mutationPath(id), "utf8");
+        const stored = readRegularFile(mutationPath(id), true);
+        if (!stored) {
+          return { success: false, cleared: false, taskId: id, error: "Mutation guard is missing or unreadable." };
+        }
+        raw = stored.raw;
       } catch {
-        return { success: false, cleared: false, taskId: id, error: "Mutation guard is missing or unreadable." };
+        return { success: false, cleared: false, taskId: id, error: "Mutation guard is unsafe or unreadable; recovery remains blocked." };
       }
       const actualFingerprint = fingerprint(raw);
       if (actualFingerprint !== config.expectedFingerprint) {
@@ -223,8 +313,14 @@ function createRecoveryLeaseStore(options = {}) {
 
       // Re-read immediately before unlinking to avoid deleting a changed guard.
       let latestRaw;
-      try { latestRaw = fs.readFileSync(mutationPath(id), "utf8"); } catch {
-        return { success: false, cleared: false, taskId: id, error: "Mutation guard changed during cleanup; inspect again." };
+      try {
+        const latest = readRegularFile(mutationPath(id), true);
+        if (!latest) {
+          return { success: false, cleared: false, taskId: id, error: "Mutation guard changed during cleanup; inspect again." };
+        }
+        latestRaw = latest.raw;
+      } catch {
+        return { success: false, cleared: false, taskId: id, error: "Mutation guard changed or became unsafe during cleanup; inspect again." };
       }
       if (fingerprint(latestRaw) !== actualFingerprint) {
         return { success: false, cleared: false, taskId: id, error: "Mutation guard changed during cleanup; inspect again." };
@@ -252,10 +348,11 @@ function createRecoveryLeaseStore(options = {}) {
     const file = leasePath(id);
     let raw;
     try {
-      raw = fs.readFileSync(file, "utf8");
-    } catch (error) {
-      if (error && error.code === "ENOENT") return { success: true, locked: false, taskId: id };
-      return { success: false, locked: true, taskId: id, error: "Recovery lease cannot be read; execution remains blocked." };
+      const stored = readRegularFile(file, true);
+      if (!stored) return { success: true, locked: false, taskId: id };
+      raw = stored.raw;
+    } catch {
+      return { success: false, locked: true, taskId: id, error: "Recovery lease is unsafe or cannot be read; execution remains blocked." };
     }
 
     try {
@@ -337,7 +434,9 @@ function createRecoveryLeaseStore(options = {}) {
     return withMutationGuard(id, (cleanId, file) => {
       let current;
       try {
-        current = JSON.parse(fs.readFileSync(file, "utf8"));
+        const stored = readRegularFile(file, true);
+        if (!stored) throw new Error("missing lease");
+        current = JSON.parse(stored.raw);
       } catch {
         return { success: false, released: false, error: "Recovery lease is missing or unreadable." };
       }
@@ -367,7 +466,9 @@ function createRecoveryLeaseStore(options = {}) {
       let raw;
       let lease;
       try {
-        raw = fs.readFileSync(file, "utf8");
+        const stored = readRegularFile(file, true);
+        if (!stored) throw new Error("missing lease");
+        raw = stored.raw;
         lease = JSON.parse(raw);
       } catch {
         return { success: false, cleared: false, taskId: cleanId, error: "Recovery lease is missing, unreadable, or corrupt; it remains blocked." };
