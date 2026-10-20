@@ -23,7 +23,7 @@ function createCheckpointStore(options = {}) {
   }
 
   function ensureDirectory() {
-    fs.mkdirSync(directory, { recursive: true });
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   }
 
   function save(checkpoint) {
@@ -35,7 +35,7 @@ function createCheckpointStore(options = {}) {
     ensureDirectory();
     const temp = target + "." + process.pid + "." + Date.now() + ".tmp";
     try {
-      fs.writeFileSync(temp, JSON.stringify(checkpoint, null, 2), { encoding: "utf8", flag: "wx" });
+      fs.writeFileSync(temp, JSON.stringify(checkpoint, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
       fs.renameSync(temp, target);
     } catch (error) {
       try { fs.rmSync(temp, { force: true }); } catch {}
