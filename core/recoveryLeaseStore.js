@@ -50,7 +50,7 @@ function createRecoveryLeaseStore(options = {}) {
   // so a live mutation cannot be mistaken for an orphaned guard.
   function withMutationGuard(taskId, operation) {
     const id = validateTaskId(taskId);
-    fs.mkdirSync(directory, { recursive: true });
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     let guardFd;
     try {
       guardFd = fs.openSync(mutationPath(id), "wx", 0o600);
@@ -184,7 +184,7 @@ function createRecoveryLeaseStore(options = {}) {
       return { success: false, cleared: false, taskId: id, error: "The inspected mutation-guard fingerprint is required." };
     }
 
-    fs.mkdirSync(directory, { recursive: true });
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     let recoveryFd;
     const recoveryFile = mutationRecoveryPath(id);
     try {
