@@ -1,6 +1,3 @@
-// AarHen checkpoint persistence adapter (JSON file store).
-// checkpointEngine integrates this adapter when AARHEN_CHECKPOINT_STORE_DIR
-// is explicitly configured; otherwise checkpoint state remains in-memory.
 "use strict";
 
 const fs = require("node:fs");
@@ -22,34 +19,47 @@ function createCheckpointStore(options = {}) {
     return path.join(directory, validateId(id) + ".json");
   }
 
-  function ensureDirectory() {
-    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-    // mkdir's mode only applies when the directory is new. Enforce privacy
-    // for existing directories created by older versions as well.
-    if (process.platform !== "win32") fs.chmodSync(directory, 0o700);
-  }
-
-  function secureDirectoryIfPresent() {
-    let stat;
+  function secureDirectoryIfPresent(allowMissing = false) {
+    let linkStat;
     try {
-      stat = fs.lstatSync(directory);
+      linkStat = fs.lstatSync(directory);
     } catch (error) {
-      if (error && error.code === "ENOENT") return false;
+      if (allowMissing && error && error.code === "ENOENT") return false;
       throw error;
     }
-    if (!stat.isDirectory()) {
-      throw new Error("Checkpoint storage path must be a real directory.");
+    if (linkStat.isSymbolicLink() || !linkStat.isDirectory()) {
+      throw new Error("Checkpoint storage path must be a real directory, not a symbolic link.");
     }
-    if (process.platform !== "win32") fs.chmodSync(directory, 0o700);
+
+    if (process.platform !== "win32") {
+      let fd;
+      try {
+        const flags = fs.constants.O_RDONLY |
+          (fs.constants.O_DIRECTORY || 0) |
+          (fs.constants.O_NOFOLLOW || 0);
+        fd = fs.openSync(directory, flags);
+        if (!fs.fstatSync(fd).isDirectory()) {
+          throw new Error("Checkpoint storage path must be a real directory.");
+        }
+        // Secure the opened directory itself, avoiding chmod-by-path races.
+        fs.fchmodSync(fd, 0o700);
+      } catch (error) {
+        if (error && error.code === "ELOOP") {
+          throw new Error("Checkpoint storage path must not be a symbolic link.");
+        }
+        throw error;
+      } finally {
+        if (fd !== undefined) {
+          try { fs.closeSync(fd); } catch {}
+        }
+      }
+    }
     return true;
   }
 
-  function secureExistingFile(target) {
-    const stat = fs.lstatSync(target);
-    if (!stat.isFile()) {
-      throw new Error("Checkpoint storage entry must be a regular file.");
-    }
-    if (process.platform !== "win32") fs.chmodSync(target, 0o600);
+  function ensureDirectory() {
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    secureDirectoryIfPresent();
   }
 
   function save(checkpoint) {
@@ -72,22 +82,53 @@ function createCheckpointStore(options = {}) {
 
   function get(id) {
     const target = filePath(id);
-    if (!secureDirectoryIfPresent()) return null;
+    if (!secureDirectoryIfPresent(true)) return null;
+
+    // Check before opening for platforms without O_NOFOLLOW. On POSIX, O_NOFOLLOW
+    // also closes the symlink-swap race between this check and open().
     try {
-      secureExistingFile(target);
+      const linkStat = fs.lstatSync(target);
+      if (linkStat.isSymbolicLink()) {
+        throw new Error("Checkpoint file must not be a symbolic link.");
+      }
+      if (!linkStat.isFile()) {
+        throw new Error("Checkpoint path must refer to a regular file.");
+      }
     } catch (error) {
       if (error && error.code === "ENOENT") return null;
       throw error;
     }
-    const parsed = JSON.parse(fs.readFileSync(target, "utf8"));
-    if (!parsed || parsed.id !== id || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("Checkpoint file failed integrity validation.");
+
+    let fd;
+    try {
+      const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0);
+      fd = fs.openSync(target, flags);
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile()) {
+        throw new Error("Checkpoint path must refer to a regular file.");
+      }
+      // Tighten legacy checkpoint files created before private file modes were
+      // enforced. fchmod operates on the opened file descriptor, not a new path.
+      if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
+      const parsed = JSON.parse(fs.readFileSync(fd, "utf8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.id !== id) {
+        throw new Error("Checkpoint file failed integrity validation.");
+      }
+      return parsed;
+    } catch (error) {
+      if (error && error.code === "ELOOP") {
+        throw new Error("Checkpoint file must not be a symbolic link.");
+      }
+      throw error;
+    } finally {
+      if (fd !== undefined) {
+        try { fs.closeSync(fd); } catch {}
+      }
     }
-    return parsed;
   }
 
   function list() {
-    if (!secureDirectoryIfPresent()) return [];
+    if (!secureDirectoryIfPresent(true)) return [];
     return fs.readdirSync(directory)
       .filter(name => name.endsWith(".json"))
       .sort()
@@ -97,13 +138,16 @@ function createCheckpointStore(options = {}) {
 
   function remove(id) {
     const target = filePath(id);
-    if (!secureDirectoryIfPresent()) return { success: true, deleted: false, id };
-    try {
-      const stat = fs.lstatSync(target);
-      if (!stat.isFile()) throw new Error("Checkpoint storage entry must be a regular file.");
-    } catch (error) {
-      if (error && error.code === "ENOENT") return { success: true, deleted: false, id };
-      throw error;
+    if (!secureDirectoryIfPresent(true)) return { success: true, deleted: false, id };
+    const stat = (() => {
+      try { return fs.lstatSync(target); } catch (error) {
+        if (error && error.code === "ENOENT") return null;
+        throw error;
+      }
+    })();
+    if (!stat) return { success: true, deleted: false, id };
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new Error("Checkpoint path must refer to a regular file, not a symbolic link.");
     }
     fs.unlinkSync(target);
     return { success: true, deleted: true, id };

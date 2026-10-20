@@ -49,6 +49,20 @@ test("new checkpoint directories and files use private permissions on POSIX", { 
   assert.equal(fileMode, 0o600);
 });
 
+test("checkpoint store refuses symlinked checkpoint files", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-symlink-"));
+  const directory = path.join(root, "checkpoints");
+  const outside = path.join(root, "outside.json");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(directory, { mode: 0o700 });
+  fs.writeFileSync(outside, JSON.stringify({ id: "linked-task", taskId: "outside" }), { mode: 0o600 });
+  fs.symlinkSync(outside, path.join(directory, "linked-task.json"));
+
+  const store = createCheckpointStore({ directory });
+  assert.throws(() => store.get("linked-task"), /symbolic link/i);
+  assert.throws(() => store.list(), /symbolic link/i);
+  assert.throws(() => store.remove("linked-task"), /symbolic link/i);
+});
 
 test("existing checkpoint directories and files are hardened on read", { skip: process.platform === "win32" }, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-legacy-mode-"));
@@ -67,15 +81,15 @@ test("existing checkpoint directories and files are hardened on read", { skip: p
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
 });
 
-test("checkpoint store refuses symbolic links instead of reading outside files", t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-symlink-"));
-  const directory = path.join(root, "checkpoints");
-  const outside = path.join(root, "outside.json");
+test("checkpoint storage directory symlinks are refused", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-dir-symlink-"));
+  const actual = path.join(root, "actual");
+  const linked = path.join(root, "linked");
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.mkdirSync(directory);
-  fs.writeFileSync(outside, JSON.stringify({ id: "linked-task", taskId: "outside" }));
-  fs.symlinkSync(outside, path.join(directory, "linked-task.json"));
+  fs.mkdirSync(actual, { mode: 0o700 });
+  fs.symlinkSync(actual, linked, "dir");
 
-  const store = createCheckpointStore({ directory });
-  assert.throws(() => store.get("linked-task"), /regular file/i);
+  const store = createCheckpointStore({ directory: linked });
+  assert.throws(() => store.save({ id: "blocked", taskId: "blocked" }), /symbolic link/i);
+  assert.throws(() => store.get("blocked"), /symbolic link/i);
 });
