@@ -19,27 +19,47 @@ function createCheckpointStore(options = {}) {
     return path.join(directory, validateId(id) + ".json");
   }
 
-  function assertDirectorySecure(allowMissing = false) {
-    let stat;
+  function secureDirectoryIfPresent(allowMissing = false) {
+    let linkStat;
     try {
-      stat = fs.lstatSync(directory);
+      linkStat = fs.lstatSync(directory);
     } catch (error) {
       if (allowMissing && error && error.code === "ENOENT") return false;
       throw error;
     }
-
-    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    if (linkStat.isSymbolicLink() || !linkStat.isDirectory()) {
       throw new Error("Checkpoint storage path must be a real directory, not a symbolic link.");
     }
-    if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
-      throw new Error("Checkpoint storage directory permissions must be private (0700).");
+
+    if (process.platform !== "win32") {
+      let fd;
+      try {
+        const flags = fs.constants.O_RDONLY |
+          (fs.constants.O_DIRECTORY || 0) |
+          (fs.constants.O_NOFOLLOW || 0);
+        fd = fs.openSync(directory, flags);
+        if (!fs.fstatSync(fd).isDirectory()) {
+          throw new Error("Checkpoint storage path must be a real directory.");
+        }
+        // Secure the opened directory itself, avoiding chmod-by-path races.
+        fs.fchmodSync(fd, 0o700);
+      } catch (error) {
+        if (error && error.code === "ELOOP") {
+          throw new Error("Checkpoint storage path must not be a symbolic link.");
+        }
+        throw error;
+      } finally {
+        if (fd !== undefined) {
+          try { fs.closeSync(fd); } catch {}
+        }
+      }
     }
     return true;
   }
 
   function ensureDirectory() {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-    assertDirectorySecure();
+    secureDirectoryIfPresent();
   }
 
   function save(checkpoint) {
@@ -62,7 +82,7 @@ function createCheckpointStore(options = {}) {
 
   function get(id) {
     const target = filePath(id);
-    if (!assertDirectorySecure(true)) return null;
+    if (!secureDirectoryIfPresent(true)) return null;
 
     // Check before opening for platforms without O_NOFOLLOW. On POSIX, O_NOFOLLOW
     // also closes the symlink-swap race between this check and open().
@@ -108,7 +128,7 @@ function createCheckpointStore(options = {}) {
   }
 
   function list() {
-    if (!assertDirectorySecure(true)) return [];
+    if (!secureDirectoryIfPresent(true)) return [];
     return fs.readdirSync(directory)
       .filter(name => name.endsWith(".json"))
       .sort()
@@ -118,9 +138,7 @@ function createCheckpointStore(options = {}) {
 
   function remove(id) {
     const target = filePath(id);
-    if (!assertDirectorySecure(true)) return { success: true, deleted: false, id };
-    // Refuse to operate on a symbolic link, even though unlink would remove the
-    // link itself, so the store consistently treats unexpected links as unsafe.
+    if (!secureDirectoryIfPresent(true)) return { success: true, deleted: false, id };
     const stat = (() => {
       try { return fs.lstatSync(target); } catch (error) {
         if (error && error.code === "ENOENT") return null;
