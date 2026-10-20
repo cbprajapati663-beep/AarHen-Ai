@@ -64,17 +64,32 @@ test("checkpoint store refuses symlinked checkpoint files", { skip: process.plat
   assert.throws(() => store.remove("linked-task"), /symbolic link/i);
 });
 
-test("checkpoint store refuses an existing directory with broad permissions on POSIX", { skip: process.platform === "win32" }, t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-dir-mode-"));
-  const directory = path.join(root, "checkpoints");
+test("existing checkpoint directories and files are hardened on read", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-legacy-mode-"));
+  const directory = path.join(root, "legacy-checkpoints");
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.mkdirSync(directory, { mode: 0o700 });
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const file = path.join(directory, "legacy-task.json");
+  const checkpoint = { id: "legacy-task", taskId: "legacy-task", steps: [], status: "paused" };
+  fs.writeFileSync(file, JSON.stringify(checkpoint), { mode: 0o644 });
   fs.chmodSync(directory, 0o755);
+  fs.chmodSync(file, 0o644);
 
   const store = createCheckpointStore({ directory });
-  assert.throws(
-    () => store.save({ id: "should-not-save", taskId: "private" }),
-    /permissions must be private/i
-  );
-  assert.equal(fs.existsSync(path.join(directory, "should-not-save.json")), false);
+  assert.deepEqual(store.get("legacy-task"), checkpoint);
+  assert.equal(fs.statSync(directory).mode & 0o777, 0o700);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+});
+
+test("checkpoint storage directory symlinks are refused", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-dir-symlink-"));
+  const actual = path.join(root, "actual");
+  const linked = path.join(root, "linked");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(actual, { mode: 0o700 });
+  fs.symlinkSync(actual, linked, "dir");
+
+  const store = createCheckpointStore({ directory: linked });
+  assert.throws(() => store.save({ id: "blocked", taskId: "blocked" }), /symbolic link/i);
+  assert.throws(() => store.get("blocked"), /symbolic link/i);
 });
