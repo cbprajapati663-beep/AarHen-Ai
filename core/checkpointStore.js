@@ -1,6 +1,6 @@
 // AarHen checkpoint persistence adapter (JSON file store).
-// This adapter is intentionally standalone; checkpointEngine remains in-memory
-// until a coordinator explicitly integrates this storage contract.
+// checkpointEngine integrates this adapter when AARHEN_CHECKPOINT_STORE_DIR
+// is explicitly configured; otherwise checkpoint state remains in-memory.
 "use strict";
 
 const fs = require("node:fs");
