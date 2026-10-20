@@ -105,6 +105,18 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.match(body.error, /input is required/i);
     });
 
+    await t.test("oversized JSON request is rejected with 413 without parsing the body", async () => {
+        const oversized = "x".repeat(20 * 1024 * 1024 + 1);
+        const response = await fetch(baseUrl + "/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Aarhen-API-Key": API_KEY },
+            body: oversized
+        });
+        const body = await response.json();
+        assert.equal(response.status, 413);
+        assert.match(body.error, /20 MiB limit/i);
+    });
+
     await t.test("malformed JSON returns 400 instead of 500", async () => {
         const response = await fetch(baseUrl + "/ask", {
             method: "POST",
