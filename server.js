@@ -46,15 +46,36 @@ function sendText(res, statusCode, text) {
    BODY PARSER
    ========================================================= */
 
-function readBody(req) {
+// Base64 media payloads need room for their JSON encoding. The hard cap
+// prevents unbounded memory growth while retaining support for 10 MiB audio.
+const MAX_REQUEST_BODY_BYTES = 20 * 1024 * 1024;
+
+function readBody(req, maxBytes = MAX_REQUEST_BODY_BYTES) {
     return new Promise((resolve, reject) => {
-        let body = "";
+        const chunks = [];
+        let receivedBytes = 0;
+        let settled = false;
 
         req.on("data", chunk => {
-            body += chunk.toString();
+            if (settled) return;
+            receivedBytes += chunk.length;
+            if (receivedBytes > maxBytes) {
+                settled = true;
+                const limitError = new Error("Request body exceeds the 20 MiB limit");
+                limitError.statusCode = 413;
+                reject(limitError);
+                // Drain the rest without buffering it so the socket can close
+                // cleanly and no additional request data is retained in memory.
+                req.resume();
+                return;
+            }
+            chunks.push(chunk);
         });
 
         req.on("end", () => {
+            if (settled) return;
+            settled = true;
+            const body = Buffer.concat(chunks).toString("utf8");
             if (!body) {
                 resolve({});
                 return;
@@ -69,7 +90,11 @@ function readBody(req) {
             }
         });
 
-        req.on("error", reject);
+        req.on("error", error => {
+            if (settled) return;
+            settled = true;
+            reject(error);
+        });
     });
 }
 
