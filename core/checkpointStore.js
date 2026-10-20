@@ -24,6 +24,32 @@ function createCheckpointStore(options = {}) {
 
   function ensureDirectory() {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    // mkdir's mode only applies when the directory is new. Enforce privacy
+    // for existing directories created by older versions as well.
+    if (process.platform !== "win32") fs.chmodSync(directory, 0o700);
+  }
+
+  function secureDirectoryIfPresent() {
+    let stat;
+    try {
+      stat = fs.lstatSync(directory);
+    } catch (error) {
+      if (error && error.code === "ENOENT") return false;
+      throw error;
+    }
+    if (!stat.isDirectory()) {
+      throw new Error("Checkpoint storage path must be a real directory.");
+    }
+    if (process.platform !== "win32") fs.chmodSync(directory, 0o700);
+    return true;
+  }
+
+  function secureExistingFile(target) {
+    const stat = fs.lstatSync(target);
+    if (!stat.isFile()) {
+      throw new Error("Checkpoint storage entry must be a regular file.");
+    }
+    if (process.platform !== "win32") fs.chmodSync(target, 0o600);
   }
 
   function save(checkpoint) {
@@ -46,7 +72,13 @@ function createCheckpointStore(options = {}) {
 
   function get(id) {
     const target = filePath(id);
-    if (!fs.existsSync(target)) return null;
+    if (!secureDirectoryIfPresent()) return null;
+    try {
+      secureExistingFile(target);
+    } catch (error) {
+      if (error && error.code === "ENOENT") return null;
+      throw error;
+    }
     const parsed = JSON.parse(fs.readFileSync(target, "utf8"));
     if (!parsed || parsed.id !== id || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("Checkpoint file failed integrity validation.");
@@ -55,7 +87,7 @@ function createCheckpointStore(options = {}) {
   }
 
   function list() {
-    if (!fs.existsSync(directory)) return [];
+    if (!secureDirectoryIfPresent()) return [];
     return fs.readdirSync(directory)
       .filter(name => name.endsWith(".json"))
       .sort()
@@ -65,7 +97,14 @@ function createCheckpointStore(options = {}) {
 
   function remove(id) {
     const target = filePath(id);
-    if (!fs.existsSync(target)) return { success: true, deleted: false, id };
+    if (!secureDirectoryIfPresent()) return { success: true, deleted: false, id };
+    try {
+      const stat = fs.lstatSync(target);
+      if (!stat.isFile()) throw new Error("Checkpoint storage entry must be a regular file.");
+    } catch (error) {
+      if (error && error.code === "ENOENT") return { success: true, deleted: false, id };
+      throw error;
+    }
     fs.unlinkSync(target);
     return { success: true, deleted: true, id };
   }

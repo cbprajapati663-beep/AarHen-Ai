@@ -48,3 +48,34 @@ test("new checkpoint directories and files use private permissions on POSIX", { 
   assert.equal(directoryMode, 0o700);
   assert.equal(fileMode, 0o600);
 });
+
+
+test("existing checkpoint directories and files are hardened on read", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-legacy-mode-"));
+  const directory = path.join(root, "legacy-checkpoints");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(directory, { mode: 0o755 });
+  const file = path.join(directory, "legacy-task.json");
+  const checkpoint = { id: "legacy-task", taskId: "legacy-task", steps: [], status: "paused" };
+  fs.writeFileSync(file, JSON.stringify(checkpoint), { mode: 0o644 });
+  fs.chmodSync(directory, 0o755);
+  fs.chmodSync(file, 0o644);
+
+  const store = createCheckpointStore({ directory });
+  assert.deepEqual(store.get("legacy-task"), checkpoint);
+  assert.equal(fs.statSync(directory).mode & 0o777, 0o700);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+});
+
+test("checkpoint store refuses symbolic links instead of reading outside files", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-checkpoint-symlink-"));
+  const directory = path.join(root, "checkpoints");
+  const outside = path.join(root, "outside.json");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(directory);
+  fs.writeFileSync(outside, JSON.stringify({ id: "linked-task", taskId: "outside" }));
+  fs.symlinkSync(outside, path.join(directory, "linked-task.json"));
+
+  const store = createCheckpointStore({ directory });
+  assert.throws(() => store.get("linked-task"), /regular file/i);
+});
