@@ -28,7 +28,7 @@
 // - Does NOT bypass Agent Runner.
 // - Does NOT bypass Autonomous Guard.
 // - Does NOT mutate task execution state.
-// - Checkpoint storage remains in-memory in this version.
+// - Checkpoint storage is in-memory by default; the Checkpoint Engine can use opt-in disk persistence via AARHEN_CHECKPOINT_STORE_DIR.
 // ============================================================
 
 
