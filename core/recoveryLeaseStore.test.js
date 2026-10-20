@@ -254,3 +254,21 @@ test("stale mutation guard cleanup refuses a live PID and unknown legacy guards"
   assert.match(unknown.error, /owner metadata is unknown/i);
   assert.equal(fs.existsSync(guardPath), true);
 });
+
+
+test("new recovery lease directories and persisted lease files use private permissions on POSIX", { skip: process.platform === "win32" }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aarhen-recovery-lease-mode-"));
+  const directory = path.join(root, "private-leases");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const store = createRecoveryLeaseStore({ directory });
+
+  const claim = store.claim("task-private-storage");
+  assert.equal(claim.success, true);
+
+  const directoryMode = fs.statSync(directory).mode & 0o777;
+  const leaseMode = fs.statSync(path.join(directory, "task-private-storage.json")).mode & 0o777;
+  assert.equal(directoryMode, 0o700);
+  assert.equal(leaseMode, 0o600);
+
+  assert.equal(store.release("task-private-storage", claim.token).released, true);
+});
