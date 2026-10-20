@@ -17,6 +17,7 @@ on:
     paths:
       - "package.json"
       - "test.js"
+      - "server.js"
       - "core/**"
       - "engines/**"
       - "providers/**"
