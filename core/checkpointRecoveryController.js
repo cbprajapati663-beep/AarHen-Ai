@@ -41,6 +41,9 @@ const checkpointBridge =
 const agentManager =
     require("./agentManager");
 
+const autonomousGuard =
+    require("./autonomousGuard");
+
 const { createRecoveryLeaseStore } =
     require("./recoveryLeaseStore");
 
@@ -2415,6 +2418,16 @@ async function resumeResolvedProviderFailure(taskId, options = {}) {
             executionStarted: false,
             requiresConfirmation: true,
             error: "Explicit execution confirmation is required to resume provider recovery."
+        };
+    }
+
+    // Emergency STOP must block recovery before acquiring a lease or changing task state.
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            executionStarted: false,
+            stopped: true,
+            error: "Emergency STOP is active; provider recovery execution is blocked."
         };
     }
 
