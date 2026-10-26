@@ -526,6 +526,18 @@ async function executeAssignedTask(
     }
 
 
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; task execution is blocked.",
+            checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+        };
+    }
+
+
     const taskResult =
         getTask(
             cleanTaskId
@@ -939,6 +951,18 @@ async function executeRequest(
 
         };
 
+    }
+
+
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; new autonomous requests are blocked.",
+            checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+        };
     }
 
 
@@ -1430,6 +1454,18 @@ async function approveAndExecute(
 
         };
 
+    }
+
+
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; approval execution is blocked.",
+            checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+        };
     }
 
 
