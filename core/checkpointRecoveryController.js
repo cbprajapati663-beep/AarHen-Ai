@@ -1463,6 +1463,31 @@ async function approveAndExecute(
         taskResult.task;
 
 
+    // Approval is a state transition, not a generic way to restart a task.
+    // Fail closed unless the task is explicitly waiting on an approval gate.
+    const hasUnresolvedApproval =
+        task.approvalRequired === true ||
+        task.steps.some(
+            step =>
+                step.requiresApproval &&
+                step.approved !== true
+        );
+
+    if (
+        task.status !== agentManager.TASK_STATES.WAITING_APPROVAL ||
+        !hasUnresolvedApproval
+    ) {
+        return {
+            success: false,
+            stage: "approval",
+            executionStarted: false,
+            requiresApproval: false,
+            error: "Task is not waiting for an unresolved approval gate.",
+            task
+        };
+    }
+
+
     // --------------------------------------------------------
     // CHECKPOINT BEFORE APPROVAL EXECUTION
     // --------------------------------------------------------
