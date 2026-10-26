@@ -189,6 +189,62 @@ function normalizeType(type) {
 // Bound provider calls so a hung integration cannot block fallback routing forever.
 // A timed-out provider may still finish in the background if it ignores cancellation.
 const DEFAULT_SEARCH_TIMEOUT_MS = 15000;
+const DEFAULT_FAILURE_THRESHOLD = 3;
+const DEFAULT_CIRCUIT_COOLDOWN_MS = 30000;
+const MAX_CIRCUIT_COOLDOWN_MS = 300000;
+const providerFailureState = new Map();
+
+function getCircuitConfig(type) {
+    const config = getProviderConfig(type) || {};
+    const threshold = Number(config.failureThreshold);
+    const cooldown = Number(config.circuitCooldownMs);
+    return {
+        failureThreshold: Number.isFinite(threshold) && threshold >= 1
+            ? Math.min(Math.floor(threshold), 20)
+            : DEFAULT_FAILURE_THRESHOLD,
+        cooldownMs: Number.isFinite(cooldown) && cooldown > 0
+            ? Math.min(Math.floor(cooldown), MAX_CIRCUIT_COOLDOWN_MS)
+            : DEFAULT_CIRCUIT_COOLDOWN_MS
+    };
+}
+
+function getCircuitState(type) {
+    const key = normalizeType(type);
+    const state = providerFailureState.get(key) || { failures: 0, openUntil: 0 };
+    if (state.openUntil && Date.now() >= state.openUntil) {
+        state.failures = 0;
+        state.openUntil = 0;
+        providerFailureState.set(key, state);
+    }
+    return {
+        provider: key,
+        failures: state.failures,
+        open: state.openUntil > Date.now(),
+        openUntil: state.openUntil || null,
+        status: state.openUntil > Date.now() ? "open" : "closed"
+    };
+}
+
+function isCircuitOpen(type) {
+    return getCircuitState(type).open;
+}
+
+function recordProviderFailure(type) {
+    const key = normalizeType(type);
+    const config = getCircuitConfig(key);
+    const state = providerFailureState.get(key) || { failures: 0, openUntil: 0 };
+    state.failures += 1;
+    if (state.failures >= config.failureThreshold) {
+        state.openUntil = Date.now() + config.cooldownMs;
+    }
+    providerFailureState.set(key, state);
+    return getCircuitState(key);
+}
+
+function recordProviderSuccess(type) {
+    providerFailureState.set(normalizeType(type), { failures: 0, openUntil: 0 });
+    return getCircuitState(type);
+}
 
 function getSearchTimeoutMs(type) {
     const configured = Number(getProviderConfig(type)?.searchTimeoutMs);
@@ -505,7 +561,9 @@ function getProviderHealth(
 
                 },
 
-            rawStatus
+            rawStatus,
+
+            circuitBreaker: getCircuitState(normalizedType)
 
         };
 
@@ -853,6 +911,23 @@ async function searchWeb({
             };
         }
 
+        if (isCircuitOpen(requestedProvider)) {
+            const circuit = getCircuitState(requestedProvider);
+            return {
+                success: false,
+                providerConnected: false,
+                providerRequired: true,
+                provider: requestedProvider,
+                results: [],
+                attemptedProviders: [requestedProvider],
+                fallbackUsed: false,
+                circuitOpen: true,
+                circuitOpenUntil: circuit.openUntil,
+                error: `Provider "${requestedProvider}" circuit is open after repeated failures; retry after cooldown.`,
+                providerManagerVersion: PROVIDER_MANAGER_VERSION
+            };
+        }
+
         if (
             !isProviderAvailable(
                 requestedProvider
@@ -902,6 +977,12 @@ async function searchWeb({
                 });
 
 
+            if (result && result.success === true) {
+                recordProviderSuccess(requestedProvider);
+            } else {
+                recordProviderFailure(requestedProvider);
+            }
+
             return {
 
                 ...safeObject(
@@ -933,6 +1014,7 @@ async function searchWeb({
 
         } catch (error) {
 
+            recordProviderFailure(requestedProvider);
             return {
 
                 success:
@@ -1034,6 +1116,10 @@ async function searchWeb({
         const type =
             providerInfo.provider;
 
+        if (isCircuitOpen(type)) {
+            lastError = `Provider "${type}" circuit is open after repeated failures.`;
+            continue;
+        }
 
         const providerInstance =
             getProvider(
@@ -1079,6 +1165,7 @@ async function searchWeb({
                 result.success ===
                     true
             ) {
+                recordProviderSuccess(type);
 
                 return {
 
@@ -1108,12 +1195,14 @@ async function searchWeb({
             }
 
 
+            recordProviderFailure(type);
             lastError =
                 result?.error ||
                 `Provider "${type}" returned an unsuccessful result.`;
 
         } catch (error) {
 
+            recordProviderFailure(type);
             lastError =
                 error.message ||
                 `Provider "${type}" search failed.`;
@@ -1278,6 +1367,14 @@ function registerProvider(
     const searchTimeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
         ? Math.max(1, Math.min(requestedTimeout, 120000))
         : DEFAULT_SEARCH_TIMEOUT_MS;
+    const requestedThreshold = Number(config.failureThreshold);
+    const failureThreshold = Number.isFinite(requestedThreshold) && requestedThreshold >= 1
+        ? Math.min(Math.floor(requestedThreshold), 20)
+        : DEFAULT_FAILURE_THRESHOLD;
+    const requestedCooldown = Number(config.circuitCooldownMs);
+    const circuitCooldownMs = Number.isFinite(requestedCooldown) && requestedCooldown > 0
+        ? Math.min(Math.floor(requestedCooldown), MAX_CIRCUIT_COOLDOWN_MS)
+        : DEFAULT_CIRCUIT_COOLDOWN_MS;
 
 
     providers[
@@ -1296,9 +1393,15 @@ function registerProvider(
 
         providerType,
 
-        searchTimeoutMs
+        searchTimeoutMs,
+
+        failureThreshold,
+
+        circuitCooldownMs
 
     };
+
+    providerFailureState.delete(normalizedType);
 
 
     return {
@@ -1517,6 +1620,7 @@ function unregisterProvider(
     delete providerConfig[
         normalizedType
     ];
+    providerFailureState.delete(normalizedType);
 
 
     return {
@@ -1604,6 +1708,8 @@ function getStatus() {
 //
 
 function reset() {
+
+    providerFailureState.clear();
 
     for (
         const type of
