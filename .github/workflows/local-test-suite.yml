@@ -11,6 +11,7 @@ on:
       - "engines/**"
       - "providers/**"
       - "skills/**"
+      - "tests/**"
       - ".github/workflows/local-test-suite.yml"
   push:
     branches: [main]
