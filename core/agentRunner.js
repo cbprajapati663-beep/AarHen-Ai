@@ -1774,11 +1774,50 @@ async function resumeTask(
         };
     }
 
-    const resumed = agentManager.resumeTask(key);
-    if (!resumed.success) {
+    const current = agentManager.getTask(key);
+    if (!current.success) {
         return {
-            ...resumed,
-            runnerVersion: AGENT_RUNNER_VERSION
+            success: false,
+            runnerVersion: AGENT_RUNNER_VERSION,
+            error: current.error || "Task not found."
+        };
+    }
+
+    // A task can be resumed from PAUSED, or restarted from READY after
+    // its outstanding approval has been granted. Never restart a task
+    // that is still waiting for approval.
+    let resumed;
+    if (current.task.status === agentManager.TASK_STATES.PAUSED) {
+        resumed = agentManager.resumeTask(key);
+        if (!resumed.success) {
+            return {
+                ...resumed,
+                runnerVersion: AGENT_RUNNER_VERSION
+            };
+        }
+    } else if (current.task.status === agentManager.TASK_STATES.READY) {
+        resumed = {
+            success: true,
+            task: current.task
+        };
+    } else if (
+        current.task.status === agentManager.TASK_STATES.RUNNING &&
+        activeRuns.has(key)
+    ) {
+        resumed = {
+            success: true,
+            task: current.task
+        };
+    } else {
+        return {
+            success: false,
+            runnerVersion: AGENT_RUNNER_VERSION,
+            requiresApproval:
+                current.task.status === agentManager.TASK_STATES.WAITING_APPROVAL,
+            error: current.task.status === agentManager.TASK_STATES.WAITING_APPROVAL
+                ? "Task is waiting for approval."
+                : "Task is not paused or ready to resume.",
+            task: current.task
         };
     }
 
