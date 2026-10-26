@@ -1,0 +1,37 @@
+name: AarHen Provider Circuit Recovery Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "providers/providerManager.js"
+      - "providers/providerManagerTimeout.test.js"
+      - "tests/provider-manager-routing.test.js"
+      - ".github/workflows/provider-circuit-recovery-test.yml"
+  push:
+    paths:
+      - "providers/providerManager.js"
+      - "providers/providerManagerTimeout.test.js"
+      - "tests/provider-manager-routing.test.js"
+      - ".github/workflows/provider-circuit-recovery-test.yml"
+
+jobs:
+  provider-circuit-recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check provider manager syntax
+        run: node --check providers/providerManager.js
+
+      - name: Run provider timeout and circuit recovery tests
+        run: node --test providers/providerManagerTimeout.test.js
+
+      - name: Run provider routing regression tests
+        run: node --test tests/provider-manager-routing.test.js
