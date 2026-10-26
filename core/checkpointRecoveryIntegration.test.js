@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const agentManager = require("./agentManager");
 const checkpointBridge = require("./checkpointBridge");
 const checkpointRecovery = require("./checkpointRecoveryController");
+const autonomousGuard = require("./autonomousGuard");
 
 function createTask() {
   const agent = agentManager.createAgent({ id: "checkpoint-integration-agent" });
@@ -30,6 +31,7 @@ function createTask() {
 
 test.beforeEach(() => {
   agentManager.reset();
+  autonomousGuard.reset();
   const reset = checkpointBridge.reset();
   assert.equal(reset.success, true);
 });
@@ -121,4 +123,65 @@ test("approveAndExecute only executes a protected task through its explicit appr
   assert.equal(result.success, true);
   assert.equal(result.task.status, agentManager.TASK_STATES.COMPLETED);
   assert.equal(result.task.steps[0].approved, true);
+});
+
+
+test("global STOP blocks new autonomous requests before task creation or checkpoint writes", async () => {
+  assert.equal(autonomousGuard.activateStop("controller STOP test").success, true);
+
+  const result = await checkpointRecovery.executeRequest("Calculate 1 + 1");
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
+});
+
+test("global STOP blocks assigned task execution before checkpoint writes", async () => {
+  const taskId = createTask();
+  assert.equal(autonomousGuard.activateStop("controller STOP test").success, true);
+
+  const result = await checkpointRecovery.executeAssignedTask("stop-test-worker", taskId);
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
+  assert.equal(agentManager.getTask(taskId).task.status, agentManager.TASK_STATES.CREATED);
+});
+
+test("global STOP blocks explicit approval execution without approving the protected step", async () => {
+  const agent = agentManager.createAgent({ id: "controller-stop-approval-agent" });
+  assert.equal(agent.success, true);
+  const created = agentManager.createTask(agent.agent.id, "Wait for explicit approval", {
+    id: "controller-stop-approval-task"
+  });
+  assert.equal(created.success, true);
+  const step = agentManager.addStep(created.task.id, {
+    id: "controller-stop-approval-step",
+    name: "Protected message",
+    action: "send_message",
+    requiresApproval: true,
+    approved: false,
+    input: { request: "Do not send without approval" }
+  });
+  assert.equal(step.success, true);
+  const waiting = agentManager.startTask(created.task.id);
+  assert.equal(waiting.success, false);
+  assert.equal(waiting.requiresApproval, true);
+  assert.equal(agentManager.getTask(created.task.id).task.status, agentManager.TASK_STATES.WAITING_APPROVAL);
+
+  assert.equal(autonomousGuard.activateStop("controller STOP test").success, true);
+  const result = await checkpointRecovery.approveAndExecute(created.task.id);
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  const finalTask = agentManager.getTask(created.task.id).task;
+  assert.equal(finalTask.status, agentManager.TASK_STATES.WAITING_APPROVAL);
+  assert.equal(finalTask.steps[0].approved, false);
+  assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
 });
