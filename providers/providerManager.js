@@ -921,24 +921,6 @@ async function searchWeb({
             };
         }
 
-        const circuitPermit = acquireCircuitPermit(requestedProvider);
-        if (!circuitPermit.allowed) {
-            const circuit = getCircuitState(requestedProvider);
-            return {
-                success: false,
-                providerConnected: false,
-                providerRequired: true,
-                provider: requestedProvider,
-                results: [],
-                attemptedProviders: [requestedProvider],
-                fallbackUsed: false,
-                circuitOpen: true,
-                circuitOpenUntil: circuit.openUntil,
-                error: `Provider "${requestedProvider}" circuit is open after repeated failures; retry after cooldown.`,
-                providerManagerVersion: PROVIDER_MANAGER_VERSION
-            };
-        }
-
         if (
             !isProviderAvailable(
                 requestedProvider
@@ -972,6 +954,24 @@ async function searchWeb({
 
             };
 
+        }
+
+        const circuitPermit = acquireCircuitPermit(requestedProvider);
+        if (!circuitPermit.allowed) {
+            const circuit = getCircuitState(requestedProvider);
+            return {
+                success: false,
+                providerConnected: false,
+                providerRequired: true,
+                provider: requestedProvider,
+                results: [],
+                attemptedProviders: [requestedProvider],
+                fallbackUsed: false,
+                circuitOpen: true,
+                circuitOpenUntil: circuit.openUntil,
+                error: `Provider "${requestedProvider}" circuit is open after repeated failures; retry after cooldown.`,
+                providerManagerVersion: PROVIDER_MANAGER_VERSION
+            };
         }
 
         try {
