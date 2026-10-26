@@ -311,10 +311,13 @@ test("global STOP blocks direct autonomous agent execution before runner invocat
 });
 
 test("global STOP blocks autonomous agent approve-and-execute before approval mutation", async () => {
-  const created = autonomousAgent.createTask("A protected task waiting for approval");
+  const agent = agentManager.createAgent({ id: "agent-stop-approval-agent" });
+  assert.equal(agent.success, true);
+  const created = agentManager.createTask(agent.agent.id, "Protected task waiting for approval", {
+    id: "agent-stop-approval-task"
+  });
   assert.equal(created.success, true);
-  const taskId = created.task.id;
-  const step = agentManager.addStep(taskId, {
+  const step = agentManager.addStep(created.task.id, {
     id: "agent-stop-approval-step",
     name: "Protected message",
     action: "send_message",
@@ -323,19 +326,19 @@ test("global STOP blocks autonomous agent approve-and-execute before approval mu
     input: { request: "Do not send without approval" }
   });
   assert.equal(step.success, true);
-  const started = agentManager.startTask(taskId);
+  const started = agentManager.startTask(created.task.id);
   assert.equal(started.success, false);
   assert.equal(started.requiresApproval, true);
-  assert.equal(agentManager.getTask(taskId).task.status, agentManager.TASK_STATES.WAITING_APPROVAL);
+  assert.equal(agentManager.getTask(created.task.id).task.status, agentManager.TASK_STATES.WAITING_APPROVAL);
 
   assert.equal(autonomousGuard.activateStop("direct autonomous agent approval STOP test").success, true);
-  const result = await autonomousAgent.approveAndExecute(taskId);
+  const result = await autonomousAgent.approveAndExecute(created.task.id);
 
   assert.equal(result.success, false);
   assert.equal(result.stopped, true);
   assert.equal(result.executionStarted, false);
   assert.equal(result.stage, "emergency-stop");
-  const after = agentManager.getTask(taskId).task;
+  const after = agentManager.getTask(created.task.id).task;
   assert.equal(after.status, agentManager.TASK_STATES.WAITING_APPROVAL);
   assert.equal(after.steps[0].approved, false);
 });
