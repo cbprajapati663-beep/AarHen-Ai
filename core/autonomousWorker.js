@@ -1,3 +1,5 @@
+const autonomousGuard = require("./autonomousGuard");
+
 // ============================================================
 // AARHEN CORE V5
 // AUTONOMOUS WORKER CONTROLLER
@@ -718,6 +720,16 @@ async function executeAssignedTask(
     options = {}
 ) {
 
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; direct worker task execution is blocked."
+        };
+    }
+
     const cleanWorkerId =
         safeString(
             workerId
@@ -905,6 +917,16 @@ async function executeRequest(
     request,
     options = {}
 ) {
+
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; direct autonomous worker requests are blocked."
+        };
+    }
 
     const assignment =
         createAndAssign(
