@@ -150,3 +150,35 @@ test("owner identity cannot be silently overwritten after initial configuration"
   assert.equal(autonomousGuard.authorizeOwner("owner-1").authorized, true);
   assert.equal(autonomousGuard.authorizeOwner("owner-2").authorized, false);
 });
+
+test("configured owner identity is required to activate emergency STOP", () => {
+  autonomousGuard.configureOwner("owner-1");
+
+  const rejected = autonomousGuard.activateStop("Unauthorized STOP", "owner-2");
+
+  assert.equal(rejected.success, false);
+  assert.equal(rejected.authorized, false);
+  assert.equal(rejected.stopped, false);
+  assert.equal(autonomousGuard.isStopped(), false);
+});
+
+test("missing owner identity cannot activate STOP after owner configuration", () => {
+  autonomousGuard.configureOwner("owner-1");
+
+  const rejected = autonomousGuard.activateStop("Missing owner identity");
+
+  assert.equal(rejected.success, false);
+  assert.equal(rejected.authorized, false);
+  assert.equal(rejected.stopped, false);
+  assert.equal(autonomousGuard.isStopped(), false);
+});
+
+test("authorized owner can activate emergency STOP", () => {
+  autonomousGuard.configureOwner("owner-1");
+
+  const activated = autonomousGuard.activateStop("Owner requested STOP", "owner-1");
+
+  assert.equal(activated.success, true);
+  assert.equal(activated.stopped, true);
+  assert.equal(autonomousGuard.isStopped(), true);
+});
