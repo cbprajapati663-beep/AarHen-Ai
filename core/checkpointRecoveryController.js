@@ -574,6 +574,27 @@ async function executeAssignedTask(
         taskResult.task;
 
 
+    // Terminal tasks must never be re-entered through the controller.
+    // Reject before checkpoint writes so retries require an explicit recovery path.
+    const terminalTaskStates = [
+        agentManager.TASK_STATES.COMPLETED,
+        agentManager.TASK_STATES.FAILED,
+        agentManager.TASK_STATES.STOPPED,
+        agentManager.TASK_STATES.CANCELLED
+    ];
+
+    if (terminalTaskStates.includes(task.status)) {
+        return {
+            success: false,
+            stage: "terminal-task-guard",
+            executionStarted: false,
+            task: clone(task),
+            error: "Terminal task state cannot be executed again through the checkpoint controller.",
+            checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+        };
+    }
+
+
     // --------------------------------------------------------
     // APPROVAL STATE
     // --------------------------------------------------------
