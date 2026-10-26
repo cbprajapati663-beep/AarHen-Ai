@@ -30,6 +30,9 @@ const agentPlanner =
 const agentRunner =
     require("./agentRunner");
 
+const autonomousGuard =
+    require("./autonomousGuard");
+
 const autonomousAgentVersion =
     "5.8.3";
 
@@ -544,6 +547,16 @@ async function executeTask(
     options = {}
 ) {
 
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; autonomous agent task execution is blocked."
+        };
+    }
+
     const id =
         safeString(
             taskId
@@ -666,6 +679,16 @@ async function executeRequest(
     request,
     options = {}
 ) {
+
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; autonomous agent requests are blocked."
+        };
+    }
 
     const cleanRequest =
         safeString(
@@ -834,6 +857,16 @@ async function approveAndExecute(
     options = {}
 ) {
 
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; autonomous agent approval execution is blocked."
+        };
+    }
+
     const approval =
         approveTask(
             taskId
@@ -920,6 +953,16 @@ async function resumeTask(
     taskId,
     options = {}
 ) {
+
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            error: "Emergency STOP is active; autonomous agent task resume is blocked."
+        };
+    }
 
     const resumed =
         agentManager.resumeTask(
