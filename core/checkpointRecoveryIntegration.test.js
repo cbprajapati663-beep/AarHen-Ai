@@ -218,6 +218,34 @@ test("global STOP blocks assigned task execution before checkpoint writes", asyn
   assert.equal(agentManager.getTask(taskId).task.status, agentManager.TASK_STATES.CREATED);
 });
 
+
+test("global STOP blocks direct autonomous worker requests before task creation", async () => {
+  const before = autonomousWorker.listTasks();
+  assert.equal(autonomousGuard.activateStop("direct worker request STOP test").success, true);
+
+  const result = await autonomousWorker.executeRequest("Direct worker bypass attempt");
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  assert.deepEqual(autonomousWorker.listTasks(), before);
+});
+
+test("global STOP blocks direct autonomous worker task execution before task mutation", async () => {
+  const taskId = createTask();
+  const before = agentManager.getTask(taskId).task;
+  assert.equal(autonomousGuard.activateStop("direct worker task STOP test").success, true);
+
+  const result = await autonomousWorker.executeAssignedTask("direct-worker-id", taskId);
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  assert.deepEqual(agentManager.getTask(taskId).task, before);
+});
+
 test("global STOP blocks explicit approval execution without approving the protected step", async () => {
   const agent = agentManager.createAgent({ id: "controller-stop-approval-agent" });
   assert.equal(agent.success, true);
