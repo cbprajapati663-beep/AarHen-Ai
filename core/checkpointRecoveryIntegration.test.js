@@ -6,6 +6,7 @@ const checkpointBridge = require("./checkpointBridge");
 const checkpointRecovery = require("./checkpointRecoveryController");
 const autonomousGuard = require("./autonomousGuard");
 const autonomousWorker = require("./autonomousWorker");
+const autonomousAgent = require("./autonomousAgent");
 
 function createTask() {
   const agent = agentManager.createAgent({ id: "checkpoint-integration-agent" });
@@ -278,4 +279,81 @@ test("global STOP blocks explicit approval execution without approving the prote
   assert.equal(finalTask.status, agentManager.TASK_STATES.WAITING_APPROVAL);
   assert.equal(finalTask.steps[0].approved, false);
   assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
+});
+
+
+test("global STOP blocks direct autonomous agent requests before task creation", async () => {
+  const before = autonomousAgent.listTasks();
+  assert.equal(autonomousGuard.activateStop("direct autonomous agent request STOP test").success, true);
+
+  const result = await autonomousAgent.executeRequest("Direct autonomous agent bypass attempt");
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  assert.deepEqual(autonomousAgent.listTasks(), before);
+});
+
+test("global STOP blocks direct autonomous agent execution before runner invocation", async () => {
+  const created = autonomousAgent.createTask("A planned task that must not execute");
+  assert.equal(created.success, true);
+  const before = agentManager.getTask(created.task.id).task;
+  assert.equal(autonomousGuard.activateStop("direct autonomous agent task STOP test").success, true);
+
+  const result = await autonomousAgent.executeTask(created.task.id);
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  assert.deepEqual(agentManager.getTask(created.task.id).task, before);
+});
+
+test("global STOP blocks autonomous agent approve-and-execute before approval mutation", async () => {
+  const created = autonomousAgent.createTask("A protected task waiting for approval");
+  assert.equal(created.success, true);
+  const taskId = created.task.id;
+  const step = agentManager.addStep(taskId, {
+    id: "agent-stop-approval-step",
+    name: "Protected message",
+    action: "send_message",
+    requiresApproval: true,
+    approved: false,
+    input: { request: "Do not send without approval" }
+  });
+  assert.equal(step.success, true);
+  const started = agentManager.startTask(taskId);
+  assert.equal(started.success, false);
+  assert.equal(started.requiresApproval, true);
+  assert.equal(agentManager.getTask(taskId).task.status, agentManager.TASK_STATES.WAITING_APPROVAL);
+
+  assert.equal(autonomousGuard.activateStop("direct autonomous agent approval STOP test").success, true);
+  const result = await autonomousAgent.approveAndExecute(taskId);
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  const after = agentManager.getTask(taskId).task;
+  assert.equal(after.status, agentManager.TASK_STATES.WAITING_APPROVAL);
+  assert.equal(after.steps[0].approved, false);
+});
+
+test("global STOP blocks autonomous agent resume before task state mutation", async () => {
+  const created = autonomousAgent.createTask("A task to keep paused");
+  assert.equal(created.success, true);
+  const taskId = created.task.id;
+  const paused = agentManager.pauseTask(taskId);
+  assert.equal(paused.success, true);
+  const before = agentManager.getTask(taskId).task;
+  assert.equal(autonomousGuard.activateStop("direct autonomous agent resume STOP test").success, true);
+
+  const result = await autonomousAgent.resumeTask(taskId);
+
+  assert.equal(result.success, false);
+  assert.equal(result.stopped, true);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "emergency-stop");
+  assert.deepEqual(agentManager.getTask(taskId).task, before);
 });
