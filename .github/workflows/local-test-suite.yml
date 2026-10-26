@@ -23,6 +23,7 @@ on:
       - "engines/**"
       - "providers/**"
       - "skills/**"
+      - "tests/**"
       - ".github/workflows/local-test-suite.yml"
   workflow_dispatch:
 
