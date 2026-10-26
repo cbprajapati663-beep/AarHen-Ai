@@ -126,6 +126,27 @@ test("approveAndExecute only executes a protected task through its explicit appr
 });
 
 
+test("terminal completed tasks are rejected before checkpoint writes or re-execution", async () => {
+  const taskId = createTask();
+  const completed = await agentManager.runTask(taskId, async () => ({
+    success: true,
+    output: "completed once"
+  }));
+  assert.equal(completed.success, true);
+  assert.equal(completed.task.status, agentManager.TASK_STATES.COMPLETED);
+  assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
+
+  const result = await checkpointRecovery.executeAssignedTask("terminal-test-worker", taskId);
+
+  assert.equal(result.success, false);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "terminal-task-guard");
+  assert.match(result.error, /terminal task state cannot be executed again/i);
+  assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
+  const after = agentManager.getTask(taskId);
+  assert.equal(after.task.status, agentManager.TASK_STATES.COMPLETED);
+});
+
 test("global STOP blocks new autonomous requests before task creation or checkpoint writes", async () => {
   assert.equal(autonomousGuard.activateStop("controller STOP test").success, true);
 
