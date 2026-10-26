@@ -63,6 +63,10 @@ const CHECKPOINT_RECOVERY_CONTROLLER_VERSION =
 // need a shared lease or atomic claim in their persistence layer.
 const activeProviderRecoveryResumes = new Set();
 
+// Prevent overlapping controller executions for the same task in this process.
+// Durable deployments should additionally enforce an atomic claim in shared storage.
+const activeTaskExecutions = new Set();
+
 
 // ============================================================
 // HELPERS
@@ -462,7 +466,7 @@ function saveAfterExecution(
 // EXECUTE ASSIGNED TASK
 // ============================================================
 
-async function executeAssignedTask(
+async function executeAssignedTaskInternal(
     workerId,
     taskId,
     options = {}
@@ -934,6 +938,46 @@ async function executeAssignedTask(
 
     };
 
+}
+
+
+// ============================================================
+// SINGLE-FLIGHT TASK EXECUTION
+// ============================================================
+// Concurrent controller calls for the same task must not both reach the
+// worker. This is an in-process guard; multi-process deployments need a
+// shared atomic execution claim in addition to this protection.
+// ============================================================
+
+async function executeAssignedTask(
+    workerId,
+    taskId,
+    options = {}
+) {
+    const id = safeString(taskId);
+
+    if (!id) {
+        return executeAssignedTaskInternal(workerId, taskId, options);
+    }
+
+    if (activeTaskExecutions.has(id)) {
+        return {
+            success: false,
+            stage: "duplicate-execution",
+            executionStarted: false,
+            duplicate: true,
+            taskId: id,
+            error: "Task execution is already active; duplicate controller execution was blocked.",
+            checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+        };
+    }
+
+    activeTaskExecutions.add(id);
+    try {
+        return await executeAssignedTaskInternal(workerId, id, options);
+    } finally {
+        activeTaskExecutions.delete(id);
+    }
 }
 
 
