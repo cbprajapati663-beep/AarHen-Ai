@@ -146,6 +146,16 @@ jobs:
 
 
       # ======================================================
+      # PROVIDER MANAGER ROUTING + FALLBACK REGRESSION TESTS
+      # ======================================================
+
+      - name: Test Provider Manager routing and fallback
+        run: |
+          node tests/provider-manager-input-guards.test.js
+          node --test tests/provider-manager-routing.test.js
+
+
+      # ======================================================
       # DIRECT ORCHESTRATOR RESEARCH TEST
       # ======================================================
       #
