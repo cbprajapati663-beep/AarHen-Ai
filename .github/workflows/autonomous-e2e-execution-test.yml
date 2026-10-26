@@ -77,7 +77,56 @@ jobs:
               );
             }
 
-            console.log("Autonomous end-to-end execution test passed.");
+            // Protected actions must stop at the approval gate in autonomous mode.
+            const protectedResult = await orchestrator.process(
+              "Send a message to Alex saying hello",
+              { autonomous: true }
+            );
+
+            if (!protectedResult || protectedResult.success !== true) {
+              throw new Error(
+                "Protected autonomous request should return an approval-required result: " +
+                (protectedResult?.error || "missing result")
+              );
+            }
+
+            if (protectedResult.status !== "approval-required") {
+              throw new Error(
+                "Protected action bypassed or missed approval gate: " +
+                protectedResult.status
+              );
+            }
+
+            if (protectedResult.autonomous?.waitingApproval !== true) {
+              throw new Error("Autonomous approval flag was not set.");
+            }
+
+            const protectedTaskId = protectedResult.autonomous?.task?.id;
+            if (!protectedTaskId) {
+              throw new Error("Protected action task ID is missing.");
+            }
+
+            const protectedTaskResult = agentManager.getTask(protectedTaskId);
+            if (
+              !protectedTaskResult.success ||
+              protectedTaskResult.task?.status !== agentManager.TASK_STATES.WAITING_APPROVAL
+            ) {
+              throw new Error(
+                "Protected task was not left waiting for approval: " +
+                protectedTaskResult.task?.status
+              );
+            }
+
+            if (
+              !protectedTaskResult.task.steps.some(
+                step => step.requiresApproval && !step.approved
+              )
+            ) {
+              throw new Error("Protected task has no outstanding step approval.");
+            }
+
+            console.log("Autonomous end-to-end execution and approval-gate tests passed.");
+
             console.log(JSON.stringify({
               requestStatus: result.status,
               autonomousEnabled: result.autonomous.enabled,
