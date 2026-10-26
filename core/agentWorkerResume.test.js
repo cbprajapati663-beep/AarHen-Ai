@@ -86,3 +86,97 @@ test("resumeWorker restarts the Agent Runner loop and completes the queued task"
   assert.equal(firstExecutions, 1, "completed first step must not repeat");
   assert.equal(secondExecutions, 1, "next pending step must execute once");
 });
+
+
+test("resumeWorker continues a task after its required step is approved", async () => {
+  const agent = manager.createAgent({
+    id: "worker-approval-resume-agent",
+    name: "Worker Approval Resume Agent"
+  });
+  assert.equal(agent.success, true);
+
+  const created = manager.createTask(
+    agent.agent.id,
+    "Prepare a message after approval",
+    { id: "worker-approval-resume-task" }
+  );
+  assert.equal(created.success, true);
+
+  const step = manager.addStep(created.task.id, {
+    id: "worker-approval-resume-step",
+    name: "Prepare outbound message",
+    description: "Wait for approval before preparing the safe handoff",
+    action: "send_message",
+    input: { request: "Prepare a test message" }
+  });
+  assert.equal(step.success, true);
+  assert.equal(step.step.requiresApproval, true);
+
+  const createdWorker = workerApi.createWorker({
+    id: "worker-approval-resume-worker",
+    agentId: agent.agent.id
+  });
+  assert.equal(createdWorker.success, true);
+  assert.equal(
+    workerApi.assignTask(createdWorker.worker.id, created.task.id).success,
+    true
+  );
+
+  const initial = await workerApi.runAssignedTask(createdWorker.worker.id);
+  assert.equal(initial.success, true);
+  assert.equal(initial.task.status, manager.TASK_STATES.WAITING_APPROVAL);
+  assert.equal(initial.workerStatus, workerApi.WORKER_STATES.WAITING_APPROVAL);
+
+  const approved = manager.approveStep(created.task.id, step.step.id);
+  assert.equal(approved.success, true);
+  assert.equal(approved.task.status, manager.TASK_STATES.READY);
+
+  const resumed = await workerApi.resumeWorker(createdWorker.worker.id);
+  assert.equal(resumed.success, true);
+  assert.equal(resumed.resumed, true);
+  assert.equal(resumed.task.status, manager.TASK_STATES.COMPLETED);
+  assert.equal(resumed.worker.status, workerApi.WORKER_STATES.IDLE);
+  assert.equal(resumed.worker.activeTaskId, null);
+  assert.deepEqual(resumed.worker.queue, []);
+
+  const completedStep = resumed.task.steps.find(item => item.id === step.step.id);
+  assert.equal(completedStep.status, manager.STEP_STATES.COMPLETED);
+  assert.equal(completedStep.result.executed, false);
+  assert.equal(completedStep.result.awaitingIntegration, true);
+});
+
+test("resumeWorker does not bypass a pending approval", async () => {
+  const agent = manager.createAgent({ id: "worker-pending-approval-agent" });
+  assert.equal(agent.success, true);
+
+  const created = manager.createTask(
+    agent.agent.id,
+    "Wait for approval",
+    { id: "worker-pending-approval-task" }
+  );
+  assert.equal(created.success, true);
+
+  const step = manager.addStep(created.task.id, {
+    id: "worker-pending-approval-step",
+    name: "Approval protected message",
+    action: "send_message",
+    input: { request: "Do not send without approval" }
+  });
+  assert.equal(step.success, true);
+
+  const createdWorker = workerApi.createWorker({
+    id: "worker-pending-approval-worker",
+    agentId: agent.agent.id
+  });
+  assert.equal(createdWorker.success, true);
+  assert.equal(workerApi.assignTask(createdWorker.worker.id, created.task.id).success, true);
+
+  const initial = await workerApi.runAssignedTask(createdWorker.worker.id);
+  assert.equal(initial.task.status, manager.TASK_STATES.WAITING_APPROVAL);
+
+  const attempted = await workerApi.resumeWorker(createdWorker.worker.id);
+  assert.equal(attempted.success, false);
+  assert.equal(attempted.requiresApproval, true);
+  assert.equal(attempted.task.status, manager.TASK_STATES.WAITING_APPROVAL);
+  assert.equal(attempted.worker.status, workerApi.WORKER_STATES.WAITING_APPROVAL);
+});
