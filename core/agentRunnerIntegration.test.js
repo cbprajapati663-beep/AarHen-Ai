@@ -98,7 +98,8 @@ test("emergency STOP blocks the real runner before a registered action handler r
   assert.equal(handlerCalls, 0, "the action handler must never run after STOP");
 
   const finalTask = manager.getTask(created.task.id).task;
-  assert.equal(finalTask.steps.find(item => item.id === first.step.id).status, manager.STEP_STATES.FAILED);
+  assert.equal(finalTask.steps.find(item => item.id === first.step.id).status, manager.STEP_STATES.PENDING,
+    "early STOP guard must leave the blocked step untouched");
   assert.equal(finalTask.steps.find(item => item.id === second.step.id).status, manager.STEP_STATES.PENDING);
 });
 
@@ -143,6 +144,7 @@ test("global STOP blocks direct runner resume before unpausing a task", async ()
     input: { request: "calculate 1 + 1" }
   });
   assert.equal(step.success, true);
+  assert.equal(manager.startTask(created.task.id).success, true);
   assert.equal(manager.pauseTask(created.task.id).success, true);
   const before = manager.getTask(created.task.id).task;
 
