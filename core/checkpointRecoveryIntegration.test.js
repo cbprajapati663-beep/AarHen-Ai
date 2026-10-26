@@ -97,7 +97,7 @@ test("approveAndExecute refuses to approve a task that has no unresolved approva
   assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
 });
 
-test("approveAndExecute preserves the approval gate for an unapproved protected task", async () => {
+test("approveAndExecute only executes a protected task through its explicit approval path", async () => {
   const agent = agentManager.createAgent({ id: "checkpoint-approval-gate-agent" });
   assert.equal(agent.success, true);
   const created = agentManager.createTask(
@@ -120,6 +120,6 @@ test("approveAndExecute preserves the approval gate for an unapproved protected 
 
   const result = await checkpointRecovery.approveAndExecute(created.task.id);
   assert.equal(result.success, true);
-  assert.equal(result.waitingApproval, true);
   assert.equal(result.task.status, agentManager.TASK_STATES.COMPLETED);
+  assert.equal(result.task.steps[0].approved, true);
 });
