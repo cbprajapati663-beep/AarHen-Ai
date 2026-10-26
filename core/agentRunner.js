@@ -1692,6 +1692,17 @@ async function runTask(
     taskId,
     options = {}
 ) {
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            runnerVersion: AGENT_RUNNER_VERSION,
+            error: "Emergency STOP is active; Agent Runner task execution is blocked."
+        };
+    }
+
     const key = safeString(taskId);
     if (!key) {
         return {
@@ -1765,6 +1776,17 @@ async function resumeTask(
     taskId,
     options = {}
 ) {
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            runnerVersion: AGENT_RUNNER_VERSION,
+            error: "Emergency STOP is active; Agent Runner task resume is blocked."
+        };
+    }
+
     const key = safeString(taskId);
     if (!key) {
         return {
@@ -1869,6 +1891,17 @@ async function createAndRunTask(
     request,
     options = {}
 ) {
+
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stage: "emergency-stop",
+            stopped: true,
+            executionStarted: false,
+            runnerVersion: AGENT_RUNNER_VERSION,
+            error: "Emergency STOP is active; Agent Runner task creation and execution are blocked."
+        };
+    }
 
     if (
         !planner ||
