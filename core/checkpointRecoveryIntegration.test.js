@@ -75,12 +75,11 @@ test("missing task IDs fail closed without creating checkpoints", () => {
   assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
 });
 
-
 test("approveAndExecute refuses to approve a task that has no unresolved approval gate", async () => {
   const taskId = createTask();
   const before = agentManager.getTask(taskId);
   assert.equal(before.success, true);
-  assert.equal(before.task.status, agentManager.TASK_STATES.READY);
+  assert.equal(before.task.status, agentManager.TASK_STATES.CREATED);
   assert.equal(before.task.approved, false);
 
   const result = await checkpointRecovery.approveAndExecute(taskId);
@@ -91,7 +90,7 @@ test("approveAndExecute refuses to approve a task that has no unresolved approva
   assert.match(result.error, /not waiting for an unresolved approval gate/i);
 
   const after = agentManager.getTask(taskId);
-  assert.equal(after.task.status, agentManager.TASK_STATES.READY);
+  assert.equal(after.task.status, agentManager.TASK_STATES.CREATED);
   assert.equal(after.task.approved, false);
   assert.equal(after.task.steps[0].approved, true); // Non-protected steps are normalized as approved.
   assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
