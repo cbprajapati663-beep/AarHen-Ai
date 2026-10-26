@@ -5,6 +5,7 @@ const agentManager = require("./agentManager");
 const checkpointBridge = require("./checkpointBridge");
 const checkpointRecovery = require("./checkpointRecoveryController");
 const autonomousGuard = require("./autonomousGuard");
+const autonomousWorker = require("./autonomousWorker");
 
 function createTask() {
   const agent = agentManager.createAgent({ id: "checkpoint-integration-agent" });
@@ -125,6 +126,50 @@ test("approveAndExecute only executes a protected task through its explicit appr
   assert.equal(result.task.steps[0].approved, true);
 });
 
+
+test("concurrent controller calls cannot execute the same task twice", async () => {
+  const taskId = createTask();
+  const originalExecute = autonomousWorker.executeAssignedTask;
+  let signalStarted;
+  let releaseExecution;
+  const started = new Promise(resolve => { signalStarted = resolve; });
+  const gate = new Promise(resolve => { releaseExecution = resolve; });
+
+  autonomousWorker.executeAssignedTask = async () => {
+    signalStarted();
+    await gate;
+    return {
+      success: true,
+      stage: "worker-execution",
+      status: "completed",
+      task: agentManager.getTask(taskId).task,
+      execution: { success: true }
+    };
+  };
+
+  try {
+    const firstExecution = checkpointRecovery.executeAssignedTask("single-flight-worker", taskId);
+    await started;
+
+    const duplicate = await checkpointRecovery.executeAssignedTask("single-flight-worker", taskId);
+    assert.equal(duplicate.success, false);
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(duplicate.executionStarted, false);
+    assert.equal(duplicate.stage, "duplicate-execution");
+    assert.match(duplicate.error, /already active/i);
+    assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 1,
+      "duplicate call must not write its own checkpoint");
+
+    releaseExecution();
+    const first = await firstExecution;
+    assert.equal(first.success, true);
+    assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 2,
+      "only the first execution should save before/after checkpoints");
+  } finally {
+    releaseExecution();
+    autonomousWorker.executeAssignedTask = originalExecute;
+  }
+});
 
 test("terminal completed tasks are rejected before checkpoint writes or re-execution", async () => {
   const taskId = createTask();
