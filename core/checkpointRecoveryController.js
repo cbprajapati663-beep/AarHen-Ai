@@ -972,11 +972,43 @@ async function executeAssignedTask(
         };
     }
 
+    let executionLease;
+    try {
+        executionLease = recoveryLeaseStore.claim(id, {
+            source: "checkpointRecoveryController.executeAssignedTask",
+            purpose: "task-execution"
+        });
+    } catch (error) {
+        return {
+            success: false,
+            stage: "execution-lease",
+            executionStarted: false,
+            taskId: id,
+            error: "Unable to acquire persistent task execution lease: " + String(error.message || error),
+            checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+        };
+    }
+
+    if (!executionLease.success) {
+        return {
+            ...executionLease,
+            success: false,
+            stage: "execution-lease",
+            executionStarted: false,
+            taskId: id,
+            error: executionLease.error || "Task execution is already claimed; duplicate execution was blocked.",
+            checkpointRecoveryControllerVersion: CHECKPOINT_RECOVERY_CONTROLLER_VERSION
+        };
+    }
+
     activeTaskExecutions.add(id);
     try {
         return await executeAssignedTaskInternal(workerId, id, options);
     } finally {
         activeTaskExecutions.delete(id);
+        // Fail closed if release fails: the persistent claim remains and
+        // subsequent execution attempts will be blocked pending operator review.
+        recoveryLeaseStore.release(id, executionLease.token);
     }
 }
 
@@ -2637,11 +2669,29 @@ async function resumeResolvedProviderFailure(taskId, options = {}) {
         return { success: false, executionStarted: false, error: resumed.error || "Unable to prepare task for execution." };
     }
 
-    const execution = await executeAssignedTask(
-        workerResult.worker.id,
-        id,
-        safeObject(config.executionOptions)
-    );
+    // This recovery flow already owns the persistent recovery lease above.
+    // Reuse that claim rather than attempting to acquire a second lease for the
+    // same task, while still sharing the in-process single-flight guard.
+    if (activeTaskExecutions.has(id)) {
+        return {
+            success: false,
+            executionStarted: false,
+            duplicate: true,
+            error: "Task execution is already active; provider recovery execution was blocked."
+        };
+    }
+
+    activeTaskExecutions.add(id);
+    let execution;
+    try {
+        execution = await executeAssignedTaskInternal(
+            workerResult.worker.id,
+            id,
+            safeObject(config.executionOptions)
+        );
+    } finally {
+        activeTaskExecutions.delete(id);
+    }
 
     if (!execution.success && execution.stage === "checkpoint-before") {
         // The runner has not started; return the task to a safe paused state.
