@@ -117,3 +117,112 @@ test("automatic routing times out a hung provider and continues to the next prov
   ]);
   assert.deepEqual(attempted, ["test-hanging-first", "test-fallback-second"]);
 });
+
+
+test("half-open recovery probe closes the circuit after provider recovery", async () => {
+  let primaryCalls = 0;
+  let fallbackCalls = 0;
+
+  assert.equal(manager.registerProvider(
+    "test-half-open-recovery-primary",
+    makeProvider(async () => {
+      primaryCalls += 1;
+      if (primaryCalls === 1) {
+        throw new Error("temporary outage");
+      }
+      return {
+        success: true,
+        provider: "test-half-open-recovery-primary",
+        results: [{ title: "Recovered result" }]
+      };
+    }),
+    {
+      priority: 1,
+      failureThreshold: 1,
+      circuitCooldownMs: 25,
+      searchTimeoutMs: 100
+    }
+  ).success, true);
+
+  assert.equal(manager.registerProvider(
+    "test-half-open-recovery-fallback",
+    makeProvider(async () => {
+      fallbackCalls += 1;
+      return {
+        success: true,
+        provider: "test-half-open-recovery-fallback",
+        results: []
+      };
+    }),
+    { priority: 2, searchTimeoutMs: 100 }
+  ).success, true);
+
+  const first = await manager.searchWeb({ query: "open circuit" });
+  assert.equal(first.success, true);
+  assert.equal(first.provider, "test-half-open-recovery-fallback");
+  assert.equal(manager.getProviderHealth("test-half-open-recovery-primary").circuitBreaker.open, true);
+
+  await new Promise(resolve => setTimeout(resolve, 35));
+
+  const recovered = await manager.searchWeb({ query: "probe recovered provider" });
+  assert.equal(recovered.success, true);
+  assert.equal(recovered.provider, "test-half-open-recovery-primary");
+  assert.equal(recovered.fallbackUsed, false);
+  assert.equal(primaryCalls, 2);
+  assert.equal(fallbackCalls, 1);
+
+  const health = manager.getProviderHealth("test-half-open-recovery-primary");
+  assert.equal(health.circuitBreaker.status, "closed");
+  assert.equal(health.circuitBreaker.open, false);
+  assert.equal(health.circuitBreaker.failures, 0);
+});
+
+test("failed half-open recovery probe reopens the circuit and falls back safely", async () => {
+  let primaryCalls = 0;
+  let fallbackCalls = 0;
+
+  assert.equal(manager.registerProvider(
+    "test-half-open-failure-primary",
+    makeProvider(async () => {
+      primaryCalls += 1;
+      throw new Error("provider remains unavailable");
+    }),
+    {
+      priority: 1,
+      failureThreshold: 1,
+      circuitCooldownMs: 25,
+      searchTimeoutMs: 100
+    }
+  ).success, true);
+
+  assert.equal(manager.registerProvider(
+    "test-half-open-failure-fallback",
+    makeProvider(async () => {
+      fallbackCalls += 1;
+      return {
+        success: true,
+        provider: "test-half-open-failure-fallback",
+        results: []
+      };
+    }),
+    { priority: 2, searchTimeoutMs: 100 }
+  ).success, true);
+
+  const first = await manager.searchWeb({ query: "open circuit" });
+  assert.equal(first.success, true);
+  assert.equal(first.provider, "test-half-open-failure-fallback");
+  assert.equal(manager.getProviderHealth("test-half-open-failure-primary").circuitBreaker.open, true);
+
+  await new Promise(resolve => setTimeout(resolve, 35));
+
+  const probe = await manager.searchWeb({ query: "failed recovery probe" });
+  assert.equal(probe.success, true);
+  assert.equal(probe.provider, "test-half-open-failure-fallback");
+  assert.equal(probe.fallbackUsed, true);
+  assert.equal(primaryCalls, 2);
+  assert.equal(fallbackCalls, 2);
+
+  const health = manager.getProviderHealth("test-half-open-failure-primary");
+  assert.equal(health.circuitBreaker.open, true);
+  assert.equal(health.circuitBreaker.status, "open");
+});
