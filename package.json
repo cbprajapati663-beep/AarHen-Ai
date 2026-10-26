@@ -7,7 +7,7 @@
     "start": "node server.js",
     "test": "node test.js",
     "test:cancellation": "node --test core/agentManagerCancellation.test.js",
-    "test:all": "npm test && npm run test:checkpoint-store && npm run test:provider-manager-input-guards && npm run test:cancellation && npm run test:learning-api && npm run test:server && npm run test:worker-resume && npm run test:runner-integration && npm run test:checkpoint-recovery && npm run test:checkpoint-restore && npm run test:checkpoint-process-restart && npm run test:checkpoint-resolution && npm run test:checkpoint-resume && npm run test:checkpoint-provider-recovery && npm run test:checkpoint-provider-decision && npm run test:recovery-lease && npm run test:recovery-lease-status",
+    "test:all": "npm test && npm run test:checkpoint-store && npm run test:provider-manager-input-guards && npm run test:voice-api && npm run test:vision-api && npm run test:multilingual-media && npm run test:cancellation && npm run test:learning-api && npm run test:server && npm run test:worker-resume && npm run test:runner-integration && npm run test:checkpoint-recovery && npm run test:checkpoint-restore && npm run test:checkpoint-process-restart && npm run test:checkpoint-resolution && npm run test:checkpoint-resume && npm run test:checkpoint-provider-recovery && npm run test:checkpoint-provider-decision && npm run test:recovery-lease && npm run test:recovery-lease-status",
     "test:learning-api": "node --test core/learningApi.test.js",
     "test:server": "node --test core/serverSmoke.test.js",
     "test:worker-resume": "node --test core/agentWorkerResume.test.js",
@@ -22,7 +22,10 @@
     "test:recovery-lease": "node --test core/recoveryLeaseStore.test.js",
     "test:recovery-lease-status": "node --test core/checkpointRecoveryLeaseStatus.test.js",
     "test:checkpoint-store": "node --test core/checkpointStore.test.js",
-    "test:provider-manager-input-guards": "node tests/provider-manager-input-guards.test.js"
+    "test:provider-manager-input-guards": "node tests/provider-manager-input-guards.test.js",
+    "test:voice-api": "node --test core/voiceApi.test.js",
+    "test:vision-api": "node --test core/visionApi.test.js",
+    "test:multilingual-media": "node --test core/multilingualMedia.test.js"
   },
   "keywords": [
     "aarhen",
