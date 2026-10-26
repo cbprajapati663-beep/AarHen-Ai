@@ -123,7 +123,7 @@ test("resumeWorker continues a task after its required step is approved", async 
   );
 
   const initial = await workerApi.runAssignedTask(createdWorker.worker.id);
-  assert.equal(initial.success, true);
+  assert.equal(initial.success, false, "execution must not proceed before approval");
   assert.equal(initial.task.status, manager.TASK_STATES.WAITING_APPROVAL);
   assert.equal(initial.workerStatus, workerApi.WORKER_STATES.WAITING_APPROVAL);
 
