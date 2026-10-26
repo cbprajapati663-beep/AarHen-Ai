@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const agentManager = require("./agentManager");
 const checkpointBridge = require("./checkpointBridge");
 const checkpointRecovery = require("./checkpointRecoveryController");
+const autonomousGuard = require("./autonomousGuard");
 const providerManager = require("../providers/providerManager");
 const providerBridge = require("./providerBridge");
 
@@ -54,6 +55,7 @@ test.beforeEach(() => {
   providerManager.reset();
   providerManager.setProviderEnabled("research", false);
   agentManager.reset();
+  autonomousGuard.reset();
   assert.equal(checkpointBridge.reset().success, true);
 });
 
@@ -171,4 +173,28 @@ test("when every provider fails, failure and attempted-provider history remain v
   assert.equal(blockedRestore.requiresOwnerDecision, true);
   assert.equal(blockedRestore.automaticRetryAllowed, false);
   assert.match(blockedRestore.error, /explicit owner decision/i);
+});
+
+
+test("emergency STOP blocks provider recovery before task state or recovery lease changes", async () => {
+  const taskId = createTask("provider-recovery-global-stop");
+  const before = agentManager.getTask(taskId);
+  assert.equal(before.success, true);
+  assert.equal(before.task.status, agentManager.TASK_STATES.CREATED);
+
+  assert.equal(autonomousGuard.activateStop("Provider recovery STOP test").success, true);
+
+  const result = await checkpointRecovery.resumeResolvedProviderFailure(taskId, {
+    ownerAuthorized: true,
+    confirmExecution: true
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stopped, true);
+  assert.match(result.error, /emergency STOP is active/i);
+
+  const after = agentManager.getTask(taskId);
+  assert.equal(after.task.status, agentManager.TASK_STATES.CREATED);
+  assert.equal(after.task.stopRequested, false);
 });
