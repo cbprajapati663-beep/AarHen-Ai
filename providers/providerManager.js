@@ -210,31 +210,41 @@ function getCircuitConfig(type) {
 
 function getCircuitState(type) {
     const key = normalizeType(type);
-    const state = providerFailureState.get(key) || { failures: 0, openUntil: 0 };
-    if (state.openUntil && Date.now() >= state.openUntil) {
-        state.failures = 0;
-        state.openUntil = 0;
-        providerFailureState.set(key, state);
-    }
+    const state = providerFailureState.get(key) || { failures: 0, openUntil: 0, halfOpenProbe: false };
+    const now = Date.now();
+    const open = state.openUntil > now;
+    const halfOpen = Boolean(state.openUntil && !open);
     return {
         provider: key,
         failures: state.failures,
-        open: state.openUntil > Date.now(),
+        open,
         openUntil: state.openUntil || null,
-        status: state.openUntil > Date.now() ? "open" : "closed"
+        status: open ? "open" : halfOpen ? (state.halfOpenProbe ? "half-open-probe-active" : "half-open") : "closed"
     };
 }
 
-function isCircuitOpen(type) {
-    return getCircuitState(type).open;
+// After cooldown, allow only one request to probe a provider. Other concurrent
+// requests skip it until that probe succeeds or fails and updates the circuit.
+function acquireCircuitPermit(type) {
+    const key = normalizeType(type);
+    const state = providerFailureState.get(key);
+    if (!state || !state.openUntil) return { allowed: true, halfOpen: false };
+    const now = Date.now();
+    if (state.openUntil > now) return { allowed: false, halfOpen: false };
+    if (state.halfOpenProbe) return { allowed: false, halfOpen: true };
+    state.halfOpenProbe = true;
+    providerFailureState.set(key, state);
+    return { allowed: true, halfOpen: true };
 }
 
 function recordProviderFailure(type) {
     const key = normalizeType(type);
     const config = getCircuitConfig(key);
-    const state = providerFailureState.get(key) || { failures: 0, openUntil: 0 };
+    const state = providerFailureState.get(key) || { failures: 0, openUntil: 0, halfOpenProbe: false };
+    const wasHalfOpenProbe = state.halfOpenProbe === true;
+    state.halfOpenProbe = false;
     state.failures += 1;
-    if (state.failures >= config.failureThreshold) {
+    if (wasHalfOpenProbe || state.failures >= config.failureThreshold) {
         state.openUntil = Date.now() + config.cooldownMs;
     }
     providerFailureState.set(key, state);
@@ -242,7 +252,7 @@ function recordProviderFailure(type) {
 }
 
 function recordProviderSuccess(type) {
-    providerFailureState.set(normalizeType(type), { failures: 0, openUntil: 0 });
+    providerFailureState.set(normalizeType(type), { failures: 0, openUntil: 0, halfOpenProbe: false });
     return getCircuitState(type);
 }
 
@@ -911,7 +921,8 @@ async function searchWeb({
             };
         }
 
-        if (isCircuitOpen(requestedProvider)) {
+        const circuitPermit = acquireCircuitPermit(requestedProvider);
+        if (!circuitPermit.allowed) {
             const circuit = getCircuitState(requestedProvider);
             return {
                 success: false,
@@ -1116,8 +1127,9 @@ async function searchWeb({
         const type =
             providerInfo.provider;
 
-        if (isCircuitOpen(type)) {
-            lastError = `Provider "${type}" circuit is open after repeated failures.`;
+        const circuitPermit = acquireCircuitPermit(type);
+        if (!circuitPermit.allowed) {
+            lastError = `Provider "${type}" circuit is open or another recovery probe is active.`;
             continue;
         }
 
