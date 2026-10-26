@@ -109,6 +109,59 @@ test("explicit unavailable or non-search provider fails without silently switchi
   assert.match(voice.error, /does not support web search/i);
 });
 
+test("repeated provider failures open its circuit and automatic routing skips it during cooldown", async () => {
+  let failingCalls = 0;
+  let fallbackCalls = 0;
+
+  manager.registerProvider("circuit-failing", mockProvider({
+    search: async () => {
+      failingCalls += 1;
+      throw new Error("temporary provider failure");
+    }
+  }), {
+    priority: 1,
+    enabled: true,
+    providerType: "web-search",
+    failureThreshold: 2,
+    circuitCooldownMs: 100
+  });
+
+  manager.registerProvider("circuit-fallback", mockProvider({
+    search: async () => {
+      fallbackCalls += 1;
+      return { success: true, provider: "circuit-fallback", results: [] };
+    }
+  }), {
+    priority: 2,
+    enabled: true,
+    providerType: "web-search"
+  });
+
+  const first = await manager.searchWeb({ query: "circuit failure one" });
+  const second = await manager.searchWeb({ query: "circuit failure two" });
+  assert.equal(first.success, true);
+  assert.equal(second.success, true);
+  assert.equal(failingCalls, 2);
+
+  const health = manager.getProviderHealth("circuit-failing");
+  assert.equal(health.circuitBreaker.status, "open");
+  assert.equal(health.circuitBreaker.open, true);
+
+  const third = await manager.searchWeb({ query: "circuit should skip" });
+  assert.equal(third.success, true);
+  assert.equal(third.provider, "circuit-fallback");
+  assert.equal(failingCalls, 2);
+  assert.equal(fallbackCalls, 3);
+
+  const explicit = await manager.searchWeb({
+    query: "explicit open circuit",
+    provider: "circuit-failing"
+  });
+  assert.equal(explicit.success, false);
+  assert.equal(explicit.circuitOpen, true);
+  assert.match(explicit.error, /circuit is open/i);
+});
+
 test("registration rejects malformed providers and attempts to replace built-ins", () => {
   assert.equal(manager.registerProvider("  ", mockProvider()).success, false);
   assert.equal(manager.registerProvider("bad-provider", {}).success, false);
