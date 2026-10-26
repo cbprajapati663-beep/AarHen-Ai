@@ -42,6 +42,46 @@ test("requested provider timeout returns a stable failure instead of hanging", a
   assert.match(result.error, /timed out after 20ms/i);
 });
 
+test("a timed-out provider opens its circuit and is skipped on subsequent requests", async () => {
+  let hungCalls = 0;
+  let fallbackCalls = 0;
+
+  assert.equal(manager.registerProvider(
+    "test-timeout-circuit-open",
+    makeProvider(() => {
+      hungCalls += 1;
+      return new Promise(() => {});
+    }),
+    {
+      priority: 1,
+      searchTimeoutMs: 15,
+      failureThreshold: 1,
+      circuitCooldownMs: 1000
+    }
+  ).success, true);
+
+  assert.equal(manager.registerProvider(
+    "test-timeout-circuit-fallback",
+    makeProvider(async () => {
+      fallbackCalls += 1;
+      return { success: true, provider: "test-timeout-circuit-fallback", results: [] };
+    }),
+    { priority: 2 }
+  ).success, true);
+
+  const first = await manager.searchWeb({ query: "timeout opens circuit" });
+  assert.equal(first.success, true);
+  assert.equal(first.provider, "test-timeout-circuit-fallback");
+  assert.equal(hungCalls, 1);
+  assert.equal(manager.getProviderHealth("test-timeout-circuit-open").circuitBreaker.open, true);
+
+  const second = await manager.searchWeb({ query: "skip provider with open circuit" });
+  assert.equal(second.success, true);
+  assert.equal(second.provider, "test-timeout-circuit-fallback");
+  assert.equal(hungCalls, 1, "open circuit should prevent another call to the hung provider");
+  assert.equal(fallbackCalls, 2);
+});
+
 test("automatic routing times out a hung provider and continues to the next provider", async () => {
   const attempted = [];
   assert.equal(manager.registerProvider(
