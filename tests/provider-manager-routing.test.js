@@ -162,6 +162,48 @@ test("repeated provider failures open its circuit and automatic routing skips it
   assert.match(explicit.error, /circuit is open/i);
 });
 
+
+test("only one concurrent request probes a provider after its circuit cooldown", async () => {
+  let failingCalls = 0;
+  let fallbackCalls = 0;
+
+  manager.registerProvider("half-open-provider", mockProvider({
+    search: async () => {
+      failingCalls += 1;
+      if (failingCalls <= 2) throw new Error("provider outage");
+      await new Promise(resolve => setTimeout(resolve, 60));
+      return { success: true, provider: "half-open-provider", results: [] };
+    }
+  }), {
+    priority: 1,
+    enabled: true,
+    providerType: "web-search",
+    failureThreshold: 2,
+    circuitCooldownMs: 40
+  });
+  manager.registerProvider("half-open-fallback", mockProvider({
+    search: async () => {
+      fallbackCalls += 1;
+      return { success: true, provider: "half-open-fallback", results: [] };
+    }
+  }), { priority: 2, enabled: true, providerType: "web-search" });
+
+  await manager.searchWeb({ query: "failure one" });
+  await manager.searchWeb({ query: "failure two" });
+  await new Promise(resolve => setTimeout(resolve, 55));
+
+  const [probe, concurrent] = await Promise.all([
+    manager.searchWeb({ query: "half-open probe" }),
+    manager.searchWeb({ query: "concurrent while probing" })
+  ]);
+
+  assert.equal(probe.success, true);
+  assert.equal(concurrent.success, true);
+  assert.equal(failingCalls, 3, "only one request should reach the recovering provider");
+  assert.equal(fallbackCalls, 3, "the other request should immediately use fallback");
+  assert.equal(manager.getProviderHealth("half-open-provider").circuitBreaker.status, "closed");
+});
+
 test("registration rejects malformed providers and attempts to replace built-ins", () => {
   assert.equal(manager.registerProvider("  ", mockProvider()).success, false);
   assert.equal(manager.registerProvider("bad-provider", {}).success, false);
