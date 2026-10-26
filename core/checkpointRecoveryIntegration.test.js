@@ -74,3 +74,51 @@ test("missing task IDs fail closed without creating checkpoints", () => {
   assert.equal(result.checkpoint, null);
   assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
 });
+
+test("approveAndExecute refuses to approve a task that has no unresolved approval gate", async () => {
+  const taskId = createTask();
+  const before = agentManager.getTask(taskId);
+  assert.equal(before.success, true);
+  assert.equal(before.task.status, agentManager.TASK_STATES.CREATED);
+  assert.equal(before.task.approved, false);
+
+  const result = await checkpointRecovery.approveAndExecute(taskId);
+
+  assert.equal(result.success, false);
+  assert.equal(result.executionStarted, false);
+  assert.equal(result.stage, "approval");
+  assert.match(result.error, /not waiting for an unresolved approval gate/i);
+
+  const after = agentManager.getTask(taskId);
+  assert.equal(after.task.status, agentManager.TASK_STATES.CREATED);
+  assert.equal(after.task.approved, false);
+  assert.equal(after.task.steps[0].approved, true); // Non-protected steps are normalized as approved.
+  assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
+});
+
+test("approveAndExecute only executes a protected task through its explicit approval path", async () => {
+  const agent = agentManager.createAgent({ id: "checkpoint-approval-gate-agent" });
+  assert.equal(agent.success, true);
+  const created = agentManager.createTask(
+    agent.agent.id,
+    "Protected action must wait for approval",
+    { id: "checkpoint-approval-gate-task" }
+  );
+  assert.equal(created.success, true);
+
+  const step = agentManager.addStep(created.task.id, {
+    id: "checkpoint-approval-gate-step",
+    name: "Send protected message",
+    description: "Send a message only after explicit approval",
+    action: "send_message",
+    requiresApproval: true,
+    approved: false,
+    input: { request: "Send a message" }
+  });
+  assert.equal(step.success, true);
+
+  const result = await checkpointRecovery.approveAndExecute(created.task.id);
+  assert.equal(result.success, true);
+  assert.equal(result.task.status, agentManager.TASK_STATES.COMPLETED);
+  assert.equal(result.task.steps[0].approved, true);
+});
