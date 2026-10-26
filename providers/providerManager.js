@@ -186,6 +186,52 @@ function normalizeType(type) {
 }
 
 
+// Bound provider calls so a hung integration cannot block fallback routing forever.
+// A timed-out provider may still finish in the background if it ignores cancellation.
+const DEFAULT_SEARCH_TIMEOUT_MS = 15000;
+
+function getSearchTimeoutMs(type) {
+    const configured = Number(getProviderConfig(type)?.searchTimeoutMs);
+    if (!Number.isFinite(configured) || configured <= 0) {
+        return DEFAULT_SEARCH_TIMEOUT_MS;
+    }
+    return Math.max(1, Math.min(configured, 120000));
+}
+
+function searchWithTimeout(providerInstance, type, args) {
+    const timeoutMs = getSearchTimeoutMs(type);
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            const error = new Error(
+                `Provider "${type}" search timed out after ${timeoutMs}ms.`
+            );
+            error.code = "PROVIDER_TIMEOUT";
+            reject(error);
+        }, timeoutMs);
+
+        Promise.resolve()
+            .then(() => providerInstance.search(args))
+            .then(
+                result => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(result);
+                },
+                error => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    reject(error);
+                }
+            );
+    });
+}
+
+
 // ============================================================
 // GET PROVIDER
 // ============================================================
@@ -845,7 +891,7 @@ async function searchWeb({
         try {
 
             const result =
-                await selected.search({
+                await searchWithTimeout(selected, requestedProvider, {
 
                     query:
                         normalizedQuery,
@@ -1017,7 +1063,7 @@ async function searchWeb({
         try {
 
             const result =
-                await providerInstance.search({
+                await searchWithTimeout(providerInstance, type, {
 
                     query:
                         normalizedQuery,
@@ -1228,6 +1274,11 @@ function registerProvider(
         ) ||
         "unknown";
 
+    const requestedTimeout = Number(config.searchTimeoutMs);
+    const searchTimeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+        ? Math.max(1, Math.min(requestedTimeout, 120000))
+        : DEFAULT_SEARCH_TIMEOUT_MS;
+
 
     providers[
         normalizedType
@@ -1243,7 +1294,9 @@ function registerProvider(
 
         enabled,
 
-        providerType
+        providerType,
+
+        searchTimeoutMs
 
     };
 
