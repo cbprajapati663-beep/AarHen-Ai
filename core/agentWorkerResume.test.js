@@ -255,3 +255,67 @@ test("runAssignedTask rejects a concurrent invocation for the same worker", asyn
     releaseExecution();
   }
 });
+
+
+test("runQueue halts at an approval gate without starting later queued tasks", async () => {
+  const agent = manager.createAgent({
+    id: "worker-queue-approval-agent",
+    name: "Worker Queue Approval Agent"
+  });
+  assert.equal(agent.success, true);
+
+  const protectedTask = manager.createTask(
+    agent.agent.id,
+    "Require approval before outbound action",
+    { id: "worker-queue-protected-task" }
+  );
+  const laterTask = manager.createTask(
+    agent.agent.id,
+    "Run only after protected task clears",
+    { id: "worker-queue-later-task" }
+  );
+  assert.equal(protectedTask.success, true);
+  assert.equal(laterTask.success, true);
+
+  const protectedStep = manager.addStep(protectedTask.task.id, {
+    id: "worker-queue-protected-step",
+    name: "Approval-protected outbound action",
+    action: "send_message",
+    input: { request: "Do not send without approval" }
+  });
+  const laterStep = manager.addStep(laterTask.task.id, {
+    id: "worker-queue-later-step",
+    name: "Later safe calculation",
+    action: "calculate"
+  });
+  assert.equal(protectedStep.success, true);
+  assert.equal(laterStep.success, true);
+
+  const createdWorker = workerApi.createWorker({
+    id: "worker-queue-approval-worker",
+    agentId: agent.agent.id
+  });
+  assert.equal(createdWorker.success, true);
+  assert.equal(workerApi.assignTask(createdWorker.worker.id, protectedTask.task.id).success, true);
+  assert.equal(workerApi.assignTask(createdWorker.worker.id, laterTask.task.id).success, true);
+
+  let laterTaskExecutions = 0;
+  const result = await workerApi.runQueue(createdWorker.worker.id, {
+    runner: async ({ task }) => {
+      if (task.id === laterTask.task.id) {
+        laterTaskExecutions += 1;
+      }
+      return { success: true, output: "unexpected runner invocation" };
+    }
+  });
+
+  assert.equal(result.processed, 1, "queue must stop after the first approval-gated task");
+  assert.equal(result.results.length, 1);
+  assert.equal(result.results[0].success, false);
+  assert.equal(result.results[0].task.status, manager.TASK_STATES.WAITING_APPROVAL);
+  assert.equal(laterTaskExecutions, 0, "later queued work must not run before approval");
+  assert.deepEqual(result.worker.queue, [protectedTask.task.id, laterTask.task.id]);
+  assert.equal(result.worker.activeTaskId, protectedTask.task.id);
+  assert.equal(result.worker.status, workerApi.WORKER_STATES.WAITING_APPROVAL);
+  assert.equal(manager.getTask(laterTask.task.id).task.status, manager.TASK_STATES.CREATED);
+});
