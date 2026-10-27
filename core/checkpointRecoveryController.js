@@ -708,6 +708,10 @@ async function executeAssignedTaskInternal(
             stage:
                 "checkpoint-before",
 
+            // The worker has not started because the durable preflight checkpoint failed.
+            executionStarted:
+                false,
+
             error:
                 beforeCheckpoint.error ||
                 "Unable to save pre-execution checkpoint.",

@@ -1,0 +1,31 @@
+name: Checkpoint Execution Lease Regression Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/checkpointExecutionLease.test.js"
+      - "core/checkpointRecoveryController.js"
+      - "core/recoveryLeaseStore.js"
+      - ".github/workflows/checkpoint-execution-lease-test.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/checkpointExecutionLease.test.js"
+      - "core/checkpointRecoveryController.js"
+      - "core/recoveryLeaseStore.js"
+      - ".github/workflows/checkpoint-execution-lease-test.yml"
+  workflow_dispatch:
+
+jobs:
+  execution-lease-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate controller syntax
+        run: node --check core/checkpointRecoveryController.js
+      - name: Run persistent execution lease tests
+        run: node --test core/checkpointExecutionLease.test.js

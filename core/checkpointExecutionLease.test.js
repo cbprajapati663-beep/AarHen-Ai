@@ -85,3 +85,35 @@ test("controller holds the persistent execution lease while the worker runs and 
     autonomousWorker.executeAssignedTask = originalExecute;
   }
 });
+
+test("controller releases its persistent execution lease when the pre-execution checkpoint fails", async () => {
+  const taskId = createTask("checkpoint-failure-releases-lease");
+  const originalSaveBeforeExecution = checkpointBridge.saveBeforeExecution;
+  let workerCalled = false;
+  const originalExecute = autonomousWorker.executeAssignedTask;
+
+  checkpointBridge.saveBeforeExecution = () => ({
+    success: false,
+    checkpoint: null,
+    error: "Simulated transient checkpoint storage failure."
+  });
+  autonomousWorker.executeAssignedTask = async () => {
+    workerCalled = true;
+    return { success: true, stage: "worker-execution", status: "completed" };
+  };
+
+  try {
+    const result = await checkpointRecovery.executeAssignedTask("checkpoint-failure-worker", taskId);
+
+    assert.equal(result.success, false);
+    assert.equal(result.stage, "checkpoint-before");
+    assert.equal(result.executionStarted, false);
+    assert.match(result.error, /checkpoint storage failure/i);
+    assert.equal(workerCalled, false, "worker must not start without a durable pre-execution checkpoint");
+    assert.equal(leaseStore.inspect(taskId).locked, false, "failed preflight must release its persistent lease");
+    assert.equal(agentManager.getTask(taskId).task.status, agentManager.TASK_STATES.CREATED);
+  } finally {
+    checkpointBridge.saveBeforeExecution = originalSaveBeforeExecution;
+    autonomousWorker.executeAssignedTask = originalExecute;
+  }
+});
