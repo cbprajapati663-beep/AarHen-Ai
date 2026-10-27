@@ -317,5 +317,5 @@ test("runQueue halts at an approval gate without starting later queued tasks", a
   assert.deepEqual(result.worker.queue, [protectedTask.task.id, laterTask.task.id]);
   assert.equal(result.worker.activeTaskId, protectedTask.task.id);
   assert.equal(result.worker.status, workerApi.WORKER_STATES.WAITING_APPROVAL);
-  assert.equal(manager.getTask(laterTask.task.id).task.status, manager.TASK_STATES.READY);
+  assert.equal(manager.getTask(laterTask.task.id).task.status, manager.TASK_STATES.CREATED);
 });
