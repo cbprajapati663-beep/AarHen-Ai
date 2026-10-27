@@ -117,3 +117,30 @@ test("controller releases its persistent execution lease when the pre-execution 
     autonomousWorker.executeAssignedTask = originalExecute;
   }
 });
+
+test("emergency STOP blocks controller execution and releases the acquired lease", async () => {
+  const taskId = createTask("stop-releases-execution-lease");
+  const originalExecute = autonomousWorker.executeAssignedTask;
+  let workerCalled = false;
+
+  assert.equal(autonomousGuard.activateStop("Execution lease STOP regression").success, true);
+  autonomousWorker.executeAssignedTask = async () => {
+    workerCalled = true;
+    return { success: true, stage: "worker-execution", status: "completed" };
+  };
+
+  try {
+    const result = await checkpointRecovery.executeAssignedTask("stop-lease-worker", taskId);
+
+    assert.equal(result.success, false);
+    assert.equal(result.stage, "emergency-stop");
+    assert.equal(result.executionStarted, false);
+    assert.equal(result.stopped, true);
+    assert.equal(workerCalled, false, "worker must not start while emergency STOP is active");
+    assert.equal(leaseStore.inspect(taskId).locked, false, "STOP rejection must not leave a persistent execution lease");
+    assert.equal(checkpointBridge.getStatus().checkpointEngine.checkpointCount, 0);
+    assert.equal(agentManager.getTask(taskId).task.status, agentManager.TASK_STATES.CREATED);
+  } finally {
+    autonomousWorker.executeAssignedTask = originalExecute;
+  }
+});
