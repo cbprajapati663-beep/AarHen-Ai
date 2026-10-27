@@ -8,6 +8,7 @@ const path = require("node:path");
 const { createRecoveryLeaseStore } = require("./recoveryLeaseStore");
 
 const API_KEY = "aarhen-test-key-for-http-smoke";
+const OWNER_API_KEY = "aarhen-owner-test-key-for-http-smoke";
 
 async function getFreePort() {
     const socket = net.createServer();
@@ -49,6 +50,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
             ...process.env,
             PORT: String(port),
             AARHEN_API_KEY: API_KEY,
+            AARHEN_OWNER_API_KEY: OWNER_API_KEY,
             AARHEN_RECOVERY_LEASE_DIR: leaseDirectory
         },
         stdio: ["ignore", "ignore", "pipe"]
@@ -143,10 +145,25 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(body.authenticated, false);
     });
 
-    await t.test("provider recovery endpoint validates owner decision input", async () => {
+    await t.test("general API key cannot authorize owner recovery even when body claims ownerAuthorized", async () => {
         const response = await fetch(baseUrl + "/checkpoint/provider-failure/resolve", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            body: JSON.stringify({
+                taskId: "unknown-task",
+                decision: "abort",
+                ownerAuthorized: true
+            })
+        });
+        const body = await response.json();
+        assert.equal(response.status, 401);
+        assert.equal(body.authenticated, false);
+    });
+
+    await t.test("provider recovery endpoint validates owner decision input", async () => {
+        const response = await fetch(baseUrl + "/checkpoint/provider-failure/resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${OWNER_API_KEY}` },
             body: JSON.stringify({
                 taskId: "unknown-task",
                 decision: "unknown",
@@ -161,7 +178,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
     await t.test("provider recovery endpoint returns conflict for unresolved task lookup", async () => {
         const response = await fetch(baseUrl + "/checkpoint/provider-failure/resolve", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${OWNER_API_KEY}` },
             body: JSON.stringify({
                 taskId: "unknown-task",
                 decision: "abort",
@@ -177,7 +194,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
     await t.test("provider recovery resume requires explicit execution confirmation", async () => {
         const response = await fetch(baseUrl + "/checkpoint/provider-failure/resume", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${OWNER_API_KEY}` },
             body: JSON.stringify({ taskId: "unknown-task", confirmExecution: false })
         });
         const body = await response.json();
@@ -204,7 +221,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
     await t.test("stale recovery lease cleanup requires explicit no-executor confirmation", async () => {
         const response = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${OWNER_API_KEY}` },
             body: JSON.stringify({
                 taskId: "task-stale",
                 leaseFingerprint: "0".repeat(64)
@@ -218,7 +235,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
     await t.test("stale recovery lease cleanup requires a fresh inspected fingerprint", async () => {
         const response = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${OWNER_API_KEY}` },
             body: JSON.stringify({
                 taskId: "task-stale",
                 confirmNoActiveExecutor: true
@@ -248,7 +265,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
 
         const inspectResponse = await fetch(
             baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-api-stale",
-            { headers: { Authorization: `Bearer ${API_KEY}` } }
+            { headers: { Authorization: `Bearer ${OWNER_API_KEY}` } }
         );
         const inspected = await inspectResponse.json();
         assert.equal(inspectResponse.status, 200);
@@ -261,7 +278,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
 
         const clearResponse = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${OWNER_API_KEY}` },
             body: JSON.stringify({
                 taskId: "task-api-stale",
                 confirmNoActiveExecutor: true,
@@ -282,7 +299,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         try {
             const response = await fetch(
                 baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-guard-inspect",
-                { headers: { Authorization: `Bearer ${API_KEY}` } }
+                { headers: { Authorization: `Bearer ${OWNER_API_KEY}` } }
             );
             const body = await response.json();
             assert.equal(response.status, 200);
@@ -305,7 +322,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         try {
             const response = await fetch(
                 baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-corrupt-inspect",
-                { headers: { Authorization: `Bearer ${API_KEY}` } }
+                { headers: { Authorization: `Bearer ${OWNER_API_KEY}` } }
             );
             const body = await response.json();
             assert.equal(response.status, 409);
@@ -334,7 +351,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
 
         const inspectResponse = await fetch(
             baseUrl + "/checkpoint/recovery-lease/inspect?taskId=task-api-stale-mutation",
-            { headers: { Authorization: `Bearer ${API_KEY}` } }
+            { headers: { Authorization: `Bearer ${OWNER_API_KEY}` } }
         );
         const inspected = await inspectResponse.json();
         assert.equal(inspectResponse.status, 200);
@@ -358,7 +375,7 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
 
         const cleanupResponse = await fetch(baseUrl + "/checkpoint/recovery-lease/clear-stale-mutation-guard", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${OWNER_API_KEY}` },
             body: JSON.stringify({
                 taskId: "task-api-stale-mutation",
                 confirmNoActiveMutation: true,
