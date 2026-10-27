@@ -148,18 +148,28 @@ const server = http.createServer(
 
             const pathname = url.pathname;
 
-            // In protected mode, every API route except the health/status
-            // probes requires a verified API key. Keep development mode
-            // backward-compatible when AARHEN_API_KEY is not configured.
+            // Health/status probes stay public. In production, missing API-key
+            // configuration is a deployment error and must fail closed rather
+            // than silently exposing every API route in development mode.
             const publicPaths = new Set(["/", "/health", "/auth/status"]);
-            if (auth.isConfigured() && !publicPaths.has(pathname)) {
-                const authentication = auth.authenticate(req);
-                if (!authentication.authenticated) {
-                    return sendJson(res, 401, {
+            if (!publicPaths.has(pathname)) {
+                if (process.env.NODE_ENV === "production" && !auth.isConfigured()) {
+                    return sendJson(res, 503, {
                         success: false,
                         authenticated: false,
-                        error: "Valid API key required."
+                        error: "API authentication is not configured for production."
                     });
+                }
+
+                if (auth.isConfigured()) {
+                    const authentication = auth.authenticate(req);
+                    if (!authentication.authenticated) {
+                        return sendJson(res, 401, {
+                            success: false,
+                            authenticated: false,
+                            error: "Valid API key required."
+                        });
+                    }
                 }
             }
 
