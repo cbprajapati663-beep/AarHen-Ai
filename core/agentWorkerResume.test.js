@@ -180,3 +180,78 @@ test("resumeWorker does not bypass a pending approval", async () => {
   assert.equal(attempted.task.status, manager.TASK_STATES.WAITING_APPROVAL);
   assert.equal(attempted.worker.status, workerApi.WORKER_STATES.WAITING_APPROVAL);
 });
+
+
+test("runAssignedTask rejects a concurrent invocation for the same worker", async () => {
+  const agent = manager.createAgent({
+    id: "worker-single-flight-agent",
+    name: "Worker Single Flight Agent"
+  });
+  assert.equal(agent.success, true);
+
+  const created = manager.createTask(
+    agent.agent.id,
+    "Execute once under concurrent calls",
+    { id: "worker-single-flight-task" }
+  );
+  assert.equal(created.success, true);
+
+  const step = manager.addStep(created.task.id, {
+    id: "worker-single-flight-step",
+    name: "Gated execution step",
+    description: "Ensure overlapping calls cannot start a second run",
+    action: "calculate"
+  });
+  assert.equal(step.success, true);
+
+  const createdWorker = workerApi.createWorker({
+    id: "worker-single-flight-worker",
+    agentId: agent.agent.id
+  });
+  assert.equal(createdWorker.success, true);
+  assert.equal(
+    workerApi.assignTask(createdWorker.worker.id, created.task.id).success,
+    true
+  );
+
+  let executions = 0;
+  let signalStarted;
+  let releaseExecution;
+  const started = new Promise(resolve => { signalStarted = resolve; });
+  const gate = new Promise(resolve => { releaseExecution = resolve; });
+
+  const controlledRunner = async () => {
+    executions += 1;
+    signalStarted();
+    await gate;
+    return { success: true, output: "completed exactly once" };
+  };
+
+  try {
+    const firstRun = workerApi.runAssignedTask(
+      createdWorker.worker.id,
+      { runner: controlledRunner }
+    );
+    await started;
+
+    const duplicate = await workerApi.runAssignedTask(
+      createdWorker.worker.id,
+      { runner: controlledRunner }
+    );
+    assert.equal(duplicate.success, false);
+    assert.match(duplicate.error, /already running/i);
+    assert.equal(executions, 1, "the overlapping call must not start another execution");
+
+    releaseExecution();
+    const completed = await firstRun;
+    assert.equal(completed.success, true);
+    assert.equal(completed.task.status, manager.TASK_STATES.COMPLETED);
+    assert.equal(executions, 1);
+    assert.equal(
+      workerApi.getWorker(createdWorker.worker.id).worker.status,
+      workerApi.WORKER_STATES.IDLE
+    );
+  } finally {
+    releaseExecution();
+  }
+});
