@@ -390,6 +390,52 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(fs.existsSync(guardPath), false);
     });
 
+    await t.test("all owner-only recovery routes reject an invalid owner key even with a valid general API key", async () => {
+        const invalidOwnerKey = "not-the-configured-owner-key";
+        const ownerRoutes = [
+            {
+                path: "/checkpoint/provider-failure/resolve",
+                method: "POST",
+                body: { taskId: "unknown-task", decision: "abort", ownerAuthorized: true }
+            },
+            {
+                path: "/checkpoint/provider-failure/resume",
+                method: "POST",
+                body: { taskId: "unknown-task", confirmExecution: true, ownerAuthorized: true }
+            },
+            {
+                path: "/checkpoint/recovery-lease/inspect?taskId=task-private",
+                method: "GET"
+            },
+            {
+                path: "/checkpoint/recovery-lease/clear-stale",
+                method: "POST",
+                body: { taskId: "task-private", confirmNoActiveExecutor: true, leaseFingerprint: "0".repeat(64), ownerAuthorized: true }
+            },
+            {
+                path: "/checkpoint/recovery-lease/clear-stale-mutation-guard",
+                method: "POST",
+                body: { taskId: "task-private", confirmNoActiveMutation: true, mutationGuardFingerprint: "0".repeat(64), ownerAuthorized: true }
+            }
+        ];
+
+        for (const route of ownerRoutes) {
+            const headers = {
+                Authorization: `Bearer ${API_KEY}`,
+                "X-Aarhen-Owner-Key": invalidOwnerKey
+            };
+            if (route.body) headers["Content-Type"] = "application/json";
+            const response = await fetch(baseUrl + route.path, {
+                method: route.method,
+                headers,
+                ...(route.body ? { body: JSON.stringify(route.body) } : {})
+            });
+            const body = await response.json();
+            assert.equal(response.status, 401, `${route.method} ${route.path} must reject an invalid owner key`);
+            assert.equal(body.authenticated, false, `${route.method} ${route.path} must not authenticate the caller`);
+        }
+    });
+
     await t.test("unknown protected route cannot bypass authentication", async () => {
         const response = await fetch(baseUrl + "/does-not-exist");
         assert.equal(response.status, 401);
