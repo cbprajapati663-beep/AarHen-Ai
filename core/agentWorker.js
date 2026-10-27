@@ -37,6 +37,10 @@ const agentRunner =
     require("./agentRunner");
 
 
+const autonomousGuard =
+    require("./autonomousGuard");
+
+
 // ============================================================
 // VERSION
 // ============================================================
@@ -867,6 +871,23 @@ async function runAssignedTask(
 
     const worker =
         resolved.worker;
+
+
+    // --------------------------------------------------------
+    // Global Emergency STOP
+    // --------------------------------------------------------
+    // Enforce STOP at the worker boundary as well as inside the
+    // Agent Runner, so queue processing cannot mutate worker/task
+    // execution state or invoke even a custom runner while STOP is active.
+    if (autonomousGuard.isStopped()) {
+        return {
+            success: false,
+            stopped: true,
+            stage: "emergency-stop",
+            error: "Emergency STOP is active; worker execution is blocked.",
+            worker: clone(worker)
+        };
+    }
 
 
     // --------------------------------------------------------
