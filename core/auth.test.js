@@ -115,7 +115,10 @@ test("owner authentication accepts only the separate configured owner key", () =
                 headers: { authorization: "Bearer ordinary-api-key" }
             }).authenticated, false);
             assert.equal(auth.authenticateOwner({
-                headers: { authorization: "Bearer dedicated-owner-key" }
+                headers: { "x-aarhen-owner-key": "ordinary-api-key" }
+            }).authenticated, false);
+            assert.equal(auth.authenticateOwner({
+                headers: { authorization: "Bearer ordinary-api-key", "x-aarhen-owner-key": "dedicated-owner-key" }
             }).authenticated, true);
         });
     });
