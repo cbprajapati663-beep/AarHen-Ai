@@ -25,7 +25,7 @@ function sendJson(res, statusCode, data) {
         "Access-Control-Allow-Methods":
             "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers":
-            "Content-Type, Authorization, X-Aarhen-API-Key"
+            "Content-Type, Authorization, X-Aarhen-API-Key, X-Aarhen-Owner-Key"
     });
 
     res.end(JSON.stringify(data, null, 2));
@@ -133,7 +133,7 @@ const server = http.createServer(
                     "Access-Control-Allow-Methods":
                         "GET, POST, PUT, DELETE, OPTIONS",
                     "Access-Control-Allow-Headers":
-                        "Content-Type, Authorization, X-Aarhen-API-Key"
+                        "Content-Type, Authorization, X-Aarhen-API-Key, X-Aarhen-Owner-Key"
                 });
 
                 res.end();
