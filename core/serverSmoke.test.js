@@ -441,3 +441,50 @@ test("HTTP server smoke tests: health, validation, routing, and API-key protecti
         assert.equal(response.status, 401);
     });
 });
+
+
+test("production server fails closed when the general API key is missing", async t => {
+    const port = await getFreePort();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
+        cwd: path.join(__dirname, ".."),
+        env: {
+            ...process.env,
+            NODE_ENV: "production",
+            PORT: String(port),
+            AARHEN_API_KEY: "",
+            AARHEN_OWNER_API_KEY: ""
+        },
+        stdio: ["ignore", "ignore", "pipe"]
+    });
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    t.after(async () => {
+        if (child.exitCode === null && !child.killed) child.kill("SIGTERM");
+        await new Promise(resolve => {
+            if (child.exitCode !== null) return resolve();
+            const timer = setTimeout(resolve, 1500);
+            child.once("exit", () => { clearTimeout(timer); resolve(); });
+        });
+    });
+
+    await waitForServer(baseUrl, child);
+
+    await t.test("health remains available for deployment monitoring", async () => {
+        const response = await fetch(baseUrl + "/health");
+        assert.equal(response.status, 200);
+    });
+
+    await t.test("API endpoints return 503 rather than running unauthenticated", async () => {
+        const response = await fetch(baseUrl + "/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: "must not execute" })
+        });
+        const body = await response.json();
+        assert.equal(response.status, 503);
+        assert.equal(body.authenticated, false);
+        assert.match(body.error, /not configured for production/i);
+    });
+});
