@@ -85,13 +85,9 @@ function verifyOwnerApiKey(providedKey) {
 
 function authenticateOwner(request) {
     const headers = request?.headers || {};
-    const authorization = headers.authorization || "";
-    const bearerKey = authorization.startsWith("Bearer ")
-        ? authorization.slice(7)
-        : "";
-    const headerKey = headers["x-aarhen-api-key"] || "";
-
-    return verifyOwnerApiKey(bearerKey || headerKey);
+    // Keep owner credentials separate from the general API Authorization header,
+    // which is checked independently by the server-wide API authentication gate.
+    return verifyOwnerApiKey(headers["x-aarhen-owner-key"] || "");
 }
 
 function authenticate(request) {
