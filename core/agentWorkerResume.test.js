@@ -4,11 +4,13 @@ const assert = require("node:assert/strict");
 const manager = require("./agentManager");
 const runner = require("./agentRunner");
 const workerApi = require("./agentWorker");
+const guard = require("./autonomousGuard");
 
 test.beforeEach(() => {
   workerApi.reset();
   runner.reset();
   manager.reset();
+  guard.reset();
 });
 
 test("resumeWorker restarts the Agent Runner loop and completes the queued task", async () => {
@@ -256,6 +258,57 @@ test("runAssignedTask rejects a concurrent invocation for the same worker", asyn
   }
 });
 
+
+
+
+test("global Emergency STOP blocks worker queue before invoking a custom runner", async () => {
+  const agent = manager.createAgent({
+    id: "worker-global-stop-agent",
+    name: "Worker Global STOP Agent"
+  });
+  assert.equal(agent.success, true);
+
+  const created = manager.createTask(
+    agent.agent.id,
+    "Must remain queued while global STOP is active",
+    { id: "worker-global-stop-task" }
+  );
+  assert.equal(created.success, true);
+  const step = manager.addStep(created.task.id, {
+    id: "worker-global-stop-step",
+    name: "Must not execute",
+    action: "calculate",
+    input: { expression: "2 + 2" }
+  });
+  assert.equal(step.success, true);
+
+  const createdWorker = workerApi.createWorker({
+    id: "worker-global-stop-worker",
+    agentId: agent.agent.id
+  });
+  assert.equal(createdWorker.success, true);
+  assert.equal(workerApi.assignTask(createdWorker.worker.id, created.task.id).success, true);
+  assert.equal(guard.activateStop("worker queue STOP regression").success, true);
+
+  let runnerCalls = 0;
+  const result = await workerApi.runQueue(createdWorker.worker.id, {
+    runner: async () => {
+      runnerCalls += 1;
+      return { success: true, output: "must not run" };
+    }
+  });
+
+  assert.equal(result.success, true, "queue wrapper reports a completed queue attempt");
+  assert.equal(result.processed, 1);
+  assert.equal(result.results[0].success, false);
+  assert.equal(result.results[0].stopped, true);
+  assert.equal(result.results[0].stage, "emergency-stop");
+  assert.equal(runnerCalls, 0, "custom runner must not be called during global STOP");
+  assert.deepEqual(result.worker.queue, [created.task.id], "queued work must remain available for a later owner-authorized restart");
+  assert.equal(result.worker.activeTaskId, null);
+  assert.equal(result.worker.status, workerApi.WORKER_STATES.IDLE);
+  assert.equal(manager.getTask(created.task.id).task.status, manager.TASK_STATES.CREATED);
+});
 
 test("runQueue halts at an approval gate without starting later queued tasks", async () => {
   const agent = manager.createAgent({
