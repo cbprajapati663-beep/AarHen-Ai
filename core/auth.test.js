@@ -76,3 +76,50 @@ test("authenticate rejects a token supplied in an unrelated header", () => {
         assert.equal(result.authenticated, false);
     });
 });
+
+
+function withOwnerApiKey(value, callback) {
+    const previous = process.env.AARHEN_OWNER_API_KEY;
+    if (value === undefined) {
+        delete process.env.AARHEN_OWNER_API_KEY;
+    } else {
+        process.env.AARHEN_OWNER_API_KEY = value;
+    }
+
+    try {
+        callback();
+    } finally {
+        if (previous === undefined) {
+            delete process.env.AARHEN_OWNER_API_KEY;
+        } else {
+            process.env.AARHEN_OWNER_API_KEY = previous;
+        }
+    }
+}
+
+test("owner authentication fails closed when a separate owner key is not configured", () => {
+    withOwnerApiKey(undefined, () => {
+        const result = auth.verifyOwnerApiKey("ordinary-api-key");
+        assert.equal(result.authenticated, false);
+        assert.equal(result.mode, "owner-unconfigured");
+    });
+});
+
+test("owner authentication accepts only the separate configured owner key", () => {
+    withApiKey("ordinary-api-key", () => {
+        withOwnerApiKey("dedicated-owner-key", () => {
+            assert.equal(auth.authenticate({
+                headers: { authorization: "Bearer ordinary-api-key" }
+            }).authenticated, true);
+            assert.equal(auth.authenticateOwner({
+                headers: { authorization: "Bearer ordinary-api-key" }
+            }).authenticated, false);
+            assert.equal(auth.authenticateOwner({
+                headers: { "x-aarhen-owner-key": "ordinary-api-key" }
+            }).authenticated, false);
+            assert.equal(auth.authenticateOwner({
+                headers: { authorization: "Bearer ordinary-api-key", "x-aarhen-owner-key": "dedicated-owner-key" }
+            }).authenticated, true);
+        });
+    });
+});

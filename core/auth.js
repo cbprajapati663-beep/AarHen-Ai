@@ -13,6 +13,14 @@ function isConfigured() {
     return Boolean(getApiKey());
 }
 
+function getOwnerApiKey() {
+    return process.env.AARHEN_OWNER_API_KEY || "";
+}
+
+function isOwnerConfigured() {
+    return Boolean(getOwnerApiKey());
+}
+
 function verifyApiKey(providedKey) {
     const configuredKey = getApiKey();
 
@@ -46,6 +54,42 @@ function verifyApiKey(providedKey) {
     };
 }
 
+function verifyOwnerApiKey(providedKey) {
+    const configuredKey = getOwnerApiKey();
+
+    if (!configuredKey) {
+        return {
+            success: false,
+            authenticated: false,
+            mode: "owner-unconfigured",
+            message: "Owner API authentication is not configured."
+        };
+    }
+
+    let valid = false;
+    if (typeof providedKey === "string" && providedKey.length > 0) {
+        const provided = Buffer.from(providedKey, "utf8");
+        const configured = Buffer.from(configuredKey, "utf8");
+        if (provided.length === configured.length) {
+            valid = timingSafeEqual(provided, configured);
+        }
+    }
+
+    return {
+        success: valid,
+        authenticated: valid,
+        mode: "owner-protected",
+        message: valid ? "Owner authentication successful." : "Invalid owner API key."
+    };
+}
+
+function authenticateOwner(request) {
+    const headers = request?.headers || {};
+    // Keep owner credentials separate from the general API Authorization header,
+    // which is checked independently by the server-wide API authentication gate.
+    return verifyOwnerApiKey(headers["x-aarhen-owner-key"] || "");
+}
+
 function authenticate(request) {
     const headers = request?.headers || {};
     const authorization = headers.authorization || "";
@@ -61,5 +105,9 @@ module.exports = {
     getApiKey,
     isConfigured,
     verifyApiKey,
-    authenticate
+    authenticate,
+    getOwnerApiKey,
+    isOwnerConfigured,
+    verifyOwnerApiKey,
+    authenticateOwner
 };

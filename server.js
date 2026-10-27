@@ -25,7 +25,7 @@ function sendJson(res, statusCode, data) {
         "Access-Control-Allow-Methods":
             "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers":
-            "Content-Type, Authorization, X-Aarhen-API-Key"
+            "Content-Type, Authorization, X-Aarhen-API-Key, X-Aarhen-Owner-Key"
     });
 
     res.end(JSON.stringify(data, null, 2));
@@ -133,7 +133,7 @@ const server = http.createServer(
                     "Access-Control-Allow-Methods":
                         "GET, POST, PUT, DELETE, OPTIONS",
                     "Access-Control-Allow-Headers":
-                        "Content-Type, Authorization, X-Aarhen-API-Key"
+                        "Content-Type, Authorization, X-Aarhen-API-Key, X-Aarhen-Owner-Key"
                 });
 
                 res.end();
@@ -237,14 +237,14 @@ const server = http.createServer(
             ) {
                 // Provider recovery decisions are owner-only. In development
                 // mode there is no authenticated owner identity, so fail closed.
-                if (!auth.isConfigured()) {
+                if (!auth.isOwnerConfigured()) {
                     return sendJson(res, 503, {
                         success: false,
                         error: "Owner authentication must be configured before provider recovery can be resolved."
                     });
                 }
 
-                const authentication = auth.authenticate(req);
+                const authentication = auth.authenticateOwner(req);
                 if (!authentication.authenticated) {
                     return sendJson(res, 401, {
                         success: false,
@@ -294,14 +294,14 @@ const server = http.createServer(
                 pathname === "/checkpoint/provider-failure/resume" &&
                 req.method === "POST"
             ) {
-                if (!auth.isConfigured()) {
+                if (!auth.isOwnerConfigured()) {
                     return sendJson(res, 503, {
                         success: false,
                         error: "Owner authentication must be configured before provider recovery can execute."
                     });
                 }
 
-                const authentication = auth.authenticate(req);
+                const authentication = auth.authenticateOwner(req);
                 if (!authentication.authenticated) {
                     return sendJson(res, 401, {
                         success: false,
@@ -342,14 +342,14 @@ const server = http.createServer(
                 pathname === "/checkpoint/recovery-lease/inspect" &&
                 req.method === "GET"
             ) {
-                if (!auth.isConfigured()) {
+                if (!auth.isOwnerConfigured()) {
                     return sendJson(res, 503, {
                         success: false,
                         error: "Owner authentication must be configured before recovery lease inspection."
                     });
                 }
 
-                const authentication = auth.authenticate(req);
+                const authentication = auth.authenticateOwner(req);
                 if (!authentication.authenticated) {
                     return sendJson(res, 401, {
                         success: false,
@@ -379,14 +379,14 @@ const server = http.createServer(
                 pathname === "/checkpoint/recovery-lease/clear-stale" &&
                 req.method === "POST"
             ) {
-                if (!auth.isConfigured()) {
+                if (!auth.isOwnerConfigured()) {
                     return sendJson(res, 503, {
                         success: false,
                         error: "Owner authentication must be configured before stale recovery leases can be cleared."
                     });
                 }
 
-                const authentication = auth.authenticate(req);
+                const authentication = auth.authenticateOwner(req);
                 if (!authentication.authenticated) {
                     return sendJson(res, 401, {
                         success: false,
@@ -434,14 +434,14 @@ const server = http.createServer(
                 pathname === "/checkpoint/recovery-lease/clear-stale-mutation-guard" &&
                 req.method === "POST"
             ) {
-                if (!auth.isConfigured()) {
+                if (!auth.isOwnerConfigured()) {
                     return sendJson(res, 503, {
                         success: false,
                         error: "Owner authentication must be configured before mutation guards can be cleared."
                     });
                 }
 
-                const authentication = auth.authenticate(req);
+                const authentication = auth.authenticateOwner(req);
                 if (!authentication.authenticated) {
                     return sendJson(res, 401, {
                         success: false,
