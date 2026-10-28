@@ -49,8 +49,15 @@ try {
 $unauthStatus = Get-HttpStatus {
     Invoke-WebRequest -Uri "$baseUrl/ask" -Method Post -ContentType "application/json" -Body '{"input":"AarHen smoke test","context":{"autonomous":false}}' -UseBasicParsing
 }
-$expectedUnauth = if ($env:NODE_ENV -eq "production" -and -not $apiKey) { 503 } else { 401 }
-Assert-Status "Protected /ask rejects missing API key" $unauthStatus $expectedUnauth
+$expectedUnauth = if ($env:NODE_ENV -eq "production" -and -not $apiKey) { 503 } elseif ($apiKey) { 401 } else { 200 }
+$unauthLabel = if ($env:NODE_ENV -eq "production" -and -not $apiKey) {
+    "Production without configured API key fails closed"
+} elseif ($apiKey) {
+    "Protected /ask rejects missing API key"
+} else {
+    "Development mode without configured key (authentication is intentionally optional)"
+}
+Assert-Status $unauthLabel $unauthStatus $expectedUnauth
 
 if (-not $apiKey) {
     Write-Host "[SKIP] Authenticated request — set AARHEN_API_KEY in this PowerShell session to test it."
