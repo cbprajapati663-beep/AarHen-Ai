@@ -47,5 +47,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Run complete automated test suite
-        run: npm run test:all
+      - name: Run complete automated test suite twice
+        # A second run catches tests that accidentally depend on a clean
+        # persistent data directory or leave state behind for the next run.
+        run: npm run test:all && npm run test:all
