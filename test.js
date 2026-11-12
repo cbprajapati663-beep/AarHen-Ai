@@ -368,11 +368,15 @@ section(
     "5. LEARNING ENGINE TEST"
 );
 
+// Give each test run its own fixture so persistent data from an earlier
+// run cannot make the first learning call look like a duplicate.
+const learningTestRunId = `${Date.now()}-${process.pid}`;
+
 const learningTitle =
-    "AarHen Learning Duplicate Safety Test";
+    `AarHen Learning Duplicate Safety Test ${learningTestRunId}`;
 
 const learningContent =
-    "AarHen learns that verified knowledge should be stored safely and duplicate knowledge should not create another memory record.";
+    `AarHen learns that verified knowledge should be stored safely and duplicate knowledge should not create another memory record. Test run ${learningTestRunId}.`;
 
 let firstLearning = null;
 let secondLearning = null;
