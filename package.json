@@ -27,7 +27,7 @@
     "test:vision-api": "node --test core/visionApi.test.js",
     "test:multilingual-media": "node --test core/multilingualMedia.test.js",
     "test:provider-manager-routing": "node --test tests/provider-manager-routing.test.js",
-    "test:ollama-provider": "node --test tests/ollama-text-provider.test.js"
+    "test:ollama-provider": "node --test tests/ollama-text-provider.test.js tests/ollama-manager-integration.test.js"
   },
   "keywords": [
     "aarhen",
