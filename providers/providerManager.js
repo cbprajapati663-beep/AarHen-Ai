@@ -94,7 +94,7 @@ const DEFAULT_CONFIG = Object.freeze({
 
     },
 
-    localAI: {
+    localai: {
         priority: 5,
         enabled: process.env.AARHEN_OLLAMA_ENABLED === "true",
         providerType: "text-generation"
@@ -116,7 +116,10 @@ const providers = {
         voiceProvider,
 
     vision:
-        visionProvider
+        visionProvider,
+
+    localai:
+        localAIProvider
 
 };
 
@@ -146,7 +149,7 @@ const providerConfig = {
     },
 
     localAI: {
-        ...DEFAULT_CONFIG.localAI
+        ...DEFAULT_CONFIG.localai
     }
 
 };
@@ -1279,16 +1282,16 @@ async function searchWeb({
 // LOCAL TEXT GENERATION
 // ============================================================
 
-async function generateText({
+async async function generateText({
     prompt,
     system = "",
     model,
-    provider = "localAI",
+    provider = "localai",
     options = {}
 } = {}) {
     const normalizedPrompt = safeString(prompt);
     if (!normalizedPrompt) {
-        return { success: false, error: "Text prompt is required.", provider: normalizeType(provider) || "localAI" };
+        return { success: false, error: "Text prompt is required.", provider: normalizeType(provider) || "localai" };
     }
 
     const type = normalizeType(provider) || "localai";
@@ -1799,7 +1802,7 @@ function reset() {
             type !== "research" &&
             type !== "voice" &&
             type !== "vision" &&
-            type !== "localAI"
+            type !== "localai"
         ) {
 
             delete providers[
