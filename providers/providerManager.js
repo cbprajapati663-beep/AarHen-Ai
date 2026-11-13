@@ -148,7 +148,7 @@ const providerConfig = {
 
     },
 
-    localAI: {
+    localai: {
         ...DEFAULT_CONFIG.localai
     }
 
@@ -1836,8 +1836,8 @@ function reset() {
 
     };
 
-    providerConfig.localAI = {
-        ...DEFAULT_CONFIG.localAI
+    providerConfig.localai = {
+        ...DEFAULT_CONFIG.localai
     };
 
 
