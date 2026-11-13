@@ -22,6 +22,9 @@
 const researchProvider =
     require("./researchProvider");
 
+const { createOllamaTextProvider } =
+    require("./ollamaTextProvider");
+
 const { createOpenAIVoiceProvider } =
     require("../core/openaiVoiceProvider");
 
@@ -33,6 +36,9 @@ const voiceProvider =
 
 const visionProvider =
     createOpenAIVisionProvider();
+
+const localAIProvider =
+    createOllamaTextProvider();
 
 
 // ============================================================
@@ -86,6 +92,12 @@ const DEFAULT_CONFIG = Object.freeze({
         providerType:
             "vision"
 
+    },
+
+    localAI: {
+        priority: 5,
+        enabled: process.env.AARHEN_OLLAMA_ENABLED === "true",
+        providerType: "text-generation"
     }
 
 });
@@ -131,6 +143,10 @@ const providerConfig = {
 
         ...DEFAULT_CONFIG.vision
 
+    },
+
+    localAI: {
+        ...DEFAULT_CONFIG.localAI
     }
 
 };
@@ -1260,6 +1276,55 @@ async function searchWeb({
 
 
 // ============================================================
+// LOCAL TEXT GENERATION
+// ============================================================
+
+async function generateText({
+    prompt,
+    system = "",
+    model,
+    provider = "localAI",
+    options = {}
+} = {}) {
+    const normalizedPrompt = safeString(prompt);
+    if (!normalizedPrompt) {
+        return { success: false, error: "Text prompt is required.", provider: normalizeType(provider) || "localAI" };
+    }
+
+    const type = normalizeType(provider) || "localai";
+    const instance = getProvider(type);
+    if (!instance || typeof instance.generateText !== "function") {
+        return { success: false, error: `Provider "${type}" does not support text generation.`, provider: type };
+    }
+    if (!isProviderAvailable(type)) {
+        return { success: false, error: `Provider "${type}" is disabled or not configured. Set AARHEN_OLLAMA_ENABLED=true to enable local Ollama.`, provider: type };
+    }
+
+    try {
+        const result = await instance.generateText({
+            prompt: normalizedPrompt,
+            system: safeString(system),
+            model,
+            options: safeObject(options)
+        });
+        return {
+            ...safeObject(result),
+            provider: result?.provider || type,
+            providerType: getProviderConfig(type)?.providerType || "text-generation",
+            providerManagerVersion: PROVIDER_MANAGER_VERSION
+        };
+    } catch (error) {
+        return {
+            success: false,
+            provider: type,
+            error: error.message || "Local text generation failed.",
+            providerManagerVersion: PROVIDER_MANAGER_VERSION
+        };
+    }
+}
+
+
+// ============================================================
 // REGISTER PROVIDER
 // ============================================================
 
@@ -1733,7 +1798,8 @@ function reset() {
         if (
             type !== "research" &&
             type !== "voice" &&
-            type !== "vision"
+            type !== "vision" &&
+            type !== "localAI"
         ) {
 
             delete providers[
@@ -1765,6 +1831,10 @@ function reset() {
 
         ...DEFAULT_CONFIG.vision
 
+    };
+
+    providerConfig.localAI = {
+        ...DEFAULT_CONFIG.localAI
     };
 
 
@@ -1807,6 +1877,8 @@ module.exports = {
     selectProvider,
 
     searchWeb,
+
+    generateText,
 
     registerProvider,
 
