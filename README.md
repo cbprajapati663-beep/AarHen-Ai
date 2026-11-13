@@ -56,6 +56,33 @@ Recovery execution leases use file-backed storage under `data/recovery-leases` b
 
 Stale leases and mutation guards are not automatically reclaimed. Inspection exposes redacted metadata; cleanup requires owner authorization, an exact inspected fingerprint, explicit confirmation, and the relevant stale-process safety checks. Cleanup does not start or resume task execution.
 
+## Local Ollama text provider (free, on-device)
+
+AarHen can use a local Ollama model for text generation without a cloud API key. Install Ollama and pull a model first. The repository's local identity profile can optionally be built as `aarhen-local`:
+
+```powershell
+ollama pull qwen2.5:1.5b
+ollama create aarhen-local -f .\\local-ai\\Modelfile
+ollama run aarhen-local
+```
+
+In the PowerShell window used to start AarHen, enable the provider:
+
+```powershell
+$env:AARHEN_OLLAMA_ENABLED = "true"
+$env:AARHEN_OLLAMA_MODEL = "aarhen-local"
+$env:AARHEN_OLLAMA_URL = "http://127.0.0.1:11434"
+npm start
+```
+
+The Provider Manager exposes `generateText({ prompt, system, model, provider: "localAI" })`. It does not silently call a paid cloud model. Ollama must be running locally; the provider reports configured state separately from verified live connectivity. The default request timeout is 120 seconds and can be changed with `AARHEN_OLLAMA_TIMEOUT_MS`.
+
+Run its mocked tests without installing or starting Ollama:
+
+```powershell
+npm run test:ollama-provider
+```
+
 ## Start the server
 
 ```bash
