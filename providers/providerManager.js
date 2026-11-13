@@ -1282,7 +1282,7 @@ async function searchWeb({
 // LOCAL TEXT GENERATION
 // ============================================================
 
-async async function generateText({
+async function generateText({
     prompt,
     system = "",
     model,
