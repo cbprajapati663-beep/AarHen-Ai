@@ -26,6 +26,9 @@
 const Brain =
     require("./brain");
 
+const { createLocalReasoning } =
+    require("./localReasoning");
+
 
 const router =
     require("../skills/router");
@@ -1884,6 +1887,20 @@ async function process(
 
         return brainResult;
 
+    }
+
+
+    // --------------------------------------------------------
+    // OPTIONAL LOCAL LLM REASONING (ADVISORY ONLY)
+    // --------------------------------------------------------
+    // Explicit opt-in keeps default latency and behavior unchanged.
+    // The result never grants permission or triggers tools/actions.
+    if (context.localAIReasoning === true) {
+        const localReasoning = await createLocalReasoning(request);
+        brainResult.localReasoning = localReasoning;
+        if (!localReasoning.success) {
+            brainResult.localReasoningWarning = localReasoning.error;
+        }
     }
 
 
