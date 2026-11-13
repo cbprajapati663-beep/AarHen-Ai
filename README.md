@@ -77,6 +77,8 @@ npm start
 
 The Provider Manager exposes `generateText({ prompt, system, model, provider: "localAI" })`. It does not silently call a paid cloud model. Ollama must be running locally; the provider reports configured state separately from verified live connectivity. The default request timeout is 120 seconds and can be changed with `AARHEN_OLLAMA_TIMEOUT_MS`.
 
+The orchestrator can optionally request an advisory reasoning analysis from the local model. Set `localAIReasoning: true` in the context passed to `orchestrate(input, context)`. The result is attached to `brain.localReasoning`. This is opt-in, does not change skill routing, does not authorize tools or external actions, and does not make autonomous execution safe by itself. If Ollama is unavailable, the normal orchestration continues and records a warning.
+
 Run its mocked tests without installing or starting Ollama:
 
 ```powershell
